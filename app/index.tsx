@@ -10,7 +10,11 @@ const SplashScreen = () => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
+<<<<<<< Updated upstream
       router.replace("(auth)/OnboardingScreen");
+=======
+      router.replace("tabs/accueil");
+>>>>>>> Stashed changes
     }, 6000);
     return () => clearTimeout(timer);
   }, []);

@@ -4,20 +4,28 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start --dev-client",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.1",
+<<<<<<< Updated upstream
     "@react-native-picker/picker": "^2.11.1",
     "@react-native-async-storage/async-storage": "^2.2.0",
+=======
+    "@expo/vector-icons": "^14.1.0",
+>>>>>>> Stashed changes
     "@react-navigation/native": "^7.1.16",
     "@react-navigation/stack": "^7.4.4",
     "axios": "^1.11.0",
     "expo": "~53.0.20",
     "expo-font": "~13.3.2",
     "expo-image-picker": "~16.1.4",
+<<<<<<< Updated upstream
+=======
+    "expo-linear-gradient": "^14.1.5",
+>>>>>>> Stashed changes
     "expo-router": "~5.1.4",
     "expo-status-bar": "~2.2.3",
     "react": "19.0.0",
