@@ -73,7 +73,7 @@ const RegisterScreen = () => {
       
       <View style={styles.footer}>
         <Text>Déjà un compte ? </Text>
-        <TouchableOpacity onPress={() => router.navigate('Login')}> 
+        <TouchableOpacity onPress={() => router.navigate('(auth)/LoginScreen')}> 
           <Text style={styles.link}>Se connecter</Text>
         </TouchableOpacity>
       </View>
