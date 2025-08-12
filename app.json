@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "parking-app",
-    "scheme": "parking-app",
-    "slug": "parking-app",
+    "name": "parkingapp",
+    "scheme": "parkingapp",
+    "slug": "parkingapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -17,10 +17,12 @@
       "supportsTablet": true
     },
     "android": {
+       "package": "com.parkingapp.app",
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
+       
       },
       "edgeToEdgeEnabled": true
     },
