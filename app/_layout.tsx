@@ -9,7 +9,12 @@ export default function Layout() {
           headerShown: false, // Masquer les en-têtes par défaut
         }}
       >
-        <Stack.Screen name="accueil" />
+
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="index" />
+        <Stack.Screen name="pourVous" />
+
+
       </Stack>
     </SafeAreaView>
   );
