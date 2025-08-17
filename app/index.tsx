@@ -10,8 +10,8 @@ const SplashScreen = () => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      router.replace("(auth)/OnboardingScreen");
-    }, 6000);
+      router.replace("/ParkingHome/reservation");
+    }, 2000);
     return () => clearTimeout(timer);
   }, []);
 

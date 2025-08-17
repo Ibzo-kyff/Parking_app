@@ -1,3 +1,4 @@
+import 'react-native-reanimated';
 import { Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native';
 
@@ -8,9 +9,7 @@ export default function Layout() {
         screenOptions={{
           headerShown: false, // Masquer les en-têtes par défaut
         }}
-      >
-        <Stack.Screen name="accueil" />
-      </Stack>
+      />
     </SafeAreaView>
   );
 }

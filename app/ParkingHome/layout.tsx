@@ -8,7 +8,6 @@ export default function HomeParking() {
       }}
     >
       <Stack.Screen name="Accueil" />
-      
     </Stack>
   );
 }

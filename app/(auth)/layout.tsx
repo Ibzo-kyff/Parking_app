@@ -11,6 +11,7 @@ export default function AuthLayout() {
       <Stack.Screen name="LoginSceen" />
       <Stack.Screen name="RegisterScreen" />
       <Stack.Screen name="ForgotPasswordScreen" />
+       <Stack.Screen name="reservation" />
     </Stack>
   );
 }
