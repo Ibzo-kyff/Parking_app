@@ -112,9 +112,9 @@ const Accueil: React.FC = () => {
           placeholder="Recherche..."
           placeholderTextColor="#999"
         />
-        <TouchableOpacity style={styles.sortButton}>
+        {/* <TouchableOpacity style={styles.sortButton}>
           <FontAwesome name="sort" size={24} color="#fff" />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </View>
 
 
@@ -227,6 +227,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     marginVertical: 10,
     marginBottom: 20,
+    marginTop: 25,
   },
   searchIcon: {
     marginRight: 10,

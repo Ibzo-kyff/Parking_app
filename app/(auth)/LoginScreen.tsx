@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { login } from '../../components/services/api';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     checkAuthStatus();
@@ -19,10 +22,6 @@ const LoginScreen = () => {
       const role = await AsyncStorage.getItem('role');
       redirectBasedOnRole(role);
     }
-  };
-
-  const handleNext = () => {
-    router.push('/(auth)/RegisterScreen');
   };
 
   const handleForgotPassword = () => {
@@ -39,7 +38,6 @@ const LoginScreen = () => {
     try {
       const { accessToken, role, emailVerified } = await login({ email, password });
 
-      // Stocker les données
       await AsyncStorage.setItem('token', accessToken || '');
       await AsyncStorage.setItem('role', role || '');
       await AsyncStorage.setItem('emailVerified', emailVerified ? 'true' : 'false');
@@ -51,12 +49,14 @@ const LoginScreen = () => {
       }
 
       redirectBasedOnRole(role);
-    } catch (error: any) {
-      Alert.alert('Erreur', error.message || 'Échec de la connexion');
-    } finally {
-      setLoading(false);
-    }
-  };
+      } catch (error) {
+        const err = error as Error;
+        Alert.alert('Erreur', err.message || 'Échec de la connexion');
+      }
+      finally {
+            setLoading(false);
+          }
+        };
 
   const redirectBasedOnRole = (role: string | null) => {
     switch (role) {
@@ -64,85 +64,177 @@ const LoginScreen = () => {
         router.push('/tabs/accueil');
         break;
       case 'PARKING':
-        router.push('/tabs/parking');
+        router.push('/(Parking)/accueil');
         break;
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Connexion</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Mot de passe"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
-      <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
-        <Text style={styles.buttonText}>{loading ? 'Chargement...' : 'Se connecter'}</Text>
-      </TouchableOpacity>
-      <View style={styles.footer}>
-        <Text>Pas encore de compte ? </Text>
-        <TouchableOpacity onPress={handleNext}>
-          <Text style={styles.link}>S'inscrire</Text>
-        </TouchableOpacity>
+    <KeyboardAvoidingView
+      style={styles.mainContainer}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <View style={styles.headerBackground}>
+        <ExpoImage
+          source={require('../../assets/images/login.gif')}
+          style={styles.headerImage}
+          contentFit="cover"
+        />
       </View>
-      <TouchableOpacity onPress={handleForgotPassword}>
-        <Text style={styles.link}>Mot de passe oublié ?</Text>
-      </TouchableOpacity>
-    </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.formContainer}>
+          <Text style={styles.title}>Connexion</Text>
+
+          <View style={styles.inputContainer}>
+            <Ionicons name="mail-outline" size={20} color="#777" style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              placeholderTextColor="#999"
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Ionicons name="lock-closed-outline" size={20} color="#777" style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Mot de passe"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              placeholderTextColor="#999"
+            />
+            <TouchableOpacity
+              style={styles.eyeIcon}
+              onPress={() => setShowPassword(!showPassword)}
+            >
+              <Ionicons
+                name={showPassword ? "eye-off-outline" : "eye-outline"}
+                size={20}
+                color="#777"
+              />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            <Text style={styles.buttonText}>{loading ? 'Connexion...' : 'Se connecter'}</Text>
+          </TouchableOpacity>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Pas encore de compte ? </Text>
+            <TouchableOpacity onPress={() => router.push('/(auth)/RegisterScreen')}>
+              <Text style={styles.footerLink}>S'inscrire</Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity onPress={handleForgotPassword}>
+            <Text style={[styles.footerLink, { textAlign: 'center', marginTop: 10 }]}>
+              Mot de passe oublié ?
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  mainContainer: {
     flex: 1,
-    justifyContent: 'center',
-    padding: 20,
     backgroundColor: '#fff',
   },
+  headerBackground: {
+    position: 'absolute',
+    top: 0,
+    height: 460,
+    width: '100%',
+    overflow: 'hidden',
+    borderBottomLeftRadius: 50,
+    borderBottomRightRadius: 50,
+  },
+  headerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  scrollContainer: {
+    flexGrow: 1,
+  },
+  formContainer: {
+    marginTop: 390,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
+    padding: 20,
+  },
   title: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
-    marginBottom: 30,
+    color: '#FD6A00',
     textAlign: 'center',
+    marginBottom: 20,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+    borderBottomWidth: 1,
+    borderColor: '#ddd',
+    paddingHorizontal: 5,
+  },
+  inputIcon: {
+    marginRight: 10,
   },
   input: {
+    flex: 1,
     height: 50,
-    borderColor: '#ccc',
-    borderWidth: 1,
-    borderRadius: 5,
-    paddingHorizontal: 15,
-    marginBottom: 15,
+    color: '#333',
+    fontSize: 16,
+  },
+  eyeIcon: {
+    padding: 10,
   },
   button: {
-    backgroundColor: '#007bff',
-    padding: 15,
-    borderRadius: 5,
+    backgroundColor: '#FD6A00',
+    padding: 16,
+    borderRadius: 8,
     alignItems: 'center',
-    marginBottom: 20,
+    marginTop: 20,
+    marginBottom: 15,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   buttonText: {
     color: '#fff',
-    fontWeight: 'bold',
+    fontWeight: '600',
+    fontSize: 16,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 15,
+    marginTop: 10,
   },
-  link: {
-    color: '#007bff',
-    fontWeight: 'bold',
+  footerText: {
+    color: '#666',
+    fontSize: 14,
+  },
+  footerLink: {
+    color: '#FD6A00',
+    fontWeight: '600',
+    fontSize: 14,
+    marginBottom:10,
   },
 });
 
