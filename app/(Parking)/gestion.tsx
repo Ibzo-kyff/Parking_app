@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
-export default function Reservation() {
+export default function gestion() {
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>Bienvenue sur l’écran du Park client </Text>
+      <Text style={styles.text}>Bienvenue sur l’écran Réservation</Text>
     </View>
   );
 }

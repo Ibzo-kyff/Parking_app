@@ -1,27 +1,50 @@
+// components/Header.tsx
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { logout } from '../components/services/api';
 
 type HeaderProps = {
-  firstName: string;
-  lastName: string;
+  firstName?: string;
+  lastName?: string;
 };
 
-const Header: React.FC<HeaderProps> = ({ firstName, lastName }) => {
-  const navigation = useNavigation<any>();
+const Header: React.FC<HeaderProps> = ({ firstName = 'User' }) => {
+  const router = useRouter();
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Déconnexion',
+      'Voulez-vous vraiment vous déconnecter ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Oui',
+          onPress: async () => {
+            await logout();                      
+            router.replace('(auth)/LoginScreen');     
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <View style={styles.container}>
-      {/* Logo */}
-      <Image source={require('../assets/images/blanc.jpg')} style={styles.logo} />
+      {/* Bouton Déconnexion */}
+      <TouchableOpacity style={styles.logoutIcon} onPress={handleLogout}>
+        <FontAwesome name="sign-out" size={24} color="white"/>
+      </TouchableOpacity>
 
-      {/* Message de salutation */}
-      <Text style={styles.userName}>👋 Fanta, {firstName} {lastName}</Text>
+      <Text style={styles.userName}>Bienvenue👋 {firstName}</Text>
 
-      {/* Icône de notification */}
-      <TouchableOpacity style={styles.notificationIcon} onPress={() => navigation.navigate('Notifications')}>
-        <FontAwesome name="bell-o" size={24} color="#000" />
+      {/* Exemple autre bouton (notifications) */}
+      <TouchableOpacity
+        style={styles.notificationIcon}
+        onPress={() => router.push('/notifications')}
+      >
+        <FontAwesome name="bell-o" size={24} color="white" />
       </TouchableOpacity>
     </View>
   );
@@ -29,33 +52,36 @@ const Header: React.FC<HeaderProps> = ({ firstName, lastName }) => {
 
 const styles = StyleSheet.create({
   container: {
+    top: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 10,
+    paddingHorizontal: 15,
     paddingVertical: 15,
-    backgroundColor: '#fff',
-    elevation: 4,
+    backgroundColor: '#FFF',
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
-  logo: {
-    width: 40,
-    height: 40,
-    resizeMode: 'contain',
+  logoutIcon: {
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#ff7d00',
   },
   userName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FD6A00',
     flex: 1,
     textAlign: 'center',
-    marginHorizontal: 10,
+    marginHorizontal: 15,
   },
   notificationIcon: {
-    padding: 5,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#ff7d00',
   },
 });
 

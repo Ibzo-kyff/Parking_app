@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 
-const carImage = require('../../assets/images/toyota1.png');
+const carImage = require('../../../assets/images/toyota1.png');
 
 interface CarDetails {
   brand: string;

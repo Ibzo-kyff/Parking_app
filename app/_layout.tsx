@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native';
 
-export default function Layout() {
+export default function RootLayout() {
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <Stack
@@ -9,7 +9,11 @@ export default function Layout() {
           headerShown: false, // Masquer les en-têtes par défaut
         }}
       >
-        <Stack.Screen name="accueil" />
+        <Stack.Screen name="index" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="tabs" />
+        <Stack.Screen name="(Parking)" />
+        <Stack.Screen name="(Client)" />
       </Stack>
     </SafeAreaView>
   );
