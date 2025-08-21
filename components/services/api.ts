@@ -2,7 +2,7 @@
 import axios, { AxiosError } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = 'http://192.168.196.71:5000/api/';
+const API_URL = 'https://parkapp-pi.vercel.app/api/';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -37,12 +37,18 @@ export const login = async (credentials: { email: string; password: string }): P
   accessToken?: string;
   role?: string;
   emailVerified?: boolean;
+  nom?: string;
+  prenom?: string;
 }> => {
   try {
     const response = await api.post('/auth/login', credentials);
-    const { accessToken, role, emailVerified } = response.data || {};
+    const { accessToken, role, emailVerified, nom, prenom } = response.data || {};
     if (accessToken) await setAuthToken(accessToken);
-    return { accessToken, role, emailVerified };
+    await AsyncStorage.setItem('role', role || '');
+    await AsyncStorage.setItem('emailVerified', emailVerified ? 'true' : 'false');
+    await AsyncStorage.setItem('nom', nom || 'Inconnu');
+    await AsyncStorage.setItem('prenom', prenom || 'Inconnu');
+    return { accessToken, role, emailVerified, nom, prenom };
   } catch (error) {
     const err = error as AxiosError<{ message?: string }>;
     throw new Error(err.response?.data?.message || 'Échec de la connexion');
@@ -58,7 +64,15 @@ export const register = async (userData: {
   phone?: string;
   address?: string;
   role?: string;
-}): Promise<any> => {
+}): Promise<{
+  message: string;
+  accessToken?: string;
+  nom?: string;
+  prenom?: string;
+  email?: string;
+  role?: string;
+  emailVerified?: boolean;
+}> => {
   try {
     const response = await api.post('/auth/register', userData);
     return response.data;
@@ -84,12 +98,27 @@ export const refreshToken = async (refreshToken: string): Promise<string> => {
 
 export const logout = async (): Promise<void> => {
   try {
+    // Essayer de déconnecter proprement du serveur
     await api.post('/auth/logout');
   } catch (error) {
-    console.error('Logout error:', error);
+    const axiosError = error as AxiosError;
+    // L'erreur 401 est attendue si le token est déjà expiré/invalide
+    if (axiosError.response?.status !== 401) {
+      console.error('Logout error (non-401):', error);
+    }
+    // On continue quand même le cleanup local même en cas d'erreur
   } finally {
+    // Nettoyage local garantie dans tous les cas
     await clearAuthToken();
-    await AsyncStorage.multiRemove(['refreshToken', 'user', 'role']);
+    await AsyncStorage.multiRemove([
+      'accessToken', 
+      'refreshToken', 
+      'role', 
+      'emailVerified', 
+      'nom', 
+      'prenom',
+      'user'
+    ]);
   }
 };
 
@@ -132,6 +161,25 @@ export const verifyResetOTP = async (email: string, otp: string): Promise<any> =
   } catch (error) {
     const err = error as AxiosError<{ message?: string }>;
     throw new Error(err.response?.data?.message || 'Invalid OTP');
+  }
+};
+export const verifyEmailWithOTP = async (email: string, otp: string): Promise<any> => {
+  try {
+    const response = await api.post('/auth/verify-email-otp', { email, otp });
+    return response.data;
+  } catch (error) {
+    const err = error as AxiosError<{ message?: string }>;
+    throw new Error(err.response?.data?.message || 'Code OTP invalide');
+  }
+};
+
+export const sendVerificationEmail = async (email: string): Promise<any> => {
+  try {
+    const response = await api.post('/auth/send-verification-email', { email });
+    return response.data;
+  } catch (error) {
+    const err = error as AxiosError<{ message?: string }>;
+    throw new Error(err.response?.data?.message || 'Échec de l\'envoi du code OTP');
   }
 };
 

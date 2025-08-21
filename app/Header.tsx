@@ -1,45 +1,71 @@
-// components/Header.tsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { logout } from '../components/services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-type HeaderProps = {
-  firstName?: string;
-  lastName?: string;
-};
-
-const Header: React.FC<HeaderProps> = ({ firstName = 'User' }) => {
+const Header: React.FC = () => {
   const router = useRouter();
+  const [prenom, setPrenom] = useState('User');
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Déconnexion',
-      'Voulez-vous vraiment vous déconnecter ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Oui',
-          onPress: async () => {
-            await logout();                      
-            router.replace('(auth)/LoginScreen');     
-          },
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const storedPrenom = await AsyncStorage.getItem('prenom');
+        if (storedPrenom) {
+          setPrenom(storedPrenom);
+        }
+      } catch (error) {
+        console.error('Erreur lors du chargement du prénom:', error);
+      }
+    };
+    loadUserData();
+  }, []);
+
+const handleLogout = () => {
+  Alert.alert(
+    'Déconnexion',
+    'Voulez-vous vraiment vous déconnecter ?',
+    [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Oui',
+        onPress: async () => {
+          try {
+            await logout();
+            // Nettoyage supplémentaire pour être sûr
+            await AsyncStorage.multiRemove([
+              'accessToken',
+              'refreshToken', 
+              'role', 
+              'emailVerified', 
+              'nom', 
+              'prenom',
+              'user',
+              'token' // Au cas où vous utiliseriez aussi 'token'
+            ]);
+            router.replace('/(auth)/LoginScreen');
+          } catch (error) {
+            console.error('Erreur lors de la déconnexion:', error);
+            // Même en cas d'erreur, on redirige vers le login
+            await AsyncStorage.clear(); // Nettoyage complet
+            router.replace('/(auth)/LoginScreen');
+          }
         },
-      ]
-    );
-  };
+      },
+    ]
+  );
+};
 
   return (
     <View style={styles.container}>
-      {/* Bouton Déconnexion */}
       <TouchableOpacity style={styles.logoutIcon} onPress={handleLogout}>
-        <FontAwesome name="sign-out" size={24} color="white"/>
+        <FontAwesome name="sign-out" size={24} color="white" />
       </TouchableOpacity>
 
-      <Text style={styles.userName}>Bienvenue👋 {firstName}</Text>
+      <Text style={styles.userName}>Bienvenue  {prenom} 👋</Text>
 
-      {/* Exemple autre bouton (notifications) */}
       <TouchableOpacity
         style={styles.notificationIcon}
         onPress={() => router.push('/notifications')}
