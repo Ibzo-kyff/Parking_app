@@ -14,6 +14,7 @@ import { register } from '../../components/services/api';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const RegisterScreen = () => {
   const [formData, setFormData] = useState({
@@ -32,33 +33,40 @@ const RegisterScreen = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleRegister = async () => {
-    const { password, confirmPassword, email, nom, prenom, phone } = formData;
-    if (password !== confirmPassword) {
-      Alert.alert('Erreur', 'Les mots de passe ne correspondent pas');
-      return;
-    }
-    if (!email || !password || !confirmPassword || !nom || !prenom || !phone) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires');
-      return;
-    }
+const handleRegister = async () => {
+  const { password, confirmPassword, email, nom, prenom, phone } = formData;
+  if (password !== confirmPassword) {
+    Alert.alert('Erreur', 'Les mots de passe ne correspondent pas');
+    return;
+  }
+  if (!email || !password || !confirmPassword || !nom || !prenom || !phone) {
+    Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires');
+    return;
+  }
 
-    setLoading(true);
-    try {
-      await register({ ...formData, role: 'CLIENT' });
-      Alert.alert('Succès', 'Inscription réussie. Vérifiez votre email pour activer votre compte');
-      router.replace('(auth)/LoginScreen');
-    } catch (error) {
-      if (error instanceof Error) {
-        Alert.alert('Erreur', error.message);
-      } else {
-        Alert.alert('Erreur', 'Échec de l’inscription');
-      }
-    } finally {
-      setLoading(false);
+  setLoading(true);
+  try {
+    const response = await register({ ...formData, role: 'CLIENT' });
+    
+    // Stocker temporairement l'email pour la vérification
+    await AsyncStorage.setItem('tempEmail', email);
+    
+    // Rediriger vers la page de vérification
+    router.push({
+      pathname: '/(auth)/VerifyEmailScreen',
+      params: { email }
+    });
+    
+  } catch (error) {
+    if (error instanceof Error) {
+      Alert.alert('Erreur', error.message);
+    } else {
+      Alert.alert('Erreur', 'Échec de l\'inscription');
     }
-  };
-
+  } finally {
+    setLoading(false);
+  }
+};
   return (
     <View style={styles.mainContainer}>
       {/* Image en arrière-plan */}
@@ -87,9 +95,20 @@ const RegisterScreen = () => {
               <Ionicons name="person-outline" size={20} color="#777" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Name"
+                placeholder="Entrez votre nom"
                 value={formData.nom}
                 onChangeText={(text) => handleChange('nom', text)}
+                placeholderTextColor="#999"
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Ionicons name="person-outline" size={20} color="#777" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Entrez votre prenom"
+                value={formData.prenom}
+                onChangeText={(text) => handleChange('prenom', text)}
                 placeholderTextColor="#999"
               />
             </View>

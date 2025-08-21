@@ -17,10 +17,15 @@ const LoginScreen = () => {
   }, []);
 
   const checkAuthStatus = async () => {
-    const token = await AsyncStorage.getItem('token');
-    if (token) {
-      const role = await AsyncStorage.getItem('role');
-      redirectBasedOnRole(role);
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      const emailVerified = await AsyncStorage.getItem('emailVerified');
+      if (token && emailVerified === 'true') {
+        const role = await AsyncStorage.getItem('role');
+        redirectBasedOnRole(role);
+      }
+    } catch (error) {
+      console.error('Erreur lors de la vérification du statut auth:', error);
     }
   };
 
@@ -36,27 +41,31 @@ const LoginScreen = () => {
 
     setLoading(true);
     try {
-      const { accessToken, role, emailVerified } = await login({ email, password });
-
-      await AsyncStorage.setItem('token', accessToken || '');
-      await AsyncStorage.setItem('role', role || '');
-      await AsyncStorage.setItem('emailVerified', emailVerified ? 'true' : 'false');
+      const { accessToken, role, emailVerified, nom, prenom } = await login({ email, password });
 
       if (!emailVerified) {
+        // Stocker temporairement l'email pour la vérification
+        await AsyncStorage.setItem('tempEmail', email);
         Alert.alert('Vérification requise', 'Veuillez vérifier votre email avant de continuer.');
         router.push('/(auth)/VerifyEmailScreen');
         return;
       }
 
-      redirectBasedOnRole(role);
-      } catch (error) {
-        const err = error as Error;
-        Alert.alert('Erreur', err.message || 'Échec de la connexion');
-      }
-      finally {
-            setLoading(false);
-          }
-        };
+      // Stocker les données uniquement si l'email est vérifié
+      await AsyncStorage.setItem('accessToken', accessToken || '');
+      await AsyncStorage.setItem('role', role || '');
+      await AsyncStorage.setItem('emailVerified', 'true');
+      await AsyncStorage.setItem('nom', nom || 'Inconnu');
+      await AsyncStorage.setItem('prenom', prenom || 'Inconnu');
+
+      redirectBasedOnRole(role || null);
+    } catch (error) {
+      const err = error as Error;
+      Alert.alert('Erreur', err.message || 'Échec de la connexion');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const redirectBasedOnRole = (role: string | null) => {
     switch (role) {
@@ -234,7 +243,7 @@ const styles = StyleSheet.create({
     color: '#FD6A00',
     fontWeight: '600',
     fontSize: 14,
-    marginBottom:10,
+    marginBottom: 10,
   },
 });
 
