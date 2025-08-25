@@ -41,7 +41,8 @@ const LoginScreen = () => {
 
     setLoading(true);
     try {
-      const { accessToken, role, emailVerified, nom, prenom } = await login({ email, password });
+      const { accessToken, role, emailVerified, nom, prenom, id, parkingId } = await login({ email, password });
+
 
       if (!emailVerified) {
         // Stocker temporairement l'email pour la vérification
@@ -58,6 +59,8 @@ const LoginScreen = () => {
       await AsyncStorage.setItem('nom', nom || 'Inconnu');
       await AsyncStorage.setItem('prenom', prenom || 'Inconnu');
 
+      if (id) await AsyncStorage.setItem("userId", String(id));
+      if (parkingId) await AsyncStorage.setItem("parkingId", String(parkingId));
       redirectBasedOnRole(role || null);
     } catch (error) {
       const err = error as Error;

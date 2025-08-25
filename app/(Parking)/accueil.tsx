@@ -58,7 +58,7 @@ const AccueilParking = () => {
    const [searchText, setSearchText] = useState('');
 
   // 🔹 Navigation / actions
-  const handleAjouterVoiture = () => router.navigate('/voitures/ajouter');
+  const handleAjouterVoiture = () => router.navigate('/(ParkingDetail)/AjoutParking');
   const handleHistorique = () => router.navigate('/historique');
   const handleVoirTout = () => router.navigate('/voitures/populaires');
 

@@ -91,11 +91,11 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
           />
           {/* Statistiques */}
           <Tabs.Screen
-            name="statistiques"
+            name="reservation"
             options={{
-              title: 'Statistiques',
+              title: 'Réservation',
               tabBarIcon: ({ color }) => (
-                <FontAwesome size={24} name="line-chart" color={color} />
+                <FontAwesome size={24} name="shopping-cart" color={color} />
               ),
             }}
           />
