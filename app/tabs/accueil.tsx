@@ -102,7 +102,7 @@ const Accueil: React.FC = () => {
   return (
     <View style={styles.container}>
       {/* ✅ Header avec nom et icône notification */}
-      <Header firstName={firstName} lastName={lastName} />
+      <Header />
 
 
       <View style={styles.searchBarContainer}>

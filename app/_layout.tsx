@@ -1,8 +1,10 @@
 import { Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native';
+import { AuthProvider } from '../context/AuthContext';
 
 export default function RootLayout() {
   return (
+    <AuthProvider>
     <SafeAreaView style={{ flex: 1 }}>
       <Stack
         screenOptions={{
@@ -16,5 +18,6 @@ export default function RootLayout() {
         <Stack.Screen name="(Client)" />
       </Stack>
     </SafeAreaView>
+    </AuthProvider>
   );
 }
