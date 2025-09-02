@@ -1,3 +1,4 @@
+// services/back.ts
 import axios from "axios";
 
 const API_URL = "https://parkapp-pi.vercel.app/api";
@@ -16,14 +17,24 @@ export const setAuthToken = (token: string | null) => {
   }
 };
 
-// ✅ Récupérer les voitures de l'utilisateur connecté
-// services/back.ts
-export const getUserCars = async (userId: string) => {
+// ✅ Récupérer les données de gestion du parking
+export const getParkingManagementData = async () => {
   try {
-    const response = await api.get(`vehicules/parking/my-vehicles/${userId}`);
+    const response = await api.get(`/vehicules/parking/management`);
     return response.data;
   } catch (error: any) {
-    console.error("Erreur récupération voitures :", error.response?.data || error.message);
+    console.error("Erreur récupération données gestion:", error.response?.data || error.message);
+    throw error;
+  }
+};
+
+// ✅ Récupérer un véhicule spécifique
+export const getParkingVehicleById = async (vehicleId: string) => {
+  try {
+    const response = await api.get(`/vehicules/parking/my-vehicles/${vehicleId}`);
+    return response.data;
+  } catch (error: any) {
+    console.error("Erreur récupération véhicule:", error.response?.data || error.message);
     throw error;
   }
 };

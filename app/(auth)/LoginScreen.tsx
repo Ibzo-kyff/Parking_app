@@ -9,9 +9,10 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator
 } from 'react-native';
 import { login } from '../../components/services/api';
-import { router } from 'expo-router';
+import { router, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import { useAuth } from '../../context/AuthContext';
@@ -21,12 +22,44 @@ const LoginScreen = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { setAuthState } = useAuth();
+  const { authState, setAuthState, isLoading } = useAuth();
 
+  const getRedirectPath = (role: string | null) => {
+    switch (role) {
+      case 'CLIENT':
+        return '/tabs/accueil';
+      case 'PARKING':
+        return '/(Parking)/accueil';
+      default:
+        return '/(auth)/LoginScreen';
+    }
+  };
+
+  const redirectBasedOnRole = (role: string | null) => {
+    const path = getRedirectPath(role);
+    router.replace(path);
+  };
+
+  // Rediriger automatiquement si l'utilisateur est déjà connecté
   useEffect(() => {
-    // Plus besoin de vérifier AsyncStorage ici, car le contexte est vide par défaut
-    // Si l'utilisateur est déjà connecté, il sera redirigé via le contexte dans RootLayout
-  }, []);
+    if (!isLoading && authState.accessToken) {
+      redirectBasedOnRole(authState.role);
+    }
+  }, [authState, isLoading]);
+
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FD6A00" />
+        <Text style={styles.loadingText}>Chargement...</Text>
+      </View>
+    );
+  }
+
+  if (authState.accessToken) {
+    return <Redirect href={getRedirectPath(authState.role)} />;
+  }
 
   const handleForgotPassword = () => {
     router.push('/(auth)/ForgotPasswordScreen');
@@ -43,8 +76,6 @@ const LoginScreen = () => {
       const { accessToken, role, emailVerified, nom, prenom, id, parkingId } = await login({ email, password });
 
       if (!emailVerified) {
-        // Stocker temporairement l'email pour la vérification si nécessaire
-        // Vous pouvez utiliser le contexte pour cela si vous le souhaitez
         Alert.alert('Vérification requise', 'Veuillez vérifier votre email avant de continuer.');
         router.push('/(auth)/VerifyEmailScreen');
         return;
@@ -60,23 +91,11 @@ const LoginScreen = () => {
         nom,
         prenom,
       });
-      redirectBasedOnRole(role || null);
     } catch (error) {
       const err = error as Error;
       Alert.alert('Erreur', err.message || 'Échec de la connexion');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const redirectBasedOnRole = (role: string | null) => {
-    switch (role) {
-      case 'CLIENT':
-        router.push('/tabs/accueil');
-        break;
-      case 'PARKING':
-        router.push('/(Parking)/accueil');
-        break;
     }
   };
 
@@ -143,7 +162,21 @@ const LoginScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  mainContainer: { flex: 1, backgroundColor: '#fff' },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff'
+  },
+  loadingText: {
+    marginTop: 10,
+    color: '#FD6A00',
+    fontSize: 16
+  },
+  mainContainer: {
+    flex: 1,
+    backgroundColor: '#fff'
+  },
   headerBackground: {
     position: 'absolute',
     top: 0,
@@ -153,8 +186,13 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 50,
     borderBottomRightRadius: 50,
   },
-  headerImage: { width: '100%', height: '100%' },
-  scrollContainer: { flexGrow: 1 },
+  headerImage: {
+    width: '100%',
+    height: '100%'
+  },
+  scrollContainer: {
+    flexGrow: 1 
+  },
   formContainer: {
     marginTop: 390,
     backgroundColor: '#fff',
@@ -162,17 +200,64 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 40,
     padding: 20,
   },
-  title: { fontSize: 26, fontWeight: 'bold', color: '#FD6A00', textAlign: 'center', marginBottom: 20 },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, borderBottomWidth: 1, borderColor: '#ddd', paddingHorizontal: 5 },
-  inputIcon: { marginRight: 10 },
-  input: { flex: 1, height: 50, color: '#333', fontSize: 16 },
-  eyeIcon: { padding: 10 },
-  button: { backgroundColor: '#FD6A00', padding: 16, borderRadius: 8, alignItems: 'center', marginTop: 20, marginBottom: 15 },
-  buttonDisabled: { opacity: 0.7 },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 10 },
-  footerText: { color: '#666', fontSize: 14 },
-  footerLink: { color: '#FD6A00', fontWeight: '600', fontSize: 14, marginBottom: 10 },
+  title: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#FD6A00',
+    textAlign: 'center',
+    marginBottom: 20
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+    borderBottomWidth: 1,
+    borderColor: '#ddd',
+    paddingHorizontal: 5
+  },
+  inputIcon: {
+    marginRight: 10 
+  },
+  input: {
+    flex: 1,
+    height: 50,
+    color: '#333',
+    fontSize: 16
+  },
+  eyeIcon: {
+    padding: 10 
+  },
+  button: {
+    backgroundColor: '#FD6A00',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 15
+  },
+  buttonDisabled: {
+    opacity: 0.7
+  },
+  buttonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 10
+  },
+  footerText: {
+    color: '#666',
+    fontSize: 14
+  },
+  footerLink: {
+    color: '#FD6A00',
+    fontWeight: '600',
+    fontSize: 14,
+    marginBottom: 10
+  },
 });
 
 export default LoginScreen;

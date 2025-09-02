@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AuthState {
   accessToken: string | null;
@@ -14,6 +15,7 @@ interface AuthContextType {
   authState: AuthState;
   setAuthState: (state: Partial<AuthState>) => void;
   clearAuthState: () => void;
+  isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,12 +30,41 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     nom: null,
     prenom: null,
   });
+  
+  const [isLoading, setIsLoading] = useState(true);
 
-  const updateAuthState = (state: Partial<AuthState>) => {
-    setAuthState((prev) => ({ ...prev, ...state }));
+  // Charger les données d'authentification au démarrage
+  useEffect(() => {
+    loadAuthData();
+  }, []);
+
+  const loadAuthData = async () => {
+    try {
+      const storedAuth = await AsyncStorage.getItem('authState');
+      if (storedAuth) {
+        const parsedAuth = JSON.parse(storedAuth);
+        setAuthState(parsedAuth);
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des données d\'authentification:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const clearAuthState = () => {
+  const updateAuthState = async (state: Partial<AuthState>) => {
+    const newState = { ...authState, ...state };
+    setAuthState(newState);
+    
+    // Sauvegarder dans AsyncStorage
+    try {
+      await AsyncStorage.setItem('authState', JSON.stringify(newState));
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde des données d\'authentification:', error);
+    }
+  };
+
+  const clearAuthState = async () => {
     setAuthState({
       accessToken: null,
       role: null,
@@ -43,10 +74,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       nom: null,
       prenom: null,
     });
+    
+    // Supprimer d'AsyncStorage
+    try {
+      await AsyncStorage.removeItem('authState');
+    } catch (error) {
+      console.error('Erreur lors de la suppression des données d\'authentification:', error);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ authState, setAuthState: updateAuthState, clearAuthState }}>
+    <AuthContext.Provider value={{ authState, setAuthState: updateAuthState, clearAuthState, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
