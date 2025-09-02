@@ -3,60 +3,45 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { logout } from '../components/services/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../context/AuthContext'; // Importez le contexte
 
 const Header: React.FC = () => {
   const router = useRouter();
   const [prenom, setPrenom] = useState('User');
+  const { authState, clearAuthState } = useAuth(); // Utilisez le contexte
 
   useEffect(() => {
-    const loadUserData = async () => {
-      try {
-        const storedPrenom = await AsyncStorage.getItem('prenom');
-        if (storedPrenom) {
-          setPrenom(storedPrenom);
-        }
-      } catch (error) {
-        console.error('Erreur lors du chargement du prénom:', error);
-      }
-    };
-    loadUserData();
-  }, []);
+    // Utilisez directement les données du contexte
+    if (authState.prenom) {
+      setPrenom(authState.prenom);
+    }
+  }, [authState.prenom]);
 
-const handleLogout = () => {
-  Alert.alert(
-    'Déconnexion',
-    'Voulez-vous vraiment vous déconnecter ?',
-    [
-      { text: 'Annuler', style: 'cancel' },
-      {
-        text: 'Oui',
-        onPress: async () => {
-          try {
-            await logout();
-            // Nettoyage supplémentaire pour être sûr
-            await AsyncStorage.multiRemove([
-              'accessToken',
-              'refreshToken', 
-              'role', 
-              'emailVerified', 
-              'nom', 
-              'prenom',
-              'user',
-              'token' // Au cas où vous utiliseriez aussi 'token'
-            ]);
-            router.replace('/(auth)/LoginScreen');
-          } catch (error) {
-            console.error('Erreur lors de la déconnexion:', error);
-            // Même en cas d'erreur, on redirige vers le login
-            await AsyncStorage.clear(); // Nettoyage complet
-            router.replace('/(auth)/LoginScreen');
-          }
+  const handleLogout = () => {
+    Alert.alert(
+      'Déconnexion',
+      'Voulez-vous vraiment vous déconnecter ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Oui',
+          onPress: async () => {
+            try {
+              await logout();
+              // Utilisez la fonction clearAuthState du contexte
+              clearAuthState();
+              router.replace('/(auth)/LoginScreen');
+            } catch (error) {
+              console.error('Erreur lors de la déconnexion:', error);
+              // Même en cas d'erreur, nettoyez le contexte
+              clearAuthState();
+              router.replace('/(auth)/LoginScreen');
+            }
+          },
         },
-      },
-    ]
-  );
-};
+      ]
+    );
+  };
 
   return (
     <View style={styles.container}>
