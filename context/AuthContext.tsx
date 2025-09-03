@@ -1,8 +1,12 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
+import { setAuthToken } from '../components/services/api';
+import { API_URL } from '../components/services/api';
 
 interface AuthState {
   accessToken: string | null;
+  refreshToken: string | null; // Ajout du refresh token
   role: string | null;
   userId: string | null;
   parkingId: string | null;
@@ -16,6 +20,7 @@ interface AuthContextType {
   setAuthState: (state: Partial<AuthState>) => void;
   clearAuthState: () => void;
   isLoading: boolean;
+  refreshAuth: () => Promise<void>; // Nouvelle méthode pour rafraîchir
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,6 +28,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [authState, setAuthState] = useState<AuthState>({
     accessToken: null,
+    refreshToken: null,
     role: null,
     userId: null,
     parkingId: null,
@@ -30,10 +36,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     nom: null,
     prenom: null,
   });
-  
   const [isLoading, setIsLoading] = useState(true);
 
-  // Charger les données d'authentification au démarrage
   useEffect(() => {
     loadAuthData();
   }, []);
@@ -55,8 +59,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const updateAuthState = async (state: Partial<AuthState>) => {
     const newState = { ...authState, ...state };
     setAuthState(newState);
-    
-    // Sauvegarder dans AsyncStorage
     try {
       await AsyncStorage.setItem('authState', JSON.stringify(newState));
     } catch (error) {
@@ -67,6 +69,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const clearAuthState = async () => {
     setAuthState({
       accessToken: null,
+      refreshToken: null,
       role: null,
       userId: null,
       parkingId: null,
@@ -74,8 +77,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       nom: null,
       prenom: null,
     });
-    
-    // Supprimer d'AsyncStorage
     try {
       await AsyncStorage.removeItem('authState');
     } catch (error) {
@@ -83,8 +84,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const refreshAuth = async () => {
+    try {
+      if (authState.refreshToken) {
+        const response = await axios.post(`${API_URL}/auth/refresh`, { refreshToken: authState.refreshToken });
+        const { accessToken, refreshToken } = response.data;
+        await updateAuthState({ accessToken, refreshToken });
+        setAuthToken(accessToken); // Mettre à jour le token dans axios
+      } else {
+        console.error('Aucun refresh token disponible');
+      }
+    } catch (error) {
+      console.error('Erreur lors du rafraîchissement du token:', error);
+      clearAuthState(); // Forcer une reconnexion si le refresh échoue
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ authState, setAuthState: updateAuthState, clearAuthState, isLoading }}>
+    <AuthContext.Provider value={{ authState, setAuthState: updateAuthState, clearAuthState, isLoading, refreshAuth }}>
       {children}
     </AuthContext.Provider>
   );
