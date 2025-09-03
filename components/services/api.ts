@@ -2,7 +2,7 @@
 import axios, { AxiosError } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = 'https://parkapp-pi.vercel.app/api/';
+export const API_URL = 'https://parkapp-pi.vercel.app/api/';
 
 const api = axios.create({
   baseURL: API_URL,
