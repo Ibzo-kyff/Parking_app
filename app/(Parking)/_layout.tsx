@@ -5,3 +5,4 @@ import SharedTabLayout from '../../components/SharedTabLayout'; // Ajustez le ch
 export default function Layout() {
   return <SharedTabLayout role="PARKING" />;
 }
+

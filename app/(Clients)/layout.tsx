@@ -7,9 +7,11 @@ export default function DetailsCarsLayout() {
         headerShown: false,
       }}
     >
-      <Stack.Screen name="CarDetailScreenn" />
-      <Stack.Screen name="CreateAnnonce" />
+      
+      <Stack.Screen name="PourVous" />
  
     </Stack>
   );
 }
+
+

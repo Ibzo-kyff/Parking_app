@@ -102,7 +102,11 @@ const Accueil: React.FC = () => {
   return (
     <View style={styles.container}>
       {/* ✅ Header avec nom et icône notification */}
+<<<<<<< Updated upstream
       <Header />
+=======
+      <Header  />
+>>>>>>> Stashed changes
 
 
       <View style={styles.searchBarContainer}>
@@ -165,7 +169,7 @@ const Accueil: React.FC = () => {
 
           <View style={styles.scrollTitleContainer}>
             <Text style={styles.scrollTitle}>Pour vous</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('pourVous' as never)}>
+            <TouchableOpacity onPress={() => navigation.navigate('(Clients)/PourVous' as never)}>
               <Text style={styles.seeAllButton}>Voir tout</Text>
             </TouchableOpacity>
           </View>
