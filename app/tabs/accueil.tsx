@@ -13,7 +13,7 @@ import {
 import { FontAwesome } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import Header from '../Header';
-import { getVehicules, getParkings } from "../../components/services/accueil"; 
+import { getVehicules, getParkings, API_URL } from "../../components/services/accueil"; 
 // 👈 on garde backend pour véhicules + parkings
 // ⚠️ mais pour marques on va utiliser des données locales directement ici
 
@@ -43,6 +43,7 @@ const Accueil: React.FC = () => {
     const fetchVehicules = async () => {
       try {
         const data = await getVehicules();
+        console.log('données véhicules:',data);
         setVehicules(data);
       } catch (error) {
         console.error("Erreur véhicules :", error);
@@ -219,10 +220,19 @@ const Accueil: React.FC = () => {
                   onPress={() => handleImagePress(index, 'vehicule')}
                 >
                   <View style={styles.imageWrapperLarge}>
-                    <Image
+                    {/* <Image
                       source={{ uri: item.photos && item.length > 0 ? '${BASE_URL}${item.photos[0]}':'vide'}}
                       style={styles.scrollImageLarge}
-                    />
+                    /> */}
+                    <Image
+  source={{
+    uri: item.photos && item.photos.length > 0
+      ? `${API_URL}${item.photos[0]}`  // ✅ bonne interpolation
+      : "https://via.placeholder.com/150" // ✅ image par défaut si pas de photo
+  }}
+  style={styles.scrollImageLarge}
+/>
+
                   </View>
                   <View style={styles.imageOverlay}>
                     <Text style={styles.imageLabel}>{item.marque}</Text>
