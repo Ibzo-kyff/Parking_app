@@ -1,4 +1,3 @@
-// services/back.ts
 import axios from "axios";
 
 const API_URL = "https://parkapp-pi.vercel.app/api";
@@ -23,6 +22,11 @@ export const getParkingManagementData = async () => {
     const response = await api.get(`/vehicules/parking/management`);
     return response.data;
   } catch (error: any) {
+    if (error.response?.status === 403 && error.response?.data?.message === "Token invalide ou expiré.") {
+      console.log("Tentative de rafraîchissement du token...");
+      // Ici, on suppose que refreshAuth est appelé depuis le contexte
+      throw error; // L'application doit gérer le rafraîchissement au niveau du composant
+    }
     console.error("Erreur récupération données gestion:", error.response?.data || error.message);
     throw error;
   }

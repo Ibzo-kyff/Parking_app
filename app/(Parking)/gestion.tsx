@@ -80,7 +80,7 @@ type ParkingData = {
 };
 
 const MonParkingScreen: React.FC = () => {
-  const { authState } = useAuth();
+  const { authState, refreshAuth, isLoading: authLoading } = useAuth();
   const [parkingData, setParkingData] = useState<ParkingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -90,21 +90,33 @@ const MonParkingScreen: React.FC = () => {
   const scrollY = useRef(new Animated.Value(0)).current;
 
 useEffect(() => {
-  const fetchParkingData = async () => {
-    try {
-      if (authState.accessToken) {
-        setAuthToken(authState.accessToken);
-        const data = await getParkingManagementData();
-        setParkingData(data);
-      } else {
-        console.error('Aucun token disponible dans authState');
+    const fetchParkingData = async () => {
+      setLoading(true);
+      try {
+        if (authState.accessToken) {
+          setAuthToken(authState.accessToken);
+          const data = await getParkingManagementData();
+          setParkingData(data);
+        } else {
+          console.error('Aucun token disponible dans authState');
+        }
+      } catch (error: any) {
+        console.error('Erreur API gestion parking:', error);
+        if (error.response?.status === 403 && error.response?.data?.message === "Token invalide ou expiré.") {
+          console.log("Tentative de rafraîchissement...");
+          await refreshAuth(); // Tenter de rafraîchir le token
+          if (authState.accessToken) {
+            setAuthToken(authState.accessToken);
+            const data = await getParkingManagementData();
+            setParkingData(data);
+          } else {
+            console.error('Rafraîchissement échoué, token toujours absent');
+          }
+        }
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Erreur API gestion parking:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
   if (authState.accessToken) {
     fetchParkingData();
