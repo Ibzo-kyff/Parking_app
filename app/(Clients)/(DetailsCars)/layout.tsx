@@ -9,6 +9,7 @@ export default function DetailsCarsLayout() {
     >
       <Stack.Screen name="CarDetailScreenn" />
       <Stack.Screen name="CreateAnnonce" />
+      <Stack.Screen name="DetailParkings" />
     </Stack>
   );
 }
