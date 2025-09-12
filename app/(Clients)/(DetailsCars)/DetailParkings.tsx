@@ -11,38 +11,15 @@ import {
   Linking,
   Alert,
 } from "react-native";
-import { FontAwesome, MaterialIcons, Ionicons, Feather } from "@expo/vector-icons";
-
-interface Parking {
-  id: number;
-  userId: number;
-  name: string;
-  address: string;
-  city: string;
-  email: string;
-  phone: string | null;
-  description: string | null;
-  capacity: number;
-  hoursOfOperation: string | null;
-  status: string;
-  logo: string | null;
-  createdAt: string;
-  updatedAt: string;
-  user?: {
-    id: number;
-    nom: string;
-    prenom: string;
-    email: string;
-    phone: string;
-  };
-  vehicles?: any[];
-}
+import { FontAwesome, MaterialIcons, Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { getParkingById, Parking } from "../../../components/services/parkingApi";
 
 export default function ParkingDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [parking, setParking] = useState<Parking | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [imageError, setImageError] = useState(false);
 
   // Debug: Afficher l'ID reçu
   console.log("ID reçu:", id);
@@ -58,14 +35,8 @@ export default function ParkingDetails() {
 
       try {
         setLoading(true);
-        const response = await fetch(`https://parkapp-pi.vercel.app/api/parkings/${id}`);
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || `Erreur ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
+        const data = await getParkingById(id);
+        console.log("Données reçues:", data);
         setParking(data);
       } catch (err: any) {
         console.error("Erreur détail parking:", err);
@@ -150,16 +121,23 @@ export default function ParkingDetails() {
         <Ionicons name="arrow-back" size={24} color="#fff" />
       </TouchableOpacity>
 
-      <Image
-        source={{
-          uri: parking.logo
-            ? `https://parkapp-pi.vercel.app${parking.logo}`
-            : "https://images.unsplash.com/photo-1565898835704-3d6be4a2c98c?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
-        }}
-        style={styles.image}
-        resizeMode="cover"
-        onError={() => console.log("Erreur de chargement de l'image")}
-      />
+      <View style={styles.imageContainer}>
+        {parking.logo && !imageError ? (
+          <Image
+            source={{
+              uri: `https://parkapp-pi.vercel.app${parking.logo}`,
+            }}
+            style={styles.image}
+            resizeMode="cover"
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          <View style={styles.placeholderContainer}>
+            <MaterialCommunityIcons name="parking" size={60} color="#6200ee" />
+            <Text style={styles.placeholderText}>{parking.name}</Text>
+          </View>
+        )}
+      </View>
 
       <View style={styles.content}>
         <View style={styles.header}>
@@ -178,7 +156,9 @@ export default function ParkingDetails() {
         
         <View style={styles.infoCard}>
           <View style={styles.infoItem}>
-            <Ionicons name="location" size={20} color="#6200ee" />
+            <View style={styles.iconContainer}>
+              <Ionicons name="location" size={20} color="#6200ee" />
+            </View>
             <View style={styles.infoTextContainer}>
               <Text style={styles.infoLabel}>Adresse</Text>
               <Text style={styles.infoValue}>{parking.address}</Text>
@@ -189,7 +169,9 @@ export default function ParkingDetails() {
           <View style={styles.divider} />
 
           <View style={styles.infoItem}>
-            <Ionicons name="time" size={20} color="#6200ee" />
+            <View style={styles.iconContainer}>
+              <Ionicons name="time" size={20} color="#6200ee" />
+            </View>
             <View style={styles.infoTextContainer}>
               <Text style={styles.infoLabel}>Horaires d'ouverture</Text>
               <Text style={styles.infoValue}>
@@ -203,7 +185,9 @@ export default function ParkingDetails() {
           {parking.phone && (
             <>
               <View style={styles.infoItem}>
-                <FontAwesome name="phone" size={20} color="#6200ee" />
+                <View style={styles.iconContainer}>
+                  <FontAwesome name="phone" size={20} color="#6200ee" />
+                </View>
                 <View style={styles.infoTextContainer}>
                   <Text style={styles.infoLabel}>Téléphone</Text>
                   <Text style={styles.infoValue}>{parking.phone}</Text>
@@ -214,7 +198,9 @@ export default function ParkingDetails() {
           )}
 
           <View style={styles.infoItem}>
-            <MaterialIcons name="email" size={20} color="#6200ee" />
+            <View style={styles.iconContainer}>
+              <MaterialIcons name="email" size={20} color="#6200ee" />
+            </View>
             <View style={styles.infoTextContainer}>
               <Text style={styles.infoLabel}>Email</Text>
               <Text style={styles.infoValue}>{parking.email}</Text>
@@ -225,7 +211,9 @@ export default function ParkingDetails() {
             <>
               <View style={styles.divider} />
               <View style={styles.infoItem}>
-                <Ionicons name="information-circle" size={20} color="#6200ee" />
+                <View style={styles.iconContainer}>
+                  <Ionicons name="information-circle" size={20} color="#6200ee" />
+                </View>
                 <View style={styles.infoTextContainer}>
                   <Text style={styles.infoLabel}>Description</Text>
                   <Text style={styles.infoValue}>{parking.description}</Text>
@@ -238,14 +226,18 @@ export default function ParkingDetails() {
           
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
-              <Feather name="book" size={24} color="#6200ee" />
+              <View style={styles.statIconContainer}>
+                <Feather name="book" size={24} color="#fff" />
+              </View>
               <Text style={styles.statValue}>{parking.capacity}</Text>
-              <Text style={styles.statLabel}>Capacité totale</Text>
+              <Text style={styles.statLabel}>Places totales</Text>
             </View>
             
             {parking.user && (
               <View style={styles.statItem}>
-                <Ionicons name="person" size={24} color="#6200ee" />
+                <View style={styles.statIconContainer}>
+                  <Ionicons name="person" size={24} color="#fff" />
+                </View>
                 <Text style={styles.statValue}>{parking.user.nom} {parking.user.prenom}</Text>
                 <Text style={styles.statLabel}>Gestionnaire</Text>
               </View>
@@ -255,12 +247,18 @@ export default function ParkingDetails() {
           <View style={styles.divider} />
           
           <View style={styles.metaInfo}>
-            <Text style={styles.metaText}>
-              Créé le: {formatDate(parking.createdAt)}
-            </Text>
-            <Text style={styles.metaText}>
-              Modifié le: {formatDate(parking.updatedAt)}
-            </Text>
+            <View style={styles.metaItem}>
+              <Ionicons name="calendar-outline" size={14} color="#888" />
+              <Text style={styles.metaText}>
+                Créé le: {formatDate(parking.createdAt)}
+              </Text>
+            </View>
+            <View style={styles.metaItem}>
+              <Ionicons name="refresh-outline" size={14} color="#888" />
+              <Text style={styles.metaText}>
+                Modifié le: {formatDate(parking.updatedAt)}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -337,30 +335,50 @@ const styles = StyleSheet.create({
     backgroundColor: "#6200ee",
     paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 5,
+    borderRadius: 25,
+    elevation: 2,
   },
   retryButtonText: {
     color: "#fff",
-    fontWeight: "bold",
+    fontWeight: "600",
+    fontSize: 14,
   },
   backButton: {
     position: "absolute",
     top: 50,
     left: 20,
     zIndex: 10,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
     borderRadius: 20,
-    padding: 8,
+    padding: 10,
+    elevation: 3,
+  },
+  imageContainer: {
+    width: "100%",
+    height: 250,
+    backgroundColor: "#e0e0e0",
+    justifyContent: "center",
+    alignItems: "center",
   },
   image: {
     width: "100%",
-    height: 250,
+    height: "100%",
+  },
+  placeholderContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  placeholderText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: "#6200ee",
+    fontWeight: "600",
   },
   content: {
     padding: 20,
     marginTop: -20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
     backgroundColor: "#fff",
   },
   header: {
@@ -371,7 +389,7 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 28,
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#1a1a1a",
     flex: 1,
     marginRight: 10,
@@ -392,34 +410,45 @@ const styles = StyleSheet.create({
   },
   statusText: {
     color: "#fff",
-    fontWeight: "600",
+    fontWeight: "700",
     fontSize: 12,
   },
   infoCard: {
     backgroundColor: "#f8f9fa",
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 20,
+    padding: 20,
     marginBottom: 20,
+    elevation: 2,
   },
   infoItem: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginVertical: 8,
+    marginVertical: 10,
+  },
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(98, 0, 238, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
   },
   infoTextContainer: {
-    marginLeft: 12,
     flex: 1,
   },
   infoLabel: {
     fontSize: 12,
     color: "#666",
-    marginBottom: 2,
-    fontWeight: "500",
+    marginBottom: 4,
+    fontWeight: "600",
+    textTransform: "uppercase",
   },
   infoValue: {
     fontSize: 16,
     fontWeight: "500",
     color: "#1a1a1a",
+    lineHeight: 22,
   },
   infoSubValue: {
     fontSize: 14,
@@ -429,7 +458,7 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: "#e0e0e0",
-    marginVertical: 8,
+    marginVertical: 12,
   },
   statsContainer: {
     flexDirection: "row",
@@ -440,11 +469,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flex: 1,
   },
+  statIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#6200ee",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
   statValue: {
     fontSize: 16,
     fontWeight: "700",
     color: "#6200ee",
     marginTop: 4,
+    textAlign: "center",
   },
   statLabel: {
     fontSize: 12,
@@ -455,10 +494,15 @@ const styles = StyleSheet.create({
   metaInfo: {
     marginTop: 8,
   },
+  metaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+  },
   metaText: {
     fontSize: 12,
     color: "#888",
-    marginBottom: 4,
+    marginLeft: 6,
   },
   actionButtons: {
     flexDirection: "row",
@@ -469,11 +513,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 10,
+    borderRadius: 12,
     flex: 1,
     marginHorizontal: 5,
+    elevation: 2,
   },
   callButton: {
     backgroundColor: "#4CAF50",

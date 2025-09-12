@@ -43,6 +43,7 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
             name="parking"
             options={{
               title: 'Parkings',
+              headerShown: false,
               tabBarIcon: ({ color }) => (
                 <FontAwesome size={24} name="car" color={color} />
               ),
@@ -53,6 +54,7 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
             name="messages"
             options={{
               title: 'Messages',
+              headerShown: false,
               tabBarIcon: ({ color }) => (
                 <FontAwesome size={24} name="envelope" color={color} />
               ),
