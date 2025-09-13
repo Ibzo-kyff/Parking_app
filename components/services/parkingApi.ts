@@ -2,12 +2,27 @@ export const API_URL = "https://parkapp-pi.vercel.app";
 
 export interface Parking {
   id: number;
+  userId: number;
   name: string;
+  address: string;
   city: string;
   email: string;
-  phone: string;
-  logo?: string;
-  image?: string;
+  phone: string | null;
+  description: string | null;
+  capacity: number;
+  hoursOfOperation: string | null;
+  status: string;
+  logo: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user?: {
+    id: number;
+    nom: string;
+    prenom: string;
+    email: string;
+    phone: string;
+  };
+  vehicles?: any[];
 }
 
 // Récupérer tous les parkings
