@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
-import { Link, useRouter } from "expo-router"; // Ajout de useRouter
+import { Link, useRouter } from "expo-router";
 import Header from '../Header';
 import { getParkings, Parking } from "../../components/services/parkingApi";
 
@@ -24,7 +24,7 @@ const ParkingList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const router = useRouter(); // Initialisation du router
+  const router = useRouter();
 
   useEffect(() => {
     const fetchParkings = async () => {
@@ -48,12 +48,11 @@ const ParkingList: React.FC = () => {
         (p) =>
           p.name.toLowerCase().includes(term) ||
           p.city.toLowerCase().includes(term) ||
-          (p.phone && p.phone.includes(term))
+          (p.phone && p.phone.toLowerCase().includes(term)) // Phone still searchable
       )
     );
   }, [searchTerm, parkings]);
 
-  // Fonction pour naviguer vers les détails avec l'ID
   const handleViewDetails = (parkingId: number) => {
     router.push(`/DetailParkings?id=${parkingId}`);
   };
@@ -71,7 +70,7 @@ const ParkingList: React.FC = () => {
 
   return (
     <View style={styles.container}>
-           <Header />
+      <Header />
       <View style={styles.header}>
         <Text style={styles.subtitle}>Trouvez l'emplacement parfait des toutes les parkings </Text>
       </View>
@@ -122,16 +121,11 @@ const ParkingList: React.FC = () => {
                   <FontAwesome name="map-marker" size={14} color="#6200ee" />
                   <Text style={styles.parkingCity}>{parking.city}</Text>
                 </View>
-                {parking.phone && (
-                  <View style={styles.phoneContainer}>
-                    <FontAwesome name="phone" size={12} color="#666" />
-                    <Text style={styles.parkingPhone}>{parking.phone}</Text>
-                  </View>
-                )}
+                {/* Removed phone number display */}
                 <View style={styles.buttonContainer}>
                   <TouchableOpacity 
                     style={styles.button}
-                    onPress={() => handleViewDetails(parking.id)} // Appel de la fonction avec l'ID
+                    onPress={() => handleViewDetails(parking.id)}
                   >
                     <Text style={styles.buttonText}>Voir détails</Text>
                     <MaterialIcons name="arrow-forward" size={16} color="#fff" />
@@ -146,6 +140,7 @@ const ParkingList: React.FC = () => {
   );
 };
 
+// Styles remain unchanged
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
