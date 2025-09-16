@@ -208,15 +208,19 @@ const AddVehicleForm: React.FC = () => {
     if (parkingId) formData.append("parkingId", parkingId);
     if (userOwnerId) formData.append("userOwnerId", userOwnerId);
 
-    photos.forEach((uri, index) => {
-      const filename = uri.split("/").pop();
-      const fileType = filename?.split(".").pop();
-      formData.append("photos", {
-        uri,
-        name: filename || `photo_${index}.${fileType}`,
-        type: `image/${fileType}`,
-      } as any);
-    });
+  for (let i = 0; i < photos.length; i++) {
+  const uri = photos[i];
+  const filename = uri.split("/").pop() || `photo_${i}.jpg`;
+  const ext = filename.split(".").pop();
+  const type = ext ? `image/${ext}` : `image/jpeg`;
+
+  // Important : envoyer un objet { uri, type, name }
+  formData.append("photos", {
+    uri,
+    name: filename,
+    type,
+  } as any);
+}
 
     const { data, error } = await apiService.createVehicle(formData, authState.accessToken || "");
     if (error) {

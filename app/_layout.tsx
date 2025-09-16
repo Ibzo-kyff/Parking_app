@@ -15,7 +15,7 @@ export default function RootLayout() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="tabs" />
         <Stack.Screen name="(Parking)" />
-        <Stack.Screen name="(Client)" />
+        <Stack.Screen name="(Clients)" />
       </Stack>
     </SafeAreaView>
     </AuthProvider>

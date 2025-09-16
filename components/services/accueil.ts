@@ -29,7 +29,7 @@ export const getParkings = async () => {
 export const getMarques = async () => {
   try {
     const response = await axios.get(`${API_URL}/api/vehicules/marques`);
-    return response.data; // ⚡ ton backend doit renvoyer { id, name, image }
+    return response.data;
   } catch (error) {
     console.error("Erreur lors de la récupération des marques :", error);
     throw error;
