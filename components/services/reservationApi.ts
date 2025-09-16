@@ -18,6 +18,7 @@ export type Reservation = {
 
 const BASE_URL = "https://parkapp-pi.vercel.app/api";
 
+
 // 🔹 Récupérer toutes les réservations du parking connecté
 export const getReservationsParking = async (): Promise<Reservation[]> => {
   const response = await api.get("/reservations/parking/all");

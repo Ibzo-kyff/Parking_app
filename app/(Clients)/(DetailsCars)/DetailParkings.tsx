@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import * as React from "react";
 import { useLocalSearchParams, router } from "expo-router";
 import {
   View,
@@ -16,17 +16,16 @@ import { getParkingById, Parking } from "../../../components/services/parkingApi
 
 export default function ParkingDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [parking, setParking] = useState<Parking | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [imageError, setImageError] = useState(false);
+  const [parking, setParking] = React.useState<Parking | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const [imageError, setImageError] = React.useState(false);
 
   // Debug: Afficher l'ID reçu
   console.log("ID reçu:", id);
 
-  useEffect(() => {
+  React.useEffect(() => {
     const fetchParkingDetails = async () => {
-      // Vérifier que l'ID est valide
       if (!id || isNaN(Number(id))) {
         setError("ID de parking invalide");
         setLoading(false);
@@ -64,19 +63,12 @@ export default function ParkingDetails() {
     }
   };
 
-  const handleNavigate = () => {
-    if (parking?.address) {
-      const address = encodeURIComponent(`${parking.address}, ${parking.city}`);
-      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${address}`);
-    }
-  };
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('fr-FR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+    return date.toLocaleDateString("fr-FR", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
   };
 
@@ -88,7 +80,7 @@ export default function ParkingDetails() {
       </View>
     );
   }
-  
+
   if (error) {
     return (
       <View style={styles.errorContainer}>
@@ -100,7 +92,7 @@ export default function ParkingDetails() {
       </View>
     );
   }
-  
+
   if (!parking) {
     return (
       <View style={styles.errorContainer}>
@@ -113,200 +105,171 @@ export default function ParkingDetails() {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <TouchableOpacity 
-        style={styles.backButton}
-        onPress={() => router.back()}
-      >
-        <Ionicons name="arrow-back" size={24} color="#fff" />
-      </TouchableOpacity>
+    <View style={styles.container}>
+      <ScrollView>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
 
-      <View style={styles.imageContainer}>
-        {parking.logo && !imageError ? (
-          <Image
-            source={{
-              uri: `https://parkapp-pi.vercel.app${parking.logo}`,
-            }}
-            style={styles.image}
-            resizeMode="cover"
-            onError={() => setImageError(true)}
-          />
-        ) : (
-          <View style={styles.placeholderContainer}>
-            <MaterialCommunityIcons name="parking" size={60} color="#6200ee" />
-            <Text style={styles.placeholderText}>{parking.name}</Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.name}>{parking.name}</Text>
-          <View style={[styles.statusBadge, 
-            parking.status === 'ACTIVE' ? styles.statusActive : 
-            parking.status === 'INACTIVE' ? styles.statusInactive : 
-            styles.statusMaintenance
-          ]}>
-            <Text style={styles.statusText}>
-              {parking.status === 'ACTIVE' ? 'Actif' : 
-               parking.status === 'INACTIVE' ? 'Inactif' : 'Maintenance'}
-            </Text>
-          </View>
+        <View style={styles.imageContainer}>
+          {parking.logo && !imageError ? (
+            <Image
+              source={{
+                uri: `https://parkapp-pi.vercel.app${parking.logo}`,
+              }}
+              style={styles.image}
+              resizeMode="cover"
+              onError={() => setImageError(true)}
+            />
+          ) : (
+            <View style={styles.placeholderContainer}>
+              <MaterialCommunityIcons name="parking" size={60} color="#6200ee" />
+              <Text style={styles.placeholderText}>{parking.name}</Text>
+            </View>
+          )}
         </View>
-        
-        <View style={styles.infoCard}>
-          <View style={styles.infoItem}>
-            <View style={styles.iconContainer}>
-              <Ionicons name="location" size={20} color="#6200ee" />
-            </View>
-            <View style={styles.infoTextContainer}>
-              <Text style={styles.infoLabel}>Adresse</Text>
-              <Text style={styles.infoValue}>{parking.address}</Text>
-              <Text style={styles.infoSubValue}>{parking.city}</Text>
-            </View>
-          </View>
 
-          <View style={styles.divider} />
-
-          <View style={styles.infoItem}>
-            <View style={styles.iconContainer}>
-              <Ionicons name="time" size={20} color="#6200ee" />
-            </View>
-            <View style={styles.infoTextContainer}>
-              <Text style={styles.infoLabel}>Horaires d'ouverture</Text>
-              <Text style={styles.infoValue}>
-                {parking.hoursOfOperation || "Non spécifié"}
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <Text style={styles.name}>{parking.name}</Text>
+            <View
+              style={[
+                styles.statusBadge,
+                parking.status === "ACTIVE"
+                  ? styles.statusActive
+                  : parking.status === "INACTIVE"
+                  ? styles.statusInactive
+                  : styles.statusMaintenance,
+              ]}
+            >
+              <Text style={styles.statusText}>
+                {parking.status === "ACTIVE"
+                  ? "Actif"
+                  : parking.status === "INACTIVE"
+                  ? "Inactif"
+                  : "Maintenance"}
               </Text>
             </View>
           </View>
 
-          <View style={styles.divider} />
-
-          {parking.phone && (
-            <>
-              <View style={styles.infoItem}>
-                <View style={styles.iconContainer}>
-                  <FontAwesome name="phone" size={20} color="#6200ee" />
-                </View>
-                <View style={styles.infoTextContainer}>
-                  <Text style={styles.infoLabel}>Téléphone</Text>
-                  <Text style={styles.infoValue}>{parking.phone}</Text>
-                </View>
+          <View style={styles.infoCard}>
+            <View style={styles.infoItem}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="location" size={20} color="#6200ee" />
               </View>
-              <View style={styles.divider} />
-            </>
-          )}
-
-          <View style={styles.infoItem}>
-            <View style={styles.iconContainer}>
-              <MaterialIcons name="email" size={20} color="#6200ee" />
-            </View>
-            <View style={styles.infoTextContainer}>
-              <Text style={styles.infoLabel}>Email</Text>
-              <Text style={styles.infoValue}>{parking.email}</Text>
-            </View>
-          </View>
-
-          {parking.description && (
-            <>
-              <View style={styles.divider} />
-              <View style={styles.infoItem}>
-                <View style={styles.iconContainer}>
-                  <Ionicons name="information-circle" size={20} color="#6200ee" />
-                </View>
-                <View style={styles.infoTextContainer}>
-                  <Text style={styles.infoLabel}>Description</Text>
-                  <Text style={styles.infoValue}>{parking.description}</Text>
-                </View>
+              <View style={styles.infoTextContainer}>
+                <Text style={styles.infoLabel}>Adresse</Text>
+                <Text style={styles.infoValue}>{parking.address}</Text>
+                <Text style={styles.infoSubValue}>{parking.city}</Text>
               </View>
-            </>
-          )}
-
-          <View style={styles.divider} />
-          
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <View style={styles.statIconContainer}>
-                <Feather name="book" size={24} color="#fff" />
-              </View>
-              <Text style={styles.statValue}>{parking.capacity}</Text>
-              <Text style={styles.statLabel}>Places totales</Text>
             </View>
-            
-            {parking.user && (
+
+            <View style={styles.divider} />
+
+            <View style={styles.infoItem}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="time" size={20} color="#6200ee" />
+              </View>
+              <View style={styles.infoTextContainer}>
+                <Text style={styles.infoLabel}>Horaires d'ouverture</Text>
+                <Text style={styles.infoValue}>
+                  {parking.hoursOfOperation || "Non spécifié"}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={styles.infoItem}>
+              <View style={styles.iconContainer}>
+                <MaterialIcons name="email" size={20} color="#6200ee" />
+              </View>
+              <View style={styles.infoTextContainer}>
+                <Text style={styles.infoLabel}>Email</Text>
+                <Text style={styles.infoValue}>{parking.email}</Text>
+              </View>
+            </View>
+
+            {parking.description && (
+              <>
+                <View style={styles.divider} />
+                <View style={styles.infoItem}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="information-circle" size={20} color="#6200ee" />
+                  </View>
+                  <View style={styles.infoTextContainer}>
+                    <Text style={styles.infoLabel}>Description</Text>
+                    <Text style={styles.infoValue}>{parking.description}</Text>
+                  </View>
+                </View>
+              </>
+            )}
+
+            <View style={styles.divider} />
+
+            <View style={styles.statsContainer}>
               <View style={styles.statItem}>
                 <View style={styles.statIconContainer}>
-                  <Ionicons name="person" size={24} color="#fff" />
+                  <Feather name="book" size={24} color="#fff" />
                 </View>
-                <Text style={styles.statValue}>{parking.user.nom} {parking.user.prenom}</Text>
-                <Text style={styles.statLabel}>Gestionnaire</Text>
+                <Text style={styles.statValue}>{parking.capacity}</Text>
+                <Text style={styles.statLabel}>Places totales</Text>
               </View>
-            )}
+
+              {parking.user && (
+                <View style={styles.statItem}>
+                  <View style={styles.statIconContainer}>
+                    <Ionicons name="person" size={24} color="#fff" />
+                  </View>
+                  <Text style={styles.statValue}>
+                    {parking.user.nom} {parking.user.prenom}
+                  </Text>
+                  <Text style={styles.statLabel}>Gestionnaire</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={styles.metaInfo}>
+              <View style={styles.metaItem}>
+                <Ionicons name="calendar-outline" size={14} color="#888" />
+                <Text style={styles.metaText}>
+                  Membre le: {formatDate(parking.createdAt)}
+                </Text>
+              </View>
+            </View>
           </View>
 
-          <View style={styles.divider} />
-          
-          <View style={styles.metaInfo}>
-            <View style={styles.metaItem}>
-              <Ionicons name="calendar-outline" size={14} color="#888" />
-              <Text style={styles.metaText}>
-                Créé le: {formatDate(parking.createdAt)}
-              </Text>
-            </View>
-            <View style={styles.metaItem}>
-              <Ionicons name="refresh-outline" size={14} color="#888" />
-              <Text style={styles.metaText}>
-                Modifié le: {formatDate(parking.updatedAt)}
-              </Text>
-            </View>
+          <View style={styles.actionButtons}>
+          <TouchableOpacity
+          style={[styles.actionButton, styles.navigateButton]}
+          onPress={() => router.navigate("messages")}
+        >
+          <FontAwesome name="envelope" size={20} color="#fff" />
+          <Text style={styles.actionButtonText}>Messagerie</Text>
+        </TouchableOpacity>
           </View>
         </View>
-
-        <View style={styles.actionButtons}>
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.callButton]} 
-            onPress={handleCall}
-            disabled={!parking.phone}
-          >
-            <FontAwesome 
-              name="phone" 
-              size={20} 
-              color={parking.phone ? "#fff" : "#ccc"} 
-            />
-            <Text style={[
-              styles.actionButtonText,
-              !parking.phone && styles.actionButtonTextDisabled
-            ]}>
-              Appeler
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.emailButton]} 
-            onPress={handleEmail}
-          >
-            <MaterialIcons name="email" size={20} color="#fff" />
-            <Text style={styles.actionButtonText}>Email</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.navigateButton]} 
-            onPress={handleNavigate}
-          >
-            <FontAwesome name="map-marker" size={20} color="#fff" />
-            <Text style={styles.actionButtonText}>Itinéraire</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
+// Ajout du style pour le conteneur du bouton fixe
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8f9fa",
   },
+  fixedButtonContainer: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    right: 20,
+    zIndex: 10,
+  },
+  // ... (les autres styles restent inchangés)
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
