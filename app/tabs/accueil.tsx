@@ -1,4 +1,3 @@
-// Sans les services api integrer dans la page accueil
 import React, { useRef, useState, useEffect } from 'react';
 import {
   View,
@@ -14,8 +13,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import Header from '../Header';
 import { getVehicules, getParkings, API_URL } from "../../components/services/accueil"; 
-// 👈 on garde backend pour véhicules + parkings
-// ⚠️ mais pour marques on va utiliser des données locales directement ici
+import { router } from 'expo-router';
 
 type RootStackParamList = {
   Accueil: { firstName?: string; lastName?: string };
@@ -28,7 +26,6 @@ type AccueilRouteProp = RouteProp<RootStackParamList, 'Accueil'>;
 const Accueil: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute<AccueilRouteProp>();
-  const { firstName, lastName } = route.params || {};
 
   // ✅ states
   const [vehicules, setVehicules] = useState<any[]>([]);
@@ -43,7 +40,6 @@ const Accueil: React.FC = () => {
     const fetchVehicules = async () => {
       try {
         const data = await getVehicules();
-        console.log('données véhicules:',data);
         setVehicules(data);
       } catch (error) {
         console.error("Erreur véhicules :", error);
@@ -123,10 +119,8 @@ const Accueil: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* ✅ Header avec nom et icône notification */}
       <Header />
 
-      
       {/* ✅ Barre de recherche */}
       <View style={styles.searchBarContainer}>
         <FontAwesome name="search" size={24} color="#999" style={styles.searchIcon} />
@@ -137,7 +131,7 @@ const Accueil: React.FC = () => {
         />
       </View>
 
-      {/* ✅ Carousel principal (parkings) */}
+      {/* ✅ Carousel principal (parkings) - CORRIGÉ */}
       <View style={styles.carouselContainer}>
         {loadingParkings ? (
           <ActivityIndicator size="large" color="#FD6A00" />
@@ -152,7 +146,16 @@ const Accueil: React.FC = () => {
           >
             {parkings.map((item, index) => (
               <View key={item.id || index} style={styles.carouselItem}>
-                <Image source={{ uri: item.image }} style={styles.carouselImage} />
+                <Image 
+                  source={{ 
+                    uri: item.logo 
+                      ? item.logo.startsWith('http') 
+                        ? item.logo // URL complète déjà
+                        : `${API_URL}${item.logo}` // URL relative
+                      : 'https://via.placeholder.com/150' // Image par défaut
+                  }} 
+                  style={styles.carouselImage} 
+                />
               </View>
             ))}
           </ScrollView>
@@ -198,7 +201,7 @@ const Accueil: React.FC = () => {
           {/* ✅ Section Pour vous (véhicules) */}
           <View style={styles.scrollTitleContainer}>
             <Text style={styles.scrollTitle}>Pour vous</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('pourVous' as never)}>
+            <TouchableOpacity onPress={() => router.push('/(Clients)/listVoiture')}>
               <Text style={styles.seeAllButton}>Voir tout</Text>
             </TouchableOpacity>
           </View>
@@ -220,19 +223,16 @@ const Accueil: React.FC = () => {
                   onPress={() => handleImagePress(index, 'vehicule')}
                 >
                   <View style={styles.imageWrapperLarge}>
-                    {/* <Image
-                      source={{ uri: item.photos && item.length > 0 ? '${BASE_URL}${item.photos[0]}':'vide'}}
-                      style={styles.scrollImageLarge}
-                    /> */}
                     <Image
-  source={{
-    uri: item.photos && item.photos.length > 0
-      ? `${API_URL}${item.photos[0]}`  // ✅ bonne interpolation
-      : "https://via.placeholder.com/150" // ✅ image par défaut si pas de photo
-  }}
-  style={styles.scrollImageLarge}
-/>
-
+                      source={{
+                        uri: item.photos && item.photos.length > 0
+                          ? item.photos[0].startsWith('http')
+                            ? item.photos[0] 
+                            : `${API_URL}${item.photos[0]}` 
+                          : "https://via.placeholder.com/150"
+                      }}
+                      style={styles.scrollImageLarge}
+                    />
                   </View>
                   <View style={styles.imageOverlay}>
                     <Text style={styles.imageLabel}>{item.marque}</Text>
@@ -276,13 +276,18 @@ const styles = StyleSheet.create({
   },
   carouselScrollView: { flex: 1 },
   carouselItem: {
-    width: 100,
+    width: 300, 
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     marginHorizontal: 5,
   },
-  carouselImage: { width: 100, height: 100, resizeMode: 'cover' },
+  carouselImage: { 
+    width: 280, 
+    height: 130, 
+    resizeMode: 'contain', 
+    borderRadius: 10,
+  },
   seeAllButton: { fontSize: 14, color: '#FD6A00', fontWeight: 'bold' },
   scrollContainer: { paddingBottom: 0, paddingTop: 20 },
   scrollSection: {
@@ -331,11 +336,32 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: 'hidden',
   },
-  scrollImage: { width: '100%', height: '100%', resizeMode: 'contain' },
-  scrollImageLarge: { width: '100%', height: '100%', resizeMode: 'cover' },
-  imageOverlay: { justifyContent: 'center', alignItems: 'center', paddingVertical: 5 },
-  imageLabel: { color: '#000', fontSize: 14, fontWeight: 'bold', marginTop: 5 },
-  imagePrix: { color: '#000', fontSize: 12, marginTop: 2 },
+  scrollImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain'
+  },
+  scrollImageLarge: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover'
+  },
+  imageOverlay: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 5
+  },
+  imageLabel: {
+    color: '#000',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginTop: 5
+  },
+  imagePrix: {
+    color: '#000',
+    fontSize: 12,
+    marginTop: 2
+  }
 });
 
 export default Accueil;
