@@ -6,20 +6,43 @@ export const API_URL = 'https://parkapp-pi.vercel.app/api/';
 
 const api = axios.create({
   baseURL: API_URL,
-  withCredentials: true,
+  withCredentials: true, // Essentiel pour envoyer les cookies
 });
 
 let authToken: string | null = null;
 
-// Helper type pour les erreurs API
-type ApiError = {
-  message: string;
-  response?: {
-    data?: {
-      message?: string;
-    };
-  };
-};
+// Intercepteur pour gérer les erreurs d'authentification
+api.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as typeof error.config & { _retry?: boolean };
+    
+    if (error.response?.status === 403 && originalRequest && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      try {
+        // Tentative de rafraîchissement du token
+        const response = await axios.post(`${API_URL}/auth/refresh`, {}, {
+          withCredentials: true // Important pour envoyer le cookie refreshToken
+        });
+        
+        const { accessToken } = response.data;
+        if (accessToken) {
+          await setAuthToken(accessToken);
+          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+          return api(originalRequest);
+        }
+      } catch (refreshError) {
+        console.error('Erreur lors du rafraîchissement du token:', refreshError);
+        await clearAuthToken();
+        await AsyncStorage.removeItem('authState');
+        // Vous pouvez rediriger vers la page de login ici si nécessaire
+      }
+    }
+    
+    return Promise.reject(error);
+  }
+);
 
 export const setAuthToken = async (token: string): Promise<void> => {
   authToken = token;
@@ -45,21 +68,35 @@ export const login = async (credentials: { email: string; password: string }): P
   try {
     const response = await api.post('/auth/login', credentials);
 
-    // ✅ inclure id & parkingId dans la destructuration
+    // Le refreshToken n'est plus dans la réponse, il est dans un cookie HTTP-only
     const { accessToken, role, emailVerified, nom, prenom, id, parkingId } = response.data || {};
 
-    // ✅ stocker accessToken
+    // Stocker accessToken
     if (accessToken) await setAuthToken(accessToken);
 
-    // ✅ stocker infos utilisateur
+    // Stocker infos utilisateur
     await AsyncStorage.setItem('role', role || '');
     await AsyncStorage.setItem('emailVerified', emailVerified ? 'true' : 'false');
     await AsyncStorage.setItem('nom', nom || 'Inconnu');
     await AsyncStorage.setItem('prenom', prenom || 'Inconnu');
 
-    // ✅ stocker id et parkingId
+    // Stocker id et parkingId
     if (id) await AsyncStorage.setItem('userId', String(id));
     if (parkingId) await AsyncStorage.setItem('parkingId', String(parkingId));
+
+    // Mettre à jour le state d'authentification
+    const authState = {
+      accessToken,
+      refreshToken: null, // Plus besoin de stocker le refreshToken côté client
+      role,
+      userId: id ? String(id) : null,
+      parkingId: parkingId ? String(parkingId) : null,
+      emailVerified: emailVerified || false,
+      nom,
+      prenom
+    };
+    
+    await AsyncStorage.setItem('authState', JSON.stringify(authState));
 
     return { accessToken, role, emailVerified, nom, prenom, id, parkingId };
   } catch (error) {
@@ -68,6 +105,7 @@ export const login = async (credentials: { email: string; password: string }): P
   }
 };
 
+// Les autres fonctions restent largement inchangées...
 export const register = async (userData: {
   email: string;
   password: string;
@@ -95,9 +133,12 @@ export const register = async (userData: {
   }
 };
 
-export const refreshToken = async (refreshToken: string): Promise<string> => {
+// Cette fonction n'est plus nécessaire car le rafraîchissement se fait automatiquement via l'intercepteur
+export const refreshToken = async (): Promise<string> => {
   try {
-    const response = await api.post('/auth/refresh', { refreshToken });
+    const response = await api.post('/auth/refresh', {}, {
+      withCredentials: true
+    });
     const { accessToken } = response.data || {};
     if (accessToken) {
       await setAuthToken(accessToken);
@@ -111,30 +152,30 @@ export const refreshToken = async (refreshToken: string): Promise<string> => {
 
 export const logout = async (): Promise<void> => {
   try {
-    // Essayer de déconnecter proprement du serveur
-    await api.post('/auth/logout');
+    await api.post('/auth/logout', {}, {
+      withCredentials: true
+    });
   } catch (error) {
     const axiosError = error as AxiosError;
-    // L'erreur 401 est attendue si le token est déjà expiré/invalide
     if (axiosError.response?.status !== 401) {
       console.error('Logout error (non-401):', error);
     }
-    // On continue quand même le cleanup local même en cas d'erreur
   } finally {
-    // Nettoyage local garantie dans tous les cas
     await clearAuthToken();
     await AsyncStorage.multiRemove([
       'accessToken', 
-      'refreshToken', 
       'role', 
       'emailVerified', 
       'nom', 
       'prenom',
-      'user'
+      'userId',
+      'parkingId',
+      'authState'
     ]);
   }
 };
 
+// Les autres fonctions restent inchangées...
 export const getStoredAccessToken = (): Promise<string | null> => {
   return AsyncStorage.getItem('accessToken');
 };
@@ -176,6 +217,7 @@ export const verifyResetOTP = async (email: string, otp: string): Promise<any> =
     throw new Error(err.response?.data?.message || 'Invalid OTP');
   }
 };
+
 export const verifyEmailWithOTP = async (email: string, otp: string): Promise<any> => {
   try {
     const response = await api.post('/auth/verify-email-otp', { email, otp });

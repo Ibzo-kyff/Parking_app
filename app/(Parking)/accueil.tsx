@@ -1,69 +1,162 @@
-
 import Header from '../Header';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  ImageBackground,
   TouchableOpacity,
   Image,
   FlatList,
   TextInput,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import Swiper from 'react-native-swiper';
-
-import bgStat from '../../assets/images/image1.jpg';
-import headerImage from '../../assets/images/parking.png';
+import axios from 'axios';
+import { useAuth } from '../../context/AuthContext';
 
 // 🔹 Types
 type Voiture = {
+  createdAt: string | number | Date;
   id: string;
   marque: string;
-  modele: string;
-  image: any;
+  model: string;
+  photos: string[];
+  status: string;
+  stats: {
+    vues: number;
+    reservations: number;
+    favoris: number;
+    reservationsActives: number;
+  };
+  nextReservation?: {
+    type: string;
+    date: string;
+    client: string;
+  };
 };
 
-type Marque = {
-  id: string;
-  nom: string;
-  logo: any;
+type ParkingData = {
+  parking: {
+    id: string;
+    name: string;
+    address: string;
+    phone: string;
+    logo: string | null;
+  };
+  statistics: {
+    total: number;
+    vendus: number;
+    enLocation: number;
+    disponibles: number;
+    enMaintenance: number;
+    indisponibles: number;
+    totalVues: number;
+    totalReservations: number;
+    totalFavoris: number;
+    reservationsActives: number;
+    monthlySales: number;
+    monthlyRentals: number;
+  };
+  vehicles: Voiture[];
+  charts: {
+    monthlyData: {
+      labels: string[];
+      sales: number[];
+      rentals: number[];
+    };
+    statusDistribution: {
+      labels: string[];
+      data: number[];
+    };
+  };
+  filters: {
+    currentStatus: string;
+    currentSearch: string;
+  };
 };
-
-// 🔹 Données
-const voituresPopulaires: Voiture[] = [
-  { id: '1', marque: 'Toyota', modele: 'Corolla', image: require('../../assets/images/voiture1.jpg') },
-  { id: '2', marque: 'Hyundai', modele: 'Elantra', image: require('../../assets/images/voiture3.jpg') },
-  { id: '3', marque: 'Peugeot', modele: '308', image: require('../../assets/images/voiture3.jpg') },
-];
-
-const marques: Marque[] = [
-  { id: '1', nom: 'Toyota', logo: require('../../assets/images/toyota.jpg') },
-  { id: '2', nom: 'Renault', logo: require('../../assets/images/renault.png') },
-  { id: '3', nom: 'Mercedes', logo: require('../../assets/images/mercede.png') },
-  { id: '4', nom: 'Audi', logo: require('../../assets/images/audi.png') },
-];
-
-const voituresRecentes: Voiture[] = [
-  { id: '4', marque: 'BMW', modele: 'Serie 3', image: require('../../assets/images/voiture1.jpg') },
-  { id: '5', marque: 'Audi', modele: 'A4', image: require('../../assets/images/voiture1.jpg') },
-  { id: '6', marque: 'Renault', modele: 'Clio', image: require('../../assets/images/voiture3.jpg') },
-];
 
 const AccueilParking = () => {
-   const [searchText, setSearchText] = useState('');
+  const { authState, refreshAuth } = useAuth();
+  const [parkingData, setParkingData] = useState<ParkingData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
+
+  const fetchParkingData = async (isRetry = false) => {
+    try {
+      const response = await axios.get('https://parkapp-pi.vercel.app/api/vehicules/parking/management', {
+        headers: {
+          Authorization: `Bearer ${authState.accessToken}`,
+        },
+      });
+      
+      // Préfixer les URLs des photos sans ajouter de doublon
+      const dataWithFixedPhotos = {
+        ...response.data,
+        vehicles: response.data.vehicles.map((v: Voiture) => ({
+          ...v,
+          photos: v.photos.map((photo: string) =>
+            photo.startsWith('http') ? photo : `https://parkapp-pi.vercel.app${photo}`
+          ),
+        })),
+      };
+      setParkingData(dataWithFixedPhotos);
+      setError(null);
+    } catch (err: any) {
+      if (err.response?.status === 403 && !isRetry && retryCount < 2) {
+        // Token expiré, essayer de le rafraîchir
+        const success = await refreshAuth();
+        if (success) {
+          setRetryCount(prev => prev + 1);
+          // Réessayer la requête avec le nouveau token
+          await fetchParkingData(true);
+          return;
+        }
+      }
+      
+      setError('Erreur lors de la récupération des données du parking');
+      console.error('Erreur API:', err);
+      
+      if (err.response?.status === 403) {
+        Alert.alert(
+          'Session expirée',
+          'Votre session a expiré. Veuillez vous reconnecter.',
+          [
+            {
+              text: 'Se reconnecter',
+              onPress: () => {
+                router.replace('/(auth)/LoginScreen');
+              }
+            }
+          ]
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (authState.accessToken) {
+      fetchParkingData();
+    } else {
+      setError('Aucun token d\'authentification disponible');
+      setLoading(false);
+    }
+  }, [authState.accessToken]);
 
   // 🔹 Navigation / actions
   const handleAjouterVoiture = () => router.navigate('/(ParkingDetail)/AjoutParking');
   const handleHistorique = () => router.navigate('/historique');
   const handleVoirTout = () => router.navigate('/voitures/populaires');
 
-  const handleSelectMarque = (marque: Marque) => {
-    router.push(`/voitures/marque/${marque.nom}`);
+  const handleSelectMarque = (marque: string) => {
+    router.push(`/voitures/marque/${marque}`);
   };
 
   const handleSelectVoiture = (voiture: Voiture) => {
@@ -73,17 +166,67 @@ const AccueilParking = () => {
   // 🔹 Renders
   const renderVoitureItem = ({ item }: { item: Voiture }) => (
     <TouchableOpacity style={styles.voitureCard} onPress={() => handleSelectVoiture(item)}>
-      <Image source={item.image} style={styles.voitureImage} />
-      <Text style={styles.voitureText}>{item.marque} {item.modele}</Text>
+      <Image
+        source={{ uri: item.photos[0] || 'https://via.placeholder.com/100x70' }}
+        style={styles.voitureImage}
+      />
+      <Text style={styles.voitureText}>{item.marque} {item.model}</Text>
     </TouchableOpacity>
   );
 
-  const renderMarqueItem = ({ item }: { item: Marque }) => (
+  const renderMarqueItem = ({ item }: { item: string }) => (
     <TouchableOpacity style={styles.marqueCard} onPress={() => handleSelectMarque(item)}>
-      <Image source={item.logo} style={styles.marqueLogo} />
-      <Text style={styles.marqueNom}>{item.nom}</Text>
+      <Image
+        source={{ uri: `https://via.placeholder.com/40x40?text=${item}` }}
+        style={styles.marqueLogo}
+      />
+      <Text style={styles.marqueNom}>{item}</Text>
     </TouchableOpacity>
   );
+
+  if (loading) {
+    return (
+      <View style={styles.mainContainer}>
+        <Header />
+        <ActivityIndicator size="large" color="#FD6A00" style={{ marginTop: 50 }} />
+      </View>
+    );
+  }
+
+  if (error || !parkingData) {
+    return (
+      <View style={styles.mainContainer}>
+        <Header />
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error || 'Aucune donnée disponible'}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={() => {
+              setLoading(true);
+              setError(null);
+              fetchParkingData();
+            }}
+          >
+            <Text style={styles.retryText}>Réessayer</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // Trier les véhicules par vues pour les "plus vus"
+  const voituresPopulaires = [...parkingData.vehicles]
+    .sort((a, b) => (b.stats?.vues || 0) - (a.stats?.vues || 0))
+    .slice(0, 3);
+
+  // Trier par date de création pour les "récemment ajoutées"
+  const voituresRecentes = [...parkingData.vehicles]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 3);
+
+  // Extraire les marques distinctes
+  const marques = [...new Set(parkingData.vehicles.map(v => v.marque))];
+
   return (
     <View style={styles.mainContainer}>
       {/* Header fixe */}
@@ -112,7 +255,7 @@ const AccueilParking = () => {
           <Text style={styles.sectionTitle}>Marques</Text>
           <FlatList
             data={marques}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item}
             horizontal
             showsHorizontalScrollIndicator={false}
             renderItem={renderMarqueItem}
@@ -126,15 +269,16 @@ const AccueilParking = () => {
             <Swiper autoplay autoplayTimeout={3} showsPagination={true} dotColor="#ccc" activeDotColor="#FD6A00">
               {voituresRecentes.map((v) => (
                 <TouchableOpacity key={v.id} style={styles.recentCard} onPress={() => handleSelectVoiture(v)}>
-                  <Image source={v.image} style={styles.recentImage} />
-                  <Text style={styles.recentText}>{v.marque} {v.modele}</Text>
+                  <Image
+                    source={{ uri: v.photos[0] || 'https://via.placeholder.com/100x150' }}
+                    style={styles.recentImage}
+                  />
+                  <Text style={styles.recentText}>{v.marque} {v.model}</Text>
                 </TouchableOpacity>
               ))}
             </Swiper>
           </View>
         </View>
-
-       
 
         {/* Populaires */}
         <View style={styles.populairesSection}>
@@ -152,10 +296,10 @@ const AccueilParking = () => {
             renderItem={renderVoitureItem}
           />
         </View>
-        {/* Liens rapides en bas de l'écran */}
-         {/* Statistiques */}
+
+        {/* Statistiques */}
         <View style={styles.statsSection}>
-           <TouchableOpacity style={styles.quickLink} onPress={handleAjouterVoiture}>
+          <TouchableOpacity style={styles.quickLink} onPress={handleAjouterVoiture}>
             <Ionicons name="add-circle" size={24} color="#FD6A00" />
             <Text style={styles.quickLinkText}>Ajouter</Text>
           </TouchableOpacity>
@@ -175,7 +319,7 @@ const AccueilParking = () => {
   );
 };
 
-// 🔹 Styles modifiés
+// 🔹 Styles modifiés avec ajout des styles d'erreur
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
@@ -186,15 +330,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingTop: 20, // Espace pour le header fixe
+    paddingTop: 20,
     paddingBottom: 20,
-  },
-  headerWrapper: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
   },
   searchBar: {
     flexDirection: 'row',
@@ -216,21 +353,27 @@ const styles = StyleSheet.create({
     fontSize: 16, 
     flex: 1 
   },
-  addButtonContainer: {
+  errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
-  addButton: { 
-    backgroundColor: '#FD6A00', 
+  errorText: {
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#666',
+    fontSize: 16,
+  },
+  retryButton: {
+    backgroundColor: '#FD6A00',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
     borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
   },
-  addButtonText: { 
-    color: '#fff', 
-    fontWeight: 'bold',
-    fontSize: 12,
+  retryText: {
+    color: '#fff',
+    fontWeight: '600',
   },
   statsSection: {
     flexDirection: 'row',
@@ -247,35 +390,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-  },
-  statsCardsContainer: {
-    flex: 1,
-    justifyContent: 'space-between',
-    height: 110,
-  },
-  statCard: {
-    height: 50,
-    paddingVertical: 6,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginHorizontal: 5,
-    overflow: 'hidden',
-    justifyContent: 'center',
-  },
-  statCardImage: { 
-    borderRadius: 10, 
-    resizeMode: 'cover', 
-    opacity: 0.3 
-  },
-  statNumber: { 
-    fontWeight: 'bold', 
-    color: '#000',
-    fontSize: 16,
-  },
-  statLabel: { 
-    color: '#000',
-    fontSize: 10,
   },
   marquesSection: { 
     marginHorizontal: 16, 
@@ -370,30 +484,16 @@ const styles = StyleSheet.create({
     color: '#333', 
     textAlign: 'center' 
   },
-  quickLinksContainer: {
-  flexDirection: 'row',
-  justifyContent: 'space-around',
-  alignItems: 'center',
-  backgroundColor: '#fff',
-  paddingVertical: 10,
-  borderTopWidth: 1,
-  borderTopColor: '#eee',
-  position: 'absolute',
-  bottom: 10,
-  left: 0,
-  right: 0,
-},
-quickLink: {
-  alignItems: 'center',
-  paddingHorizontal: 10,
-},
-quickLinkText: {
-  marginTop: 4,
-  fontSize: 12,
-  color: '#333',
-  fontWeight: '500',
-},
-
+  quickLink: {
+    alignItems: 'center',
+    paddingHorizontal: 10,
+  },
+  quickLinkText: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#333',
+    fontWeight: '500',
+  },
 });
 
 export default AccueilParking;
