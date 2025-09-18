@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAuthToken, refreshToken } from '../components/services/api';
 
 interface AuthState {
+  token: any;
+  user: any;
   accessToken: string | null;
   role: string | null;
   userId: string | null;
