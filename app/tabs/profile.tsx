@@ -1,64 +1,300 @@
-import React, { useState } from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity, ScrollView, Modal, Pressable, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { 
+  View, Text, Image, StyleSheet, TouchableOpacity, ScrollView, 
+  Modal, Pressable, Dimensions, ActivityIndicator, Alert, 
+  RefreshControl, Platform 
+} from 'react-native';
 import { Ionicons, Feather, MaterialCommunityIcons, FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { Link } from 'expo-router'; // Changement important ici
+import { Link, router } from 'expo-router';
+import { useAuth } from '../../context/AuthContext';
+import { userService } from '../../components/services/profileApi'; // Import du service
 
 const { width } = Dimensions.get('window');
 
-const profile = () => {
+const Profile = () => {
   const [profileImage, setProfileImage] = useState('https://cdn-icons-png.flaticon.com/512/149/149071.png');
   const [modalVisible, setModalVisible] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [userData, setUserData] = useState({
+    nom: "",
+    prenom: "",
+    userId: ""
+  });
+
+  const { authState, clearAuthState } = useAuth();
+
+  // Fonction pour récupérer les données utilisateur
+  const fetchUserData = async (isRefreshing = false) => {
+    try {
+      if (!isRefreshing) setLoading(true);
+      else setRefreshing(true);
+      
+      const token = authState.accessToken;
+      
+      if (!token) {
+        Alert.alert('Erreur', 'Token d\'authentification manquant');
+        router.replace('/(auth)/LoginScreen');
+        return;
+      }
+
+      // Utilisation du service API
+      const userInfo = await userService.getCurrentUser(token);
+      
+      // Mettre à jour l'image de profil
+      if (userInfo.image) {
+        setProfileImage(`https://parkapp-pi.vercel.app${userInfo.image}?t=${Date.now()}`);
+      }
+      
+      // Déterminer le titre en fonction du rôle
+      let title = "Utilisateur";
+      if (userInfo.role === 'CLIENT') title = 'Client';
+      else if (userInfo.role === 'PARKING') title = 'Propriétaire de parking';
+      
+      setUserData({
+        nom: userInfo.nom || "Prénom",
+        prenom: userInfo.prenom || "Nom",
+        userId: userInfo.id || ""
+      });
+      
+    } catch (error: any) {
+      console.error('Erreur:', error);
+      
+      if (error.status === 401) {
+        // Token invalide ou expiré
+        Alert.alert('Session expirée', 'Veuillez vous reconnecter');
+        clearAuthState();
+        router.replace('/(auth)/LoginScreen');
+      } else {
+        Alert.alert('Erreur', 'Impossible de charger les données du profil');
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUserData();
+    
+    const interval = setInterval(() => {
+      fetchUserData(true);
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fonction pour uploader l'image
+  const uploadImage = async (uri: string) => {
+    try {
+      setUploading(true);
+      const token = authState.accessToken;
+      
+      if (!token) {
+        Alert.alert('Erreur', 'Token d\'authentification manquant');
+        return false;
+      }
+
+      // Utilisation du service API pour uploader l'image
+      const result = await userService.updateProfileImage(token, uri);
+      
+      Alert.alert('Succès', 'Photo de profil mise à jour avec succès');
+      
+      // Mettre à jour l'image affichée
+      if (result.image) {
+        setProfileImage(`https://parkapp-pi.vercel.app${result.image}?t=${Date.now()}`);
+      }
+      
+      return true;
+    } catch (error: any) {
+      console.error('Erreur upload complète:', error);
+      
+      let errorMessage = 'Impossible de mettre à jour la photo de profil';
+      if (error.message.includes('413')) {
+        errorMessage = 'L\'image est trop volumineuse. Veuillez choisir une image plus petite.';
+      } else if (error.message.includes('415')) {
+        errorMessage = 'Format d\'image non supporté. Veuillez utiliser JPEG ou PNG.';
+      } else if (error.message.includes('network')) {
+        errorMessage = 'Erreur de réseau. Veuillez vérifier votre connexion internet.';
+      }
+      
+      Alert.alert('Erreur', errorMessage);
+      return false;
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 1,
-    });
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission requise', 'Nous avons besoin de votre permission pour accéder à votre galerie');
+        return;
+      }
 
-    if (!result.canceled) {
-      setProfileImage(result.assets[0].uri);
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        await uploadImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Erreur sélection image:', error);
+      Alert.alert('Erreur', 'Impossible de sélectionner l\'image');
+    } finally {
+      setModalVisible(false);
     }
-    setModalVisible(false);
   };
 
   const takePhoto = async () => {
-    let result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 1,
-    });
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission requise', 'Nous avons besoin de votre permission pour accéder à votre caméra');
+        return;
+      }
 
-    if (!result.canceled) {
-      setProfileImage(result.assets[0].uri);
+      let result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        await uploadImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Erreur prise photo:', error);
+      Alert.alert('Erreur', 'Impossible de prendre une photo');
+    } finally {
+      setModalVisible(false);
     }
-    setModalVisible(false);
   };
 
-  return (
+  const handleLogout = async () => {
+    Alert.alert(
+      'Déconnexion',
+      'Êtes-vous sûr de vouloir vous déconnecter ?',
+      [
+        {
+          text: 'Annuler',
+          style: 'cancel',
+        },
+        {
+          text: 'Se déconnecter',
+          onPress: async () => {
+            try {
+              clearAuthState(); // Utilisez la fonction du contexte pour effacer les données
+              router.replace('/(auth)/LoginScreen');
+            } catch (error) {
+              console.error('Erreur lors de la déconnexion:', error);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRefresh = () => {
+    fetchUserData(true);
+  };
+
+  // Composant Skeleton pour le chargement
+  const SkeletonLoader = () => (
     <ScrollView contentContainerStyle={styles.contentContainer}>
-      {/* Photo de profil modifiable */}
+      {/* En-tête avec skeleton */}
       <View style={styles.profileHeader}>
-        <TouchableOpacity onPress={() => setModalVisible(true)} activeOpacity={0.8}>
+        <View style={styles.profileImageContainer}>
+          <View style={[styles.profileImage, styles.skeletonImage]} />
+          <View style={styles.editIcon}>
+            <Feather name="edit-2" size={20} color="#FDB913" />
+          </View>
+        </View>
+        <View style={styles.skeletonTextContainer}>
+          <View style={[styles.skeletonText, { width: 180, height: 24, marginBottom: 8 }]} />
+          <View style={[styles.skeletonText, { width: 140, height: 16 }]} />
+        </View>
+      </View>
+
+      {/* Options du menu avec skeleton */}
+      <View style={styles.menuContainer}>
+        {[1, 2, 3].map((item) => (
+          <View key={item} style={styles.menuItem}>
+            <View style={[styles.menuIcon, styles.skeletonIcon]} />
+            <View style={styles.menuTextContainer}>
+              <View style={[styles.skeletonText, { width: 200, height: 16, marginBottom: 4 }]} />
+              <View style={[styles.skeletonText, { width: 160, height: 14 }]} />
+            </View>
+            <View style={[styles.skeletonChevron, { width: 20, height: 20 }]} />
+          </View>
+        ))}
+      </View>
+
+      {/* Bouton Déconnexion avec skeleton */}
+      <View style={[styles.logoutButton, styles.skeletonButton]} />
+    </ScrollView>
+  );
+
+  if (loading) {
+    return <SkeletonLoader />;
+  }
+
+  return (
+    <ScrollView 
+      contentContainerStyle={styles.contentContainer}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          colors={['#FDB913']}
+          tintColor={'#FDB913'}
+        />
+      }
+    >
+      {/* En-tête avec photo de profil */}
+      <View style={styles.profileHeader}>
+        <TouchableOpacity onPress={() => setModalVisible(true)} activeOpacity={0.8} disabled={uploading}>
           <View style={styles.profileImageContainer}>
-            <Image
-              source={{ uri: profileImage }}
-              style={styles.profileImage}
-            />
+            {uploading ? (
+              <View style={[styles.profileImage, styles.uploadingContainer]}>
+                <ActivityIndicator size="large" color="#FDB913" />
+              </View>
+            ) : (
+              <Image
+                source={{ uri: profileImage }}
+                style={styles.profileImage}
+                onError={() => setProfileImage('https://cdn-icons-png.flaticon.com/512/149/149071.png')}
+              />
+            )}
             <View style={styles.editIcon}>
-              <Feather name="edit-2" size={20} color="#FDB913" />
+              {uploading ? (
+                <ActivityIndicator size="small" color="#FDB913" />
+              ) : (
+                <Feather name="edit-2" size={20} color="#FDB913" />
+              )}
             </View>
           </View>
         </TouchableOpacity>
-        <Text style={styles.userName}>Harber Djitteye</Text>
-        <Text style={styles.userTitle}>Développeur Full Stack</Text>
+        <Text style={styles.userName}>{userData.nom} {userData.prenom}</Text>
+        
+        {refreshing && (
+          <View style={styles.refreshingIndicator}>
+            <ActivityIndicator size="small" color="#FDB913" />
+            <Text style={styles.refreshingText}>Mise à jour...</Text>
+          </View>
+        )}
       </View>
 
-      {/* Menu options */}
+      {/* Options du menu */}
       <View style={styles.menuContainer}>
-       <Link href="../(profil)/infopersonnel" asChild>
+        <Link href="../(profil)/infopersonnel" asChild>
           <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
             <View style={styles.menuIcon}>
               <Ionicons name="person-outline" size={24} color="#FDB913" />
@@ -70,36 +306,43 @@ const profile = () => {
             <Feather name="chevron-right" size={20} color="#999" />
           </TouchableOpacity>
         </Link>
+        
         <Link href="../(profil)/parametre" asChild>
-        <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
-          <View style={styles.menuIcon}>
-            <Feather name="settings" size={24} color="#FDB913" />
-          </View>
-          <View style={styles.menuTextContainer}>
-            <Text style={styles.menuItemText}>Paramètres</Text>
-            <Text style={styles.menuItemSubText}>Personnalisez l'application</Text>
-          </View>
-          <Feather name="chevron-right" size={20} color="#999" />
-        </TouchableOpacity>
-       </Link>
+          <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
+            <View style={styles.menuIcon}>
+              <Feather name="settings" size={24} color="#FDB913" />
+            </View>
+            <View style={styles.menuTextContainer}>
+              <Text style={styles.menuItemText}>Paramètres</Text>
+              <Text style={styles.menuItemSubText}>Personnalisez l'application</Text>
+            </View>
+            <Feather name="chevron-right" size={20} color="#999" />
+          </TouchableOpacity>
+        </Link>
          
-       <Link href="../(profil)/aide" asChild>
-        <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
-          <View style={styles.menuIcon}>
-            <Feather name="help-circle" size={24} color="#FDB913" />
-          </View>
-          <View style={styles.menuTextContainer}>
-            <Text style={styles.menuItemText}>Aide & Support</Text>
-            <Text style={styles.menuItemSubText}>Centre d'aide et contact</Text>
-          </View>
-          <Feather name="chevron-right" size={20} color="#999" />
-        </TouchableOpacity>
+        <Link href="../(profil)/aide" asChild>
+          <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
+            <View style={styles.menuIcon}>
+              <Feather name="help-circle" size={24} color="#FDB913" />
+            </View>
+            <View style={styles.menuTextContainer}>
+              <Text style={styles.menuItemText}>Aide & Support</Text>
+              <Text style={styles.menuItemSubText}>Centre d'aide et contact</Text>
+            </View>
+            <Feather name="chevron-right" size={20} color="#999" />
+          </TouchableOpacity>
         </Link>
       </View>
 
       {/* Bouton Déconnexion */}
-      <TouchableOpacity style={styles.logoutButton} activeOpacity={0.8}>
+      <TouchableOpacity style={styles.logoutButton} activeOpacity={0.8} onPress={handleLogout}>
         <Text style={styles.logoutButtonText}>Déconnexion</Text>
+      </TouchableOpacity>
+
+      {/* Bouton de rafraîchissement */}
+      <TouchableOpacity style={styles.refreshButton} activeOpacity={0.8} onPress={handleRefresh}>
+        <Feather name="refresh-cw" size={20} color="#FDB913" />
+        <Text style={styles.refreshButtonText}>Rafraîchir les données</Text>
       </TouchableOpacity>
 
       {/* Modal pour changer la photo */}
@@ -117,6 +360,7 @@ const profile = () => {
               style={styles.modalButton} 
               onPress={takePhoto}
               android_ripple={{ color: '#f0f0f0' }}
+              disabled={uploading}
             >
               <MaterialCommunityIcons name="camera" size={24} color="#FDB913" />
               <Text style={styles.modalButtonText}>Prendre une photo</Text>
@@ -126,6 +370,7 @@ const profile = () => {
               style={styles.modalButton} 
               onPress={pickImage}
               android_ripple={{ color: '#f0f0f0' }}
+              disabled={uploading}
             >
               <FontAwesome name="photo" size={24} color="#FDB913" />
               <Text style={styles.modalButtonText}>Choisir depuis la galerie</Text>
@@ -135,6 +380,7 @@ const profile = () => {
               style={[styles.modalButton, { borderBottomWidth: 0 }]} 
               onPress={() => setModalVisible(false)}
               android_ripple={{ color: '#f0f0f0' }}
+              disabled={uploading}
             >
               <Text style={[styles.modalButtonText, { color: '#FDB913' }]}>Annuler</Text>
             </Pressable>
@@ -145,16 +391,25 @@ const profile = () => {
   );
 };
 
+// Les styles restent exactement les mêmes que dans le code précédent
 const styles = StyleSheet.create({
   contentContainer: {
-    flex: 1,
-    backgroundColor: "white",
-    paddingBottom: 5,
+    flexGrow: 1,
+    backgroundColor: "#f8f9fa",
+    paddingVertical: 20,
   },
   profileHeader: {
     alignItems: 'center',
     paddingVertical: 30,
     marginBottom: 20,
+    backgroundColor: 'white',
+    marginHorizontal: 20,
+    borderRadius: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   profileImageContainer: {
     position: 'relative',
@@ -164,8 +419,13 @@ const styles = StyleSheet.create({
     width: 130,
     height: 130,
     borderRadius: 75,
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: '#FDB913',
+  },
+  uploadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
   },
   editIcon: {
     position: 'absolute',
@@ -184,44 +444,52 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   userName: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#FDB913',
+    color: '#333',
     marginBottom: 5,
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
   },
   userTitle: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#777',
     fontStyle: 'italic',
+    marginBottom: 5,
+  },
+  refreshingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  refreshingText: {
+    fontSize: 12,
+    color: '#FDB913',
+    marginLeft: 8,
   },
   menuContainer: {
     marginHorizontal: 20,
-    marginBottom: 5,
+    marginBottom: 20,
     backgroundColor: 'white',
     borderRadius: 15,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 18,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.05)',
   },
   menuIcon: {
-    width: 35,
-    height: 35,
-    borderRadius: 22.5,
-    backgroundColor: 'rgba(255, 99, 71, 0.1)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(253, 185, 19, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
@@ -230,13 +498,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   menuItemText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#333',
     fontWeight: '500',
     marginBottom: 3,
   },
   menuItemSubText: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#777',
   },
   logoutButton: {
@@ -247,15 +515,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
     elevation: 3,
+    marginBottom: 15,
   },
   logoutButtonText: {
     color: '#FDB913',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  refreshButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  refreshButtonText: {
+    color: '#FDB913',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   centeredView: {
     flex: 1,
@@ -272,11 +561,11 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 5,
+      height: 2,
     },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
   modalTitle: {
     fontSize: 18,
@@ -286,7 +575,7 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     width: '100%',
-    paddingVertical: 8,
+    paddingVertical: 16,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -298,6 +587,28 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     color: '#333',
   },
+  
+  // Styles pour le skeleton loader
+  skeletonImage: {
+    backgroundColor: '#e1e1e1',
+  },
+  skeletonTextContainer: {
+    alignItems: 'center',
+  },
+  skeletonText: {
+    backgroundColor: '#e1e1e1',
+    borderRadius: 4,
+  },
+  skeletonIcon: {
+    backgroundColor: '#e1e1e1',
+  },
+  skeletonChevron: {
+    backgroundColor: '#e1e1e1',
+    borderRadius: 10,
+  },
+  skeletonButton: {
+    backgroundColor: '#e1e1e1',
+  },
 });
 
-export default profile;
+export default Profile;
