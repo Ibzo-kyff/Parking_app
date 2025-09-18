@@ -1,4 +1,4 @@
-// MonParkingScreen.tsx
+// app/(Parking)/gestion.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -15,10 +15,10 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { G, Circle } from 'react-native-svg';
 import { getParkingManagementData, setAuthToken } from '../../components/services/back';
 import { useAuth } from '../../context/AuthContext';
 
+// Types
 type Voiture = {
   id: string;
   marque: string;
@@ -80,7 +80,7 @@ type ParkingData = {
 };
 
 const MonParkingScreen: React.FC = () => {
-  const { authState, refreshAuth, isLoading: authLoading } = useAuth();
+  const { authState, refreshAuth } = useAuth();
   const [parkingData, setParkingData] = useState<ParkingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,7 +89,7 @@ const MonParkingScreen: React.FC = () => {
 
   const scrollY = useRef(new Animated.Value(0)).current;
 
-useEffect(() => {
+  useEffect(() => {
     const fetchParkingData = async () => {
       setLoading(true);
       try {
@@ -102,15 +102,15 @@ useEffect(() => {
         }
       } catch (error: any) {
         console.error('Erreur API gestion parking:', error);
-        if (error.response?.status === 403 && error.response?.data?.message === "Token invalide ou expiré.") {
+        if (error.response?.status === 403) {
           console.log("Tentative de rafraîchissement...");
-          await refreshAuth(); // Tenter de rafraîchir le token
-          if (authState.accessToken) {
+          const success = await refreshAuth();
+          if (success && authState.accessToken) {
             setAuthToken(authState.accessToken);
             const data = await getParkingManagementData();
             setParkingData(data);
           } else {
-            console.error('Rafraîchissement échoué, token toujours absent');
+            console.error('Rafraîchissement échoué');
           }
         }
       } finally {
@@ -118,33 +118,46 @@ useEffect(() => {
       }
     };
 
-  if (authState.accessToken) {
-    fetchParkingData();
-  } else {
-    console.error('Token absent, requête non effectuée');
-    setLoading(false);
-  }
-}, [authState.accessToken]);
+    if (authState.accessToken) {
+      fetchParkingData();
+    } else {
+      console.error('Token absent, requête non effectuée');
+      setLoading(false);
+    }
+  }, [authState.accessToken]);
 
   const totalVoitures = parkingData?.statistics.total || 0;
   const voituresLocation = parkingData?.statistics.enLocation || 0;
   const voituresVente = parkingData?.statistics.vendus || 0;
   const voituresDisponibles = parkingData?.statistics.disponibles || 0;
 
-  const pourcentageLocation = totalVoitures ? (voituresLocation / totalVoitures) * 100 : 0;
-  const pourcentageVente = totalVoitures ? (voituresVente / totalVoitures) * 100 : 0;
-  const pourcentageDisponibles = totalVoitures ? (voituresDisponibles / totalVoitures) * 100 : 0;
-
-  // Graphique circulaire
-  const size = 180;
-  const strokeWidth = 20;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const segments = [
-    { value: pourcentageLocation, color: '#FD6A00' },
-    { value: pourcentageVente, color: '#FFD1A3' },
-    { value: pourcentageDisponibles, color: '#4CAF50' },
-  ];
+  // Fonction alternative pour le graphique circulaire (sans SVG)
+  const renderResumeGraph = () => {
+    return (
+      <View style={{ alignItems: 'center' }}>
+        <View style={styles.circleContainer}>
+          <View style={styles.circle}>
+            <Text style={styles.centerText}>{totalVoitures}</Text>
+            <Text style={styles.centerSubText}>Voitures</Text>
+          </View>
+        </View>
+        <View style={styles.statsLegend}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendColor, { backgroundColor: '#FD6A00' }]} />
+            <Text style={styles.legendText}>Location ({voituresLocation})</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendColor, { backgroundColor: '#FFD1A3' }]} />
+            <Text style={styles.legendText}>Vente ({voituresVente})</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendColor, { backgroundColor: '#4CAF50' }]} />
+            <Text style={styles.legendText}>Disponibles ({voituresDisponibles})</Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
 
   const filteredVoitures = parkingData?.vehicles.filter(v => {
     if (selectedBottomFilter === 'Total') return true;
@@ -200,40 +213,6 @@ useEffect(() => {
       ))}
     </View>
   );
-
-  const renderResumeGraph = () => {
-    let startAngle = -90;
-    return (
-      <View style={{ alignItems: 'center' }}>
-        <Svg width={size} height={size}>
-          <G rotation="-90" originX={size / 2} originY={size / 2}>
-            {segments.map((segment, index) => {
-              const arc = (segment.value / 100) * circumference;
-              const circle = (
-                <Circle
-                  key={index}
-                  stroke={segment.color}
-                  fill="transparent"
-                  strokeWidth={strokeWidth}
-                  strokeDasharray={`${arc} ${circumference - arc}`}
-                  strokeDashoffset={-(startAngle / 360) * circumference}
-                  r={radius}
-                  cx={size / 2}
-                  cy={size / 2}
-                />
-              );
-              startAngle += (segment.value / 100) * 360;
-              return circle;
-            })}
-          </G>
-        </Svg>
-        <View style={styles.centerText}>
-          <Text style={{ fontSize: 18, fontWeight: 'bold' }}>{totalVoitures}</Text>
-          <Text style={{ fontSize: 12, color: '#666' }}>Voitures</Text>
-        </View>
-      </View>
-    );
-  };
 
   const renderMonthlyChart = () => {
     if (!parkingData?.charts.monthlyData) return null;
@@ -309,7 +288,7 @@ useEffect(() => {
 
       {sticky && <View style={styles.stickyFloatingButtons}>{renderBottomButtons()}</View>}
 
-      <Animated.ScrollView onScroll={handleScroll} scrollEventThrottle={16}>
+      <ScrollView onScroll={handleScroll} scrollEventThrottle={16}>
         <View style={styles.headerRow}>
           <Text style={styles.title}>Gérer vos voitures</Text>
           <Text style={styles.parkingName}>{parkingData.parking.name}</Text>
@@ -321,20 +300,6 @@ useEffect(() => {
 
         <View style={styles.statsContainer}>
           {renderResumeGraph()}
-          <View style={styles.statsLegend}>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendColor, { backgroundColor: '#FD6A00' }]} />
-              <Text style={styles.legendText}>Location ({voituresLocation})</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendColor, { backgroundColor: '#FFD1A3' }]} />
-              <Text style={styles.legendText}>Vente ({voituresVente})</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendColor, { backgroundColor: '#4CAF50' }]} />
-              <Text style={styles.legendText}>Disponibles ({voituresDisponibles})</Text>
-            </View>
-          </View>
         </View>
 
         {!sticky && renderBottomButtons()}
@@ -373,7 +338,7 @@ useEffect(() => {
             </View>
           ))}
         </View>
-      </Animated.ScrollView>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -450,12 +415,29 @@ const styles = StyleSheet.create({
     elevation: 3,
     alignItems: 'center',
   },
-  centerText: { 
-    position: 'absolute', 
-    top: '40%', 
-    left: '50%', 
-    transform: [{ translateX: -20 }], 
-    alignItems: 'center' 
+  circleContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  circle: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: '#f8f8f8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 20,
+    borderColor: '#FD6A00',
+  },
+  centerText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  centerSubText: {
+    fontSize: 12,
+    color: '#666',
   },
   statsLegend: {
     marginTop: 15,

@@ -10,8 +10,8 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
-import { Link } from "expo-router";
-import Header from "../Header";
+import { Link, useRouter } from "expo-router";
+import Header from '../Header';
 import { getParkings, Parking } from "../../components/services/parkingApi";
 
 export const unstable_settings = {
@@ -24,6 +24,7 @@ const ParkingList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const router = useRouter();
 
   useEffect(() => {
     const fetchParkings = async () => {
@@ -47,10 +48,14 @@ const ParkingList: React.FC = () => {
         (p) =>
           p.name.toLowerCase().includes(term) ||
           p.city.toLowerCase().includes(term) ||
-          p.phone.includes(term)
+          (p.phone && p.phone.toLowerCase().includes(term)) // Phone still searchable
       )
     );
   }, [searchTerm, parkings]);
+
+  const handleViewDetails = (parkingId: number) => {
+    router.push(`/DetailParkings?id=${parkingId}`);
+  };
 
   if (loading) {
     return (
@@ -65,6 +70,7 @@ const ParkingList: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      <Header />
       <View style={styles.header}>
         <Text style={styles.subtitle}>Trouvez l'emplacement parfait des toutes les parkings </Text>
       </View>
@@ -115,19 +121,15 @@ const ParkingList: React.FC = () => {
                   <FontAwesome name="map-marker" size={14} color="#6200ee" />
                   <Text style={styles.parkingCity}>{parking.city}</Text>
                 </View>
-                {parking.phone && (
-                  <View style={styles.phoneContainer}>
-                    <FontAwesome name="phone" size={12} color="#666" />
-                    <Text style={styles.parkingPhone}>{parking.phone}</Text>
-                  </View>
-                )}
+                {/* Removed phone number display */}
                 <View style={styles.buttonContainer}>
-                  <Link href={`/DetailParkings`} asChild>
-                    <TouchableOpacity style={styles.button}>
-                      <Text style={styles.buttonText}>Voir détails</Text>
-                      <MaterialIcons name="arrow-forward" size={16} color="#fff" />
-                    </TouchableOpacity>
-                  </Link>
+                  <TouchableOpacity 
+                    style={styles.button}
+                    onPress={() => handleViewDetails(parking.id)}
+                  >
+                    <Text style={styles.buttonText}>Voir détails</Text>
+                    <MaterialIcons name="arrow-forward" size={16} color="#fff" />
+                  </TouchableOpacity>
                 </View>
               </View>
             </View>
@@ -138,11 +140,12 @@ const ParkingList: React.FC = () => {
   );
 };
 
+// Styles remain unchanged
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
     backgroundColor: "#f8f9fa",
-    paddingHorizontal: 16,
+    padding: 20
   },
   loadingContainer: {
     flex: 1,
@@ -246,7 +249,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   button: {
-    backgroundColor: "#6200ee",
+    backgroundColor:  '#ff7d00',
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 20,
