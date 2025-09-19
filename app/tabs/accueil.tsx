@@ -14,8 +14,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import Header from '../Header';
 import { getVehicules, getParkings, API_URL } from "../../components/services/accueil"; 
-// 👈 on garde backend pour véhicules + parkings
-// ⚠️ mais pour marques on va utiliser des données locales directement ici
+
 
 type RootStackParamList = {
   Accueil: { firstName?: string; lastName?: string };
