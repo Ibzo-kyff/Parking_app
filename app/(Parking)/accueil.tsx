@@ -37,6 +37,11 @@ type Voiture = {
     date: string;
     client: string;
   };
+  marqueRef: {
+    id: number;
+    name: string;
+    logoUrl: string;
+  };
 };
 
 type ParkingData = {
@@ -89,7 +94,7 @@ const AccueilParking = () => {
 
   const fetchParkingData = async (isRetry = false) => {
     try {
-      const response = await axios.get('https://parkapp-pi.vercel.app/api/vehicules/parking/management', {
+      const response = await axios.get('http://192.168.1.24:5000/api/vehicules/parking/management', {
         headers: {
           Authorization: `Bearer ${authState.accessToken}`,
         },
@@ -109,11 +114,9 @@ const AccueilParking = () => {
       setError(null);
     } catch (err: any) {
       if (err.response?.status === 403 && !isRetry && retryCount < 2) {
-        // Token expiré, essayer de le rafraîchir
         const success = await refreshAuth();
         if (success) {
           setRetryCount(prev => prev + 1);
-          // Réessayer la requête avec le nouveau token
           await fetchParkingData(true);
           return;
         }
@@ -174,13 +177,13 @@ const AccueilParking = () => {
     </TouchableOpacity>
   );
 
-  const renderMarqueItem = ({ item }: { item: string }) => (
-    <TouchableOpacity style={styles.marqueCard} onPress={() => handleSelectMarque(item)}>
+  const renderMarqueItem = ({ item }: { item: { id: number; name: string; logoUrl: string } }) => (
+    <TouchableOpacity style={styles.marqueCard} onPress={() => handleSelectMarque(item.name)}>
       <Image
-        source={{ uri: `https://via.placeholder.com/40x40?text=${item}` }}
+        source={{ uri: item.logoUrl || 'https://via.placeholder.com/40x40' }}
         style={styles.marqueLogo}
       />
-      <Text style={styles.marqueNom}>{item}</Text>
+      <Text style={styles.marqueNom}>{item.name}</Text>
     </TouchableOpacity>
   );
 
@@ -224,8 +227,10 @@ const AccueilParking = () => {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 3);
 
-  // Extraire les marques distinctes
-  const marques = [...new Set(parkingData.vehicles.map(v => v.marque))];
+  // Extraire les marques distinctes avec leurs logos
+  const marques = [...new Set(parkingData.vehicles.map(v => v.marqueRef))]
+    .filter((marque): marque is { id: number; name: string; logoUrl: string } => marque !== null)
+    .slice(0, 5); // Limiter à 5 marques
 
   return (
     <View style={styles.mainContainer}>
@@ -255,7 +260,7 @@ const AccueilParking = () => {
           <Text style={styles.sectionTitle}>Marques</Text>
           <FlatList
             data={marques}
-            keyExtractor={(item) => item}
+            keyExtractor={(item) => item.id.toString()}
             horizontal
             showsHorizontalScrollIndicator={false}
             renderItem={renderMarqueItem}
@@ -319,7 +324,7 @@ const AccueilParking = () => {
   );
 };
 
-// 🔹 Styles modifiés avec ajout des styles d'erreur
+// 🔹 Styles (inchangés)
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,

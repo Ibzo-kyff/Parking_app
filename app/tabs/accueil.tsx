@@ -35,7 +35,6 @@ const Accueil: React.FC = () => {
   const [loadingParkings, setLoadingParkings] = useState(true);
   const [loadingMarques, setLoadingMarques] = useState(true);
 
-  // ✅ récupération des véhicules
   useEffect(() => {
     const fetchVehicules = async () => {
       try {
@@ -50,7 +49,6 @@ const Accueil: React.FC = () => {
     fetchVehicules();
   }, []);
 
-  // ✅ récupération des parkings
   useEffect(() => {
     const fetchParkings = async () => {
       try {
@@ -65,7 +63,6 @@ const Accueil: React.FC = () => {
     fetchParkings();
   }, []);
 
-  // ✅ récupération des marques locales (PAS backend)
   useEffect(() => {
     try {
       const images = [
@@ -83,15 +80,12 @@ const Accueil: React.FC = () => {
     }
   }, []);
 
-  // refs pour carrousels
   const scrollViewRef = useRef<ScrollView>(null);
   const pourVousScrollRef = useRef<ScrollView>(null);
 
-  // index
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentPourVousIndex, setCurrentPourVousIndex] = useState(0);
 
-  // ✅ défilement auto carrousel principal (parkings)
   useEffect(() => {
     if (parkings.length === 0) return;
     const intervalId = setInterval(() => {
@@ -102,7 +96,6 @@ const Accueil: React.FC = () => {
     return () => clearInterval(intervalId);
   }, [currentIndex, parkings]);
 
-  // défilement auto "Pour vous"
   useEffect(() => {
     if (vehicules.length === 0) return;
     const intervalId = setInterval(() => {
@@ -114,14 +107,22 @@ const Accueil: React.FC = () => {
   }, [currentPourVousIndex, vehicules]);
 
   const handleImagePress = (index: number, type: string) => {
-    console.log(`Pressed on ${type} image at index: ${index}`);
+    if (type === 'vehicule') {
+      const selectedVehicule = vehicules[index];
+      // Navigation vers l'écran de détails avec les informations du véhicule
+      router.push({
+        pathname: '/(Clients)/CreateListingScreen',
+        params: { vehicule: JSON.stringify(selectedVehicule) }
+      });
+    } else {
+      console.log(`Pressed on ${type} image at index: ${index}`);
+    }
   };
 
   return (
     <View style={styles.container}>
       <Header />
 
-      {/* ✅ Barre de recherche */}
       <View style={styles.searchBarContainer}>
         <FontAwesome name="search" size={24} color="#999" style={styles.searchIcon} />
         <TextInput
@@ -131,7 +132,6 @@ const Accueil: React.FC = () => {
         />
       </View>
 
-      {/* ✅ Carousel principal (parkings) - CORRIGÉ */}
       <View style={styles.carouselContainer}>
         {loadingParkings ? (
           <ActivityIndicator size="large" color="#FD6A00" />
@@ -143,6 +143,12 @@ const Accueil: React.FC = () => {
             style={styles.carouselScrollView}
             scrollEventThrottle={16}
             pagingEnabled
+            snapToInterval={320} 
+            snapToAlignment="center" 
+            decelerationRate="fast" 
+            contentContainerStyle={{
+              paddingHorizontal: 10,
+            }}
           >
             {parkings.map((item, index) => (
               <View key={item.id || index} style={styles.carouselItem}>
@@ -150,9 +156,9 @@ const Accueil: React.FC = () => {
                   source={{ 
                     uri: item.logo 
                       ? item.logo.startsWith('http') 
-                        ? item.logo // URL complète déjà
-                        : `${API_URL}${item.logo}` // URL relative
-                      : 'https://via.placeholder.com/150' // Image par défaut
+                        ? item.logo
+                        : `${API_URL}${item.logo}`
+                      : 'https://via.placeholder.com/150'
                   }} 
                   style={styles.carouselImage} 
                 />
@@ -164,7 +170,6 @@ const Accueil: React.FC = () => {
 
       <View style={styles.scrollContainer}>
         <View style={styles.scrollSection}>
-          {/* ✅ Section Nos marques avec Voir tout */}
           <View style={styles.scrollTitleContainer}>
             <Text style={styles.scrollTitle}>Nos marques</Text>
             <TouchableOpacity onPress={() => navigation.navigate('tousLesMarques' as never)}>
@@ -198,7 +203,6 @@ const Accueil: React.FC = () => {
             </ScrollView>
           )}
 
-          {/* ✅ Section Pour vous (véhicules) */}
           <View style={styles.scrollTitleContainer}>
             <Text style={styles.scrollTitle}>Pour vous</Text>
             <TouchableOpacity onPress={() => router.push('/(Clients)/listVoiture')}>
@@ -248,7 +252,6 @@ const Accueil: React.FC = () => {
   );
 };
 
-// ✅ Styles
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f4f3f3', padding: 20 },
   scrollViewContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
@@ -266,26 +269,29 @@ const styles = StyleSheet.create({
   },
   searchIcon: { marginRight: 10 },
   searchBar: { flex: 1 },
-  carouselContainer: {
+ carouselContainer: {
     height: 150,
     marginBottom: 20,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 10,
+    paddingHorizontal: 0, 
   },
-  carouselScrollView: { flex: 1 },
+  carouselScrollView: { 
+    flex: 1,
+  },
   carouselItem: {
-    width: 300, 
+    width: 320, 
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: 5,
+    marginHorizontal: 2, 
   },
   carouselImage: { 
-    width: 280, 
+    width: '100%',
     height: 130, 
-    resizeMode: 'contain', 
+    resizeMode: 'cover', 
     borderRadius: 10,
   },
   seeAllButton: { fontSize: 14, color: '#FD6A00', fontWeight: 'bold' },
