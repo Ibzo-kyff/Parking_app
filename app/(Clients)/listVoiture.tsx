@@ -27,9 +27,16 @@ interface Parking {
   logo?: string;
 }
 
+interface Marque {
+  id: number;
+  name: string;
+  logoUrl?: string;
+  isCustom?: boolean;
+}
+
 interface Vehicule {
   id: number;
-  marque: string;
+  marqueRef?: Marque; // Relation avec la marque
   model: string;
   prix: number;
   photos: string[] | string;
@@ -93,7 +100,7 @@ const ListVoiture = () => {
   useEffect(() => {
     if (searchQuery) {
       const filtered = applyAdvancedFilters(vehicules.filter(vehicule =>
-        vehicule.marque.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (vehicule.marqueRef?.name?.toLowerCase().includes(searchQuery.toLowerCase()) || '') ||
         vehicule.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (vehicule.parking?.name && vehicule.parking.name.toLowerCase().includes(searchQuery.toLowerCase()))
       ));
@@ -192,7 +199,7 @@ const ListVoiture = () => {
     
     if (searchQuery) {
       filtered = filtered.filter(vehicule =>
-        vehicule.marque.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (vehicule.marqueRef?.name?.toLowerCase().includes(searchQuery.toLowerCase()) || '') ||
         vehicule.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (vehicule.parking?.name && vehicule.parking.name.toLowerCase().includes(searchQuery.toLowerCase()))
       );
@@ -439,12 +446,12 @@ const ListVoiture = () => {
 
                     <View style={styles.vehiculeInfo}>
                       <Text style={styles.carTitle} numberOfLines={1}>
-                        {item.marque} {item.model}
+                        {item.marqueRef?.name || 'Marque inconnue'} {item.model}
                       </Text>
                       <Text style={styles.carPrice}>Prix: {item.prix.toLocaleString()} FCFA</Text>
                       
                       {/* Badge de statut */}
-                      {/* {item.status && (
+                      {item.status && (
                         <View style={[
                           styles.statusBadge,
                           item.status === 'EN_LOCATION' && styles.rentBadge,
@@ -456,7 +463,7 @@ const ListVoiture = () => {
                              item.status === 'EN_VENTE' ? 'En vente' : 'Disponible'}
                           </Text>
                         </View>
-                      )} */}
+                      )}
                       
                       {/* Informations supplémentaires */}
                       <View style={styles.additionalInfo}>

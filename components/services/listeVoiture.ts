@@ -10,7 +10,7 @@ const api = axios.create({
 export const getVehicules = async () => {
   try {
     const response = await api.get('/Vehicules');
-    return response.data; // ✅ chaque véhicule contient déjà "parking"
+    return response.data; 
   } catch (error) {
     const axiosError = error as AxiosError;
     if (axiosError.response) {
