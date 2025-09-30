@@ -15,13 +15,12 @@ import Header from "../Header";
 
 const ReservationsUser = () => {
   return (
-        <View style={styles.container}>
-      <Header />
+      
     <ReservationList
       fetchReservations={getUserReservations}
       cancelReservation={cancelReservationApi}
     />
-        </View>
+      
   );
 };
 const styles = StyleSheet.create({
