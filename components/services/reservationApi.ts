@@ -18,6 +18,20 @@ export type Reservation = {
 
 const BASE_URL = "https://parkapp-pi.vercel.app/api";
 
+// 🔹 Récupérer les réservations de l'utilisateur connecté
+export const getUserReservations = async (): Promise<Reservation[]> => {
+  const response = await api.get("/reservations");
+  
+  return response.data.map((item: Reservation) => ({
+    ...item,
+    vehicle: {
+      ...item.vehicle,
+      imageUrl: item.vehicle.imageUrl?.startsWith("http")
+        ? item.vehicle.imageUrl
+        : `${BASE_URL}${item.vehicle.imageUrl}`,
+    },
+  }));
+};
 
 // 🔹 Récupérer toutes les réservations du parking connecté
 export const getReservationsParking = async (): Promise<Reservation[]> => {
@@ -34,7 +48,7 @@ export const getReservationsParking = async (): Promise<Reservation[]> => {
   }));
 };
 
-// 🔹 Récupérer toutes les réservations d’un parking par son ID (ADMIN ou parking propriétaire)
+// 🔹 Récupérer toutes les réservations d'un parking par son ID (ADMIN ou parking propriétaire)
 export const getReservationsByParkingId = async (
   parkingId: number
 ): Promise<Reservation[]> => {

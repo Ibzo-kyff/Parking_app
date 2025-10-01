@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
-import { Link, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import Header from '../Header';
 import { getParkings, Parking } from "../../components/services/parkingApi";
 
@@ -24,6 +24,7 @@ const ParkingList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [imageErrors, setImageErrors] = useState<{ [key: number]: boolean }>({});
   const router = useRouter();
 
   useEffect(() => {
@@ -48,13 +49,17 @@ const ParkingList: React.FC = () => {
         (p) =>
           p.name.toLowerCase().includes(term) ||
           p.city.toLowerCase().includes(term) ||
-          (p.phone && p.phone.toLowerCase().includes(term)) // Phone still searchable
+          (p.phone && p.phone.toLowerCase().includes(term))
       )
     );
   }, [searchTerm, parkings]);
 
   const handleViewDetails = (parkingId: number) => {
     router.push(`/DetailParkings?id=${parkingId}`);
+  };
+
+  const handleImageError = (parkingId: number) => {
+    setImageErrors(prev => ({ ...prev, [parkingId]: true }));
   };
 
   if (loading) {
@@ -108,12 +113,13 @@ const ParkingList: React.FC = () => {
             <View key={parking.id} style={styles.card}>
               <Image
                 source={{
-                  uri: parking.logo
-                    ? `https://parkapp-pi.vercel.app${parking.logo}`
+                  uri: parking.logo && !imageErrors[parking.id] 
+                    ? parking.logo // Utilisez directement l'URL de Vercel Blob
                     : "https://images.unsplash.com/photo-1565898835704-3d6be4a2c98c?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=600&q=80",
                 }}
                 style={styles.image}
                 resizeMode="cover"
+                onError={() => handleImageError(parking.id)}
               />
               <View style={styles.cardContent}>
                 <Text style={styles.parkingName}>{parking.name}</Text>
@@ -121,7 +127,6 @@ const ParkingList: React.FC = () => {
                   <FontAwesome name="map-marker" size={14} color="#6200ee" />
                   <Text style={styles.parkingCity}>{parking.city}</Text>
                 </View>
-                {/* Removed phone number display */}
                 <View style={styles.buttonContainer}>
                   <TouchableOpacity 
                     style={styles.button}
@@ -140,7 +145,6 @@ const ParkingList: React.FC = () => {
   );
 };
 
-// Styles remain unchanged
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
@@ -232,16 +236,6 @@ const styles = StyleSheet.create({
   parkingCity: { 
     color: "#666", 
     fontSize: 14,
-    marginLeft: 6,
-  },
-  phoneContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  parkingPhone: {
-    color: "#666", 
-    fontSize: 13,
     marginLeft: 6,
   },
   buttonContainer: {
