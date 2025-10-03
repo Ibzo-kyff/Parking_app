@@ -10,13 +10,29 @@ import {
   TouchableOpacity,
   Linking,
   Alert,
+  Platform // Ajout de Platform
 } from "react-native";
 import { FontAwesome, MaterialIcons, Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { getParkingById, Parking } from "../../../components/services/parkingApi";
 
+// Interface étendue pour inclure les propriétés manquantes
+interface ExtendedParking extends Parking {
+  latitude?: number;
+  longitude?: number;
+}
+
+interface ExtendedUser {
+  id: number;
+  nom: string;
+  prenom: string;
+  email: string;
+  phone: string;
+  image?: string; // Propriété optionnelle
+}
+
 export default function ParkingDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [parking, setParking] = React.useState<Parking | null>(null);
+  const [parking, setParking] = React.useState<ExtendedParking | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [imageError, setImageError] = React.useState(false);
@@ -36,7 +52,7 @@ export default function ParkingDetails() {
         setLoading(true);
         const data = await getParkingById(id);
         console.log("Données reçues:", data);
-        setParking(data);
+        setParking(data as ExtendedParking);
       } catch (err: any) {
         console.error("Erreur détail parking:", err);
         setError(err.message || "Impossible de charger ce parking");
@@ -63,6 +79,38 @@ export default function ParkingDetails() {
     }
   };
 
+  const handleNavigate = () => {
+    if (parking?.latitude && parking?.longitude) {
+      const url = Platform.OS === 'ios' 
+        ? `maps://app?daddr=${parking.latitude},${parking.longitude}`
+        : `google.navigation:q=${parking.latitude},${parking.longitude}`;
+      
+      Linking.openURL(url).catch(() => {
+        // Fallback pour les appareils sans Google Maps
+        const fallbackUrl = `https://www.google.com/maps/dir/?api=1&destination=${parking.latitude},${parking.longitude}`;
+        Linking.openURL(fallbackUrl);
+      });
+    } else {
+      Alert.alert("Information", "Coordonnées GPS non disponibles");
+    }
+  };
+
+  const handleMessage = () => {
+    if (parking?.user) {
+      const user = parking.user as ExtendedUser;
+      router.navigate({
+        pathname: "../(profil)/chatpage",
+        params: {
+          userId: user.id.toString(),
+          userName: `${user.nom} ${user.prenom}`,
+          userAvatar: user.image || "https://randomuser.me/api/portraits/men/1.jpg"
+        }
+      });
+    } else {
+      Alert.alert("Information", "Aucun gestionnaire associé à ce parking");
+    }
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("fr-FR", {
@@ -75,7 +123,7 @@ export default function ParkingDetails() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6200ee" />
+        <ActivityIndicator size="large" color="#ff7d00" />
         <Text style={styles.loadingText}>Chargement des détails...</Text>
       </View>
     );
@@ -104,9 +152,11 @@ export default function ParkingDetails() {
     );
   }
 
+  const user = parking.user as ExtendedUser;
+
   return (
     <View style={styles.container}>
-      <ScrollView>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -123,7 +173,7 @@ export default function ParkingDetails() {
             />
           ) : (
             <View style={styles.placeholderContainer}>
-              <MaterialCommunityIcons name="parking" size={60} color="#6200ee" />
+              <MaterialCommunityIcons name="parking" size={60} color="#ff7d00" />
               <Text style={styles.placeholderText}>{parking.name}</Text>
             </View>
           )}
@@ -155,7 +205,7 @@ export default function ParkingDetails() {
           <View style={styles.infoCard}>
             <View style={styles.infoItem}>
               <View style={styles.iconContainer}>
-                <Ionicons name="location" size={20} color="#6200ee" />
+                <Ionicons name="location" size={20} color="#ff7d00" />
               </View>
               <View style={styles.infoTextContainer}>
                 <Text style={styles.infoLabel}>Adresse</Text>
@@ -168,7 +218,7 @@ export default function ParkingDetails() {
 
             <View style={styles.infoItem}>
               <View style={styles.iconContainer}>
-                <Ionicons name="time" size={20} color="#6200ee" />
+                <Ionicons name="time" size={20} color="#ff7d00" />
               </View>
               <View style={styles.infoTextContainer}>
                 <Text style={styles.infoLabel}>Horaires d'ouverture</Text>
@@ -182,7 +232,7 @@ export default function ParkingDetails() {
 
             <View style={styles.infoItem}>
               <View style={styles.iconContainer}>
-                <MaterialIcons name="email" size={20} color="#6200ee" />
+                <MaterialIcons name="email" size={20} color="#ff7d00" />
               </View>
               <View style={styles.infoTextContainer}>
                 <Text style={styles.infoLabel}>Email</Text>
@@ -195,7 +245,7 @@ export default function ParkingDetails() {
                 <View style={styles.divider} />
                 <View style={styles.infoItem}>
                   <View style={styles.iconContainer}>
-                    <Ionicons name="information-circle" size={20} color="#6200ee" />
+                    <Ionicons name="information-circle" size={20} color="#ff7d00" />
                   </View>
                   <View style={styles.infoTextContainer}>
                     <Text style={styles.infoLabel}>Description</Text>
@@ -216,13 +266,13 @@ export default function ParkingDetails() {
                 <Text style={styles.statLabel}>Places totales</Text>
               </View>
 
-              {parking.user && (
+              {user && (
                 <View style={styles.statItem}>
                   <View style={styles.statIconContainer}>
                     <Ionicons name="person" size={24} color="#fff" />
                   </View>
                   <Text style={styles.statValue}>
-                    {parking.user.nom} {parking.user.prenom}
+                    {user.nom} {user.prenom}
                   </Text>
                   <Text style={styles.statLabel}>Gestionnaire</Text>
                 </View>
@@ -242,34 +292,43 @@ export default function ParkingDetails() {
           </View>
 
           <View style={styles.actionButtons}>
-          <TouchableOpacity
-          style={[styles.actionButton, styles.navigateButton]}
-          onPress={() => router.navigate("messages")}
-        >
-          <FontAwesome name="envelope" size={20} color="#fff" />
-          <Text style={styles.actionButtonText}>Messagerie</Text>
-        </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionButton, styles.messageButton]}
+              onPress={handleMessage}
+            >
+              <FontAwesome name="envelope" size={20} color="#fff" />
+              <Text style={styles.actionButtonText}>Message</Text>
+            </TouchableOpacity>
           </View>
+
+          {/* Bouton de navigation optionnel */}
+          {(parking.latitude && parking.longitude) && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.navigateButton]}
+              onPress={handleNavigate}
+            >
+              <Ionicons name="navigate" size={20} color="#fff" />
+              <Text style={styles.actionButtonText}>Y aller</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     </View>
   );
 }
 
-// Ajout du style pour le conteneur du bouton fixe
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8f9fa",
   },
-  fixedButtonContainer: {
-    position: "absolute",
-    bottom: 20,
-    left: 20,
-    right: 20,
-    zIndex: 10,
+  scrollView: {
+    flex: 1,
   },
-  // ... (les autres styles restent inchangés)
+  scrollContent: {
+    flexGrow: 1,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
@@ -295,14 +354,14 @@ const styles = StyleSheet.create({
     marginVertical: 20,
   },
   retryButton: {
-    backgroundColor: "#6200ee",
+    backgroundColor: "#ff7d00",
     paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 25,
     elevation: 2,
   },
   retryButtonText: {
-    color: '#ff7d00',
+    color: '#fff',
     fontWeight: "600",
     fontSize: 14,
   },
@@ -311,9 +370,9 @@ const styles = StyleSheet.create({
     top: 50,
     left: 20,
     zIndex: 15,
-    // backgroundColor:  '#ff7d00',
-    // borderRadius: 10,
-    padding: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 20,
+    padding: 8,
     elevation: 3,
   },
   imageContainer: {
@@ -334,7 +393,7 @@ const styles = StyleSheet.create({
   placeholderText: {
     marginTop: 10,
     fontSize: 16,
-    color: "#6200ee",
+    color: "#ff7d00",
     fontWeight: "600",
   },
   content: {
@@ -343,15 +402,16 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
     backgroundColor: "#fff",
+    minHeight: 400,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     marginBottom: 20,
   },
   name: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "800",
     color: "#1a1a1a",
     flex: 1,
@@ -361,6 +421,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
+    alignSelf: 'flex-start',
   },
   statusActive: {
     backgroundColor: "#4CAF50",
@@ -392,7 +453,11 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+<<<<<<< Updated upstream
     backgroundColor: "#FF9800",
+=======
+    backgroundColor: "rgba(255, 125, 0, 0.1)",
+>>>>>>> Stashed changes
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -436,7 +501,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor:  '#ff7d00',
+    backgroundColor: '#ff7d00',
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 8,
@@ -444,7 +509,7 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#6200ee",
+    color: "#ff7d00",
     marginTop: 4,
     textAlign: "center",
   },
@@ -470,18 +535,19 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 30,
+    marginBottom: 15,
+    gap: 10,
   },
   actionButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     borderRadius: 12,
     flex: 1,
-    marginHorizontal: 5,
     elevation: 2,
+    minHeight: 50,
   },
   callButton: {
     backgroundColor: "#4CAF50",
@@ -489,17 +555,19 @@ const styles = StyleSheet.create({
   emailButton: {
     backgroundColor: "#2196F3",
   },
-  navigateButton: {
+  messageButton: {
     backgroundColor: "#FF9800",
+  },
+  navigateButton: {
+    backgroundColor: "#9C27B0",
+    marginBottom: 30,
   },
   actionButtonText: {
     color: "#fff",
     fontWeight: "600",
-    marginLeft: 8,
-    fontSize: 14,
-  },
-  actionButtonTextDisabled: {
-    color: "#eee",
+    marginLeft: 6,
+    fontSize: 12,
+    textAlign: 'center',
   },
 });
 
