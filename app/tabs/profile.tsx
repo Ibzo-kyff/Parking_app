@@ -225,7 +225,7 @@ const Profile = () => {
 
       {/* Options du menu avec skeleton */}
       <View style={styles.menuContainer}>
-        {[1, 2, 3].map((item) => (
+        {[1, 2, 3, 4].map((item) => (
           <View key={item} style={styles.menuItem}>
             <View style={[styles.menuIcon, styles.skeletonIcon]} />
             <View style={styles.menuTextContainer}>
@@ -328,6 +328,20 @@ const Profile = () => {
             <View style={styles.menuTextContainer}>
               <Text style={styles.menuItemText}>Aide & Support</Text>
               <Text style={styles.menuItemSubText}>Centre d'aide et contact</Text>
+            </View>
+            <Feather name="chevron-right" size={20} color="#999" />
+          </TouchableOpacity>
+        </Link>
+
+        {/* NOUVEAU : Section Favoris */}
+        <Link href="../(profil)/favoris" asChild>
+          <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
+            <View style={styles.menuIcon}>
+              <FontAwesome name="heart" size={24} color="#FDB913" />
+            </View>
+            <View style={styles.menuTextContainer}>
+              <Text style={styles.menuItemText}>Favoris</Text>
+              <Text style={styles.menuItemSubText}>Vos véhicules favoris</Text>
             </View>
             <Feather name="chevron-right" size={20} color="#999" />
           </TouchableOpacity>
