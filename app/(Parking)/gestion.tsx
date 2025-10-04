@@ -435,7 +435,7 @@ const MonParkingScreen: React.FC = () => {
               key={voiture.id} 
               style={styles.voitureCard}
               onPress={() => router.push({ 
-                pathname: "../../components/CarsDetails", 
+                pathname: "/(Clients)/CreateListingSreen", 
                 params: { voiture: JSON.stringify(voiture) } 
               })}
             >
