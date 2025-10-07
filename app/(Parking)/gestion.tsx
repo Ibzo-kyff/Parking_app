@@ -12,11 +12,15 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
   ActivityIndicator,
+  Modal,
   ScrollView,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getParkingManagementData, setAuthToken } from '../../components/services/back';
 import { useAuth } from '../../context/AuthContext';
+import { useRouter } from 'expo-router';
+import Svg, { Circle, G, Rect, Text as SvgText } from 'react-native-svg';
 
 // Types
 type Voiture = {
@@ -73,21 +77,22 @@ type ParkingData = {
       data: number[];
     };
   };
-  filters: {
-    currentStatus: string;
-    currentSearch: string;
-  };
 };
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const MonParkingScreen: React.FC = () => {
   const { authState, refreshAuth } = useAuth();
   const [parkingData, setParkingData] = useState<ParkingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedBottomFilter, setSelectedBottomFilter] = useState('Total');
+  const [selectedBottomFilter, setSelectedBottomFilter] = useState('En vente');
   const [sticky, setSticky] = useState(false);
+  const [graphType, setGraphType] = useState<'pie' | 'bar'>('pie');
+  const [menuVisible, setMenuVisible] = useState(false);
 
   const scrollY = useRef(new Animated.Value(0)).current;
+  const router = useRouter();
 
   useEffect(() => {
     const fetchParkingData = async () => {
@@ -97,8 +102,6 @@ const MonParkingScreen: React.FC = () => {
           setAuthToken(authState.accessToken);
           const data = await getParkingManagementData();
           setParkingData(data);
-        } else {
-          console.error('Aucun token disponible dans authState');
         }
       } catch (error: any) {
         console.error('Erreur API gestion parking:', error);
@@ -131,41 +134,27 @@ const MonParkingScreen: React.FC = () => {
   const voituresVente = parkingData?.statistics.vendus || 0;
   const voituresDisponibles = parkingData?.statistics.disponibles || 0;
 
-  // Fonction alternative pour le graphique circulaire (sans SVG)
-  const renderResumeGraph = () => {
-    return (
-      <View style={{ alignItems: 'center' }}>
-        <View style={styles.circleContainer}>
-          <View style={styles.circle}>
-            <Text style={styles.centerText}>{totalVoitures}</Text>
-            <Text style={styles.centerSubText}>Voitures</Text>
-          </View>
-        </View>
-        <View style={styles.statsLegend}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: '#FD6A00' }]} />
-            <Text style={styles.legendText}>Location ({voituresLocation})</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: '#FFD1A3' }]} />
-            <Text style={styles.legendText}>Vente ({voituresVente})</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: '#4CAF50' }]} />
-            <Text style={styles.legendText}>Disponibles ({voituresDisponibles})</Text>
-          </View>
-        </View>
-      </View>
-    );
-  };
+  const pourcentageLocation = totalVoitures ? (voituresLocation / totalVoitures) * 100 : 0;
+  const pourcentageVente = totalVoitures ? (voituresVente / totalVoitures) * 100 : 0;
+  const pourcentageDisponibles = totalVoitures ? (voituresDisponibles / totalVoitures) * 100 : 0;
+
+  const size = 180;
+  const strokeWidth = 20;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+
+  const segments = [
+    { value: pourcentageLocation, color: '#FD6A00', label: 'En location', count: voituresLocation },
+    { value: pourcentageVente, color: '#FFD1A3', label: 'En vente', count: voituresVente },
+    { value: pourcentageDisponibles, color: '#f1f1f1', label: 'Disponibles', count: voituresDisponibles },
+  ];
 
   const filteredVoitures = parkingData?.vehicles.filter(v => {
-    if (selectedBottomFilter === 'Total') return true;
     if (selectedBottomFilter === 'En vente') return v.status === 'ACHETE';
     if (selectedBottomFilter === 'En location') return v.status === 'EN_LOCATION';
     if (selectedBottomFilter === 'Disponibles') return v.status === 'DISPONIBLE';
     return true;
-  }).filter(v => 
+  }).filter(v =>
     v.marque.toLowerCase().includes(searchQuery.toLowerCase()) ||
     v.model.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
@@ -200,7 +189,7 @@ const MonParkingScreen: React.FC = () => {
 
   const renderBottomButtons = () => (
     <View style={styles.bottomButtonsContainer}>
-      {['Total', 'En vente', 'En location', 'Disponibles'].map(filter => (
+      {['En vente', 'En location', 'Disponibles'].map(filter => (
         <TouchableOpacity
           key={filter}
           style={[styles.bottomButton, selectedBottomFilter === filter && styles.bottomButtonActive]}
@@ -214,65 +203,202 @@ const MonParkingScreen: React.FC = () => {
     </View>
   );
 
-  const renderMonthlyChart = () => {
-    if (!parkingData?.charts.monthlyData) return null;
+  const renderBarChart = () => {
+    const monthlyData = parkingData?.charts?.monthlyData;
+    if (!monthlyData) return null;
 
-    const { labels, sales, rentals } = parkingData.charts.monthlyData;
-    const maxValue = Math.max(...sales, ...rentals, 1);
+    const maxValue = Math.max(...monthlyData.sales, ...monthlyData.rentals, 1);
+    const chartHeight = 150;
+    const barWidth = 25;
+    const spacing = 15;
+    const totalWidth = monthlyData.labels.length * (barWidth * 2 + spacing);
+    const chartPadding = 20;
 
     return (
-      <View style={styles.monthlyChartContainer}>
-        <Text style={styles.chartTitle}>Ventes et locations</Text>
-        <View style={styles.chartBars}>
-          {labels.map((label, index) => (
-            <View key={index} style={styles.chartColumn}>
-              <View style={styles.barContainer}>
-                <View
-                  style={[
-                    styles.salesBar,
-                    { height: sales[index] / maxValue * 80 }
-                  ]}
+      <View style={styles.barChartContainer}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: chartPadding }}
+        >
+          <Svg width={totalWidth + chartPadding * 2} height={chartHeight + 60}>
+            {/* Lignes de grille */}
+            {[0, 25, 50, 75, 100].map((percent, index) => {
+              const y = chartHeight - (percent / 100) * chartHeight;
+              return (
+                <Rect
+                  key={index}
+                  x={0}
+                  y={y}
+                  width={totalWidth}
+                  height={1}
+                  fill="#e0e0e0"
                 />
-                <View
-                  style={[
-                    styles.rentalsBar,
-                    { height: rentals[index] / maxValue * 80 }
-                  ]}
-                />
-              </View>
-              <Text style={styles.chartLabel}>{label}</Text>
-            </View>
-          ))}
-        </View>
+              );
+            })}
+
+            {monthlyData.labels.map((label, index) => {
+              const x = index * (barWidth * 2 + spacing) + chartPadding;
+              const salesHeight = (monthlyData.sales[index] / maxValue) * chartHeight;
+              const rentalsHeight = (monthlyData.rentals[index] / maxValue) * chartHeight;
+
+              return (
+                <View key={index}>
+                  {/* Barre des ventes */}
+                  <Rect
+                    x={x}
+                    y={chartHeight - salesHeight}
+                    width={barWidth}
+                    height={salesHeight}
+                    fill="#FD6A00"
+                    rx={4}
+                  />
+                  {/* Barre des locations */}
+                  <Rect
+                    x={x + barWidth + 2}
+                    y={chartHeight - rentalsHeight}
+                    width={barWidth}
+                    height={rentalsHeight}
+                    fill="#FFD1A3"
+                    rx={4}
+                  />
+                  
+                  {/* Valeurs des ventes - Toujours affichées même si 0 */}
+                  <SvgText
+                    x={x + barWidth / 2}
+                    y={chartHeight - salesHeight - 5}
+                    textAnchor="middle"
+                    fontSize="10"
+                    fontWeight="bold"
+                    fill={monthlyData.sales[index] === 0 ? "#999" : "#333"}
+                  >
+                    {monthlyData.sales[index]}
+                  </SvgText>
+                  
+                  {/* Valeurs des locations - Toujours affichées même si 0 */}
+                  <SvgText
+                    x={x + barWidth * 1.5 + 2}
+                    y={chartHeight - rentalsHeight - 5}
+                    textAnchor="middle"
+                    fontSize="10"
+                    fontWeight="bold"
+                    fill={monthlyData.rentals[index] === 0 ? "#999" : "#333"}
+                  >
+                    {monthlyData.rentals[index]}
+                  </SvgText>
+                  
+                  {/* Labels des mois */}
+                  <SvgText
+                    x={x + barWidth}
+                    y={chartHeight + 20}
+                    textAnchor="middle"
+                    fontSize="10"
+                    fill="#666"
+                  >
+                    {label}
+                  </SvgText>
+                </View>
+              );
+            })}
+          </Svg>
+        </ScrollView>
+        
+        {/* Légende */}
         <View style={styles.chartLegend}>
           <View style={styles.legendItem}>
             <View style={[styles.legendColor, { backgroundColor: '#FD6A00' }]} />
-            <Text style={styles.legendText}>En vente</Text>
+            <Text style={styles.legendText}>Ventes</Text>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendColor, { backgroundColor: '#FFD1A3' }]} />
-            <Text style={styles.legendText}>En location</Text>
+            <Text style={styles.legendText}>Locations</Text>
           </View>
         </View>
       </View>
     );
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#FD6A00" style={{ marginTop: 50 }} />
-      </SafeAreaView>
-    );
-  }
+  const renderGraphContainer = () => {
+    let startAngle = -90;
+    const monthlyData = parkingData?.charts?.monthlyData;
 
-  if (!parkingData) {
     return (
-      <SafeAreaView style={styles.container}>
-        <Text style={styles.errorText}>Aucune donnée de parking disponible</Text>
-      </SafeAreaView>
+      <View style={styles.graphContainer}>
+        <View style={styles.graphHeader}>
+          <Text style={styles.graphTitle}>
+            {graphType === 'pie' ? 'Résumé voitures' : 'Ventes & Locations mensuelles'}
+          </Text>
+          <TouchableOpacity style={styles.settingsIcon} onPress={() => setMenuVisible(true)}>
+            <Ionicons name="options-outline" size={24} color="#FD6A00" />
+          </TouchableOpacity>
+        </View>
+
+        <Modal transparent visible={menuVisible} animationType="fade">
+          <TouchableOpacity style={styles.modalOverlay} onPress={() => setMenuVisible(false)}>
+            <View style={styles.menuContainer}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => { setGraphType('pie'); setMenuVisible(false); }}>
+                <Text style={graphType === 'pie' ? styles.menuItemActiveText : styles.menuItemText}>Résumé voitures</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuItem} onPress={() => { setGraphType('bar'); setMenuVisible(false); }}>
+                <Text style={graphType === 'bar' ? styles.menuItemActiveText : styles.menuItemText}>Ventes / Locations</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {graphType === 'pie' ? (
+          <View style={styles.pieWrapper}>
+            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+              <Svg width={size} height={size}>
+                <G rotation="-90" originX={size / 2} originY={size / 2}>
+                  {segments.map((segment, index) => {
+                    const arc = (segment.value / 100) * circumference;
+                    const circle = (
+                      <Circle
+                        key={index}
+                        stroke={segment.color}
+                        fill="transparent"
+                        strokeWidth={strokeWidth}
+                        strokeDasharray={`${arc} ${circumference - arc}`}
+                        strokeDashoffset={-(startAngle / 360) * circumference}
+                        r={radius}
+                        cx={size / 2}
+                        cy={size / 2}
+                      />
+                    );
+                    startAngle += (segment.value / 100) * 360;
+                    return circle;
+                  })}
+                </G>
+              </Svg>
+              <View style={styles.centerText}>
+                <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#333' }}>{totalVoitures}</Text>
+                <Text style={{ fontSize: 12, color: '#666' }}>Voitures</Text>
+              </View>
+            </View>
+
+            <View style={styles.statsLegendRight}>
+              {segments.map((segment, index) => (
+                <View key={index} style={styles.legendItem}>
+                  <View style={[styles.legendCircle, { backgroundColor: segment.color }]} />
+                  <View style={{ flexDirection: 'column' }}>
+                    <Text style={styles.legendPercentage}>{segment.value.toFixed(0)}%</Text>
+                    <Text style={styles.legendStatus}>{segment.label}</Text>
+                  </View>
+                  <Text style={styles.legendCount}>{segment.count}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : (
+          renderBarChart()
+        )}
+      </View>
     );
-  }
+  };
+
+  if (loading) return <SafeAreaView style={styles.container}><ActivityIndicator size="large" color="#FD6A00" style={{ marginTop: 50 }} /></SafeAreaView>;
+  if (!parkingData) return <SafeAreaView style={styles.container}><Text style={styles.errorText}>Aucune donnée de parking disponible</Text></SafeAreaView>;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -291,51 +417,45 @@ const MonParkingScreen: React.FC = () => {
       <ScrollView onScroll={handleScroll} scrollEventThrottle={16}>
         <View style={styles.headerRow}>
           <Text style={styles.title}>Gérer vos voitures</Text>
-          <Text style={styles.parkingName}>{parkingData.parking.name}</Text>
+          <TouchableOpacity style={styles.addButton} onPress={() => router.push('../(ParkingDetail)/AjoutParking')}>
+            <Ionicons name="add-circle" size={24} color="#FD6A00" />
+            <Text style={styles.addText}>Ajouter</Text>
+          </TouchableOpacity>
         </View>
 
         <Text style={styles.total}>Total des voitures : {totalVoitures}</Text>
 
-        {renderMonthlyChart()}
-
-        <View style={styles.statsContainer}>
-          {renderResumeGraph()}
-        </View>
+        {renderGraphContainer()}
 
         {!sticky && renderBottomButtons()}
 
         <View style={{ marginTop: 20 }}>
           {filteredVoitures.map(voiture => (
-            <View key={voiture.id} style={styles.voitureCard}>
-              <Image 
-                source={voiture.photos && voiture.photos.length > 0 
-                  ? { uri: voiture.photos[0] } 
-                  : getImageSource(voiture.status)
-                } 
-                style={styles.voitureImageClickable} 
+            <TouchableOpacity 
+              key={voiture.id} 
+              style={styles.voitureCard}
+              onPress={() => router.push({ 
+                pathname: "/(Clients)/CreateListingSreen", 
+                params: { voiture: JSON.stringify(voiture) } 
+              })}
+            >
+              <Image
+                source={voiture.photos && voiture.photos.length > 0 ? { uri: voiture.photos[0] } : getImageSource(voiture.status)}
+                style={styles.voitureImageClickable}
               />
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <Text style={{ fontSize: 18, fontWeight: 'bold' }}>
                   {voiture.marque} {voiture.model}
                 </Text>
-                <Text style={{ fontSize: 14, color: '#666' }}>
-                  {getStatusLabel(voiture.status)}
-                </Text>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FD6A00' }}>
-                  {voiture.prix} €
-                </Text>
+                <Text style={{ fontSize: 14, color: '#666' }}>{getStatusLabel(voiture.status)}</Text>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FD6A00' }}>{voiture.prix} FCFA</Text>
                 {voiture.nextReservation && (
                   <Text style={{ fontSize: 12, color: '#666' }}>
                     Prochaine réservation: {new Date(voiture.nextReservation.date).toLocaleDateString()}
                   </Text>
                 )}
               </View>
-              <View style={styles.statsBadge}>
-                <Text style={styles.statsText}>👁️ {voiture.stats.vues}</Text>
-                <Text style={styles.statsText}>❤️ {voiture.stats.favoris}</Text>
-                <Text style={styles.statsText}>📅 {voiture.stats.reservationsActives}</Text>
-              </View>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
       </ScrollView>
@@ -346,8 +466,9 @@ const MonParkingScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 20, paddingTop: 20 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
-  title: { fontSize: 18, fontWeight: 'bold', color: '#333', marginTop: 10 },
-  parkingName: { fontSize: 14, color: '#666', fontStyle: 'italic' },
+  title: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+  addButton: { flexDirection: 'row', alignItems: 'center' },
+  addText: { marginLeft: 5, color: '#FD6A00', fontWeight: 'bold' },
   total: { fontSize: 14, color: '#666', marginTop: 8 },
   searchContainerSticky: {
     flexDirection: 'row',
@@ -366,24 +487,30 @@ const styles = StyleSheet.create({
     right: 20, 
     flexDirection: 'row', 
     justifyContent: 'space-around', 
-    zIndex: 1000,
-    backgroundColor: 'white',
-    padding: 10,
-    borderRadius: 25,
+    zIndex: 1000, 
+    backgroundColor: 'white', 
+    padding: 10, 
+    borderRadius: 25, 
     elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   bottomButtonsContainer: { 
     flexDirection: 'row', 
     justifyContent: 'space-around', 
-    marginTop: 20,
-    flexWrap: 'wrap',
+    marginTop: 20, 
+    flexWrap: 'wrap' 
   },
   bottomButton: { 
     paddingVertical: 12, 
     paddingHorizontal: 15, 
     borderRadius: 25, 
-    backgroundColor: '#FFD1A3',
+    backgroundColor: '#FFD1A3', 
     margin: 5,
+    minWidth: 100,
+    alignItems: 'center',
   },
   bottomButtonActive: { backgroundColor: '#FD6A00' },
   bottomButtonText: { color: '#FD6A00', fontWeight: 'bold', fontSize: 12 },
@@ -407,119 +534,129 @@ const styles = StyleSheet.create({
     borderRadius: 10, 
     resizeMode: 'cover' 
   },
-  statsContainer: { 
+  errorText: { 
+    textAlign: 'center', 
+    marginTop: 50, 
+    color: '#666', 
+    fontSize: 16 
+  },
+  centerText: { 
+    position: 'absolute', 
+    top: '40%', 
+    left: 0, 
+    right: 0, 
+    alignItems: 'center' 
+  },
+  graphContainer: { 
     backgroundColor: '#fff', 
+    borderRadius: 15, 
     padding: 15, 
     marginTop: 20, 
-    borderRadius: 10, 
     elevation: 3,
-    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
-  circleContainer: {
+  graphHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 15,
   },
-  circle: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: '#f8f8f8',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 20,
-    borderColor: '#FD6A00',
+  pieWrapper: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center' 
   },
-  centerText: {
-    fontSize: 24,
+  graphTitle: { 
+    fontSize: 16, 
     fontWeight: 'bold',
     color: '#333',
   },
-  centerSubText: {
-    fontSize: 12,
-    color: '#666',
+  settingsIcon: { 
+    padding: 5,
   },
-  statsLegend: {
-    marginTop: 15,
-    width: '100%',
+  modalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0,0,0,0.3)', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
   },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
+  menuContainer: { 
+    backgroundColor: '#fff', 
+    borderRadius: 15, 
+    padding: 15, 
+    width: 200,
+    elevation: 5,
   },
-  legendColor: {
-    width: 15,
-    height: 15,
-    borderRadius: 3,
-    marginRight: 8,
+  menuItem: { 
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 8,
   },
-  legendText: {
-    fontSize: 12,
-    color: '#666',
+  menuItemText: { 
+    fontSize: 14, 
+    color: '#333' 
   },
-  monthlyChartContainer: {
-    backgroundColor: '#fff',
-    padding: 15,
-    marginTop: 20,
-    borderRadius: 10,
-    elevation: 3,
+  menuItemActiveText: { 
+    fontSize: 14, 
+    color: '#FD6A00', 
+    fontWeight: 'bold' 
   },
-  chartTitle: {
-    fontSize: 16,
+  statsLegendRight: { 
+    marginLeft: 20 
+  },
+  legendItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginBottom: 12,
+    width: 120,
+  },
+  legendCircle: { 
+    width: 12, 
+    height: 12, 
+    borderRadius: 6, 
+    marginRight: 8 
+  },
+  legendPercentage: { 
+    fontSize: 12, 
     fontWeight: 'bold',
-    marginBottom: 15,
-    textAlign: 'center',
+    color: '#333',
   },
-  chartBars: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'flex-end',
-    height: 100,
+  legendStatus: { 
+    fontSize: 10, 
+    color: '#666' 
   },
-  chartColumn: {
-    alignItems: 'center',
+  legendCount: { 
+    marginLeft: 'auto', 
+    fontSize: 12, 
+    fontWeight: 'bold', 
+    color: '#FD6A00' 
   },
-  barContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    height: 80,
-    marginBottom: 5,
-  },
-  salesBar: {
-    width: 8,
-    backgroundColor: '#FD6A00',
-    marginRight: 2,
-    borderRadius: 2,
-  },
-  rentalsBar: {
-    width: 8,
-    backgroundColor: '#FFD1A3',
-    borderRadius: 2,
-  },
-  chartLabel: {
-    fontSize: 10,
-    color: '#666',
+  barChartContainer: {
+    height: 210,
   },
   chartLegend: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 10,
+    marginTop: 15,
+    paddingHorizontal: 20,
   },
-  statsBadge: {
-    alignItems: 'flex-end',
-    marginLeft: 10,
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 15,
   },
-  statsText: {
-    fontSize: 10,
+  legendColor: {
+    width: 12,
+    height: 12,
+    borderRadius: 2,
+    marginRight: 5,
+  },
+  legendText: {
+    fontSize: 12,
     color: '#666',
-    marginBottom: 2,
-  },
-  errorText: {
-    textAlign: 'center',
-    marginTop: 50,
-    color: '#666',
-    fontSize: 16,
   },
 });
 
