@@ -42,7 +42,17 @@ export default function ProfilLayout() {
             headerBackTitle: 'Retour',
           }}
         />
+        <Stack.Screen 
+          name="favoris" 
+          options={{
+            title: 'Vos véhicules favoris',
+            headerShown: true,
+            headerBackTitle: 'Retour',
+          }}
+        />
       </Stack>
+      
+      
       
     </View>
   );
