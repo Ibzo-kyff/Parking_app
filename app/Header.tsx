@@ -53,7 +53,7 @@ const Header: React.FC = () => {
 
       <TouchableOpacity
         style={styles.notificationIcon}
-        onPress={() => router.push('/notifications')}
+        onPress={() => router.push('/(Clients)/Notifications')}
       >
         <FontAwesome name="bell-o" size={24} color="white" />
       </TouchableOpacity>

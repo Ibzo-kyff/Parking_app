@@ -94,7 +94,7 @@ const AccueilParking = () => {
 
   const fetchParkingData = async (isRetry = false) => {
     try {
-      const response = await axios.get('http://192.168.1.24:5000/api/vehicules/parking/management', {
+      const response = await axios.get('https://api.parkapp-pi.vercel.app/api/vehicules/parking/management', {
         headers: {
           Authorization: `Bearer ${authState.accessToken}`,
         },
@@ -228,9 +228,15 @@ const AccueilParking = () => {
     .slice(0, 3);
 
   // Extraire les marques distinctes avec leurs logos
-  const marques = [...new Set(parkingData.vehicles.map(v => v.marqueRef))]
-    .filter((marque): marque is { id: number; name: string; logoUrl: string } => marque !== null)
-    .slice(0, 5); // Limiter à 5 marques
+const marques = parkingData.vehicles
+  .map(v => v.marqueRef)
+  .filter((marque): marque is { id: number; name: string; logoUrl: string } => !!marque)
+  .filter((marque, index, self) =>
+    index === self.findIndex(m => m.id === marque.id) // garder seulement la première occurrence
+  )
+  .slice(0, 5);
+
+
 
   return (
     <View style={styles.mainContainer}>
