@@ -172,7 +172,7 @@ const Accueil: React.FC = () => {
         <View style={styles.scrollSection}>
           <View style={styles.scrollTitleContainer}>
             <Text style={styles.scrollTitle}>Nos marques</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('tousLesMarques' as never)}>
+            <TouchableOpacity onPress={() => router.replace('(Clients)/tousLesMarques')}>
               <Text style={styles.seeAllButton}>Voir tout</Text>
             </TouchableOpacity>
           </View>

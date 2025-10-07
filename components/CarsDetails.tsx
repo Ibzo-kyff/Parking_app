@@ -88,13 +88,18 @@ function CarDetailScreen() {
     );
   }
 
-  // Préparer photos (inchangé)
-  const getPhotoUrls = (photos: string[] | string | undefined): string[] => {
+  // Préparer photos (avec gestion des valeurs undefined/null dans l'array)
+  const getPhotoUrls = (photos: string[] | string | undefined | null): string[] => {
     if (!photos) return [];
     if (Array.isArray(photos)) {
-      return photos.map(photo => photo.startsWith('http') ? photo : `${BASE_URL}${photo}`);
+      return photos
+        .filter(photo => photo != null && typeof photo === 'string') // Filtrer les valeurs non valides
+        .map(photo => photo.startsWith('http') ? photo : `${BASE_URL}${photo}`);
     }
-    return [photos.startsWith('http') ? photos : `${BASE_URL}${photos}`];
+    if (typeof photos === 'string') {
+      return [photos.startsWith('http') ? photos : `${BASE_URL}${photos}`];
+    }
+    return [];
   };
 
   const photoUrls = getPhotoUrls(vehicule.photos);

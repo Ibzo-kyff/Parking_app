@@ -20,6 +20,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getVehicules } from '../../components/services/listeVoiture';
 import { router } from 'expo-router';
 import { BASE_URL } from '../../components/services/listeVoiture';
+import { useLocalSearchParams } from 'expo-router';
 
 interface Parking {
   id: number;
@@ -51,6 +52,9 @@ interface Vehicule {
 const { width } = Dimensions.get('window');
 
 const ListVoiture = () => {
+  const params = useLocalSearchParams();
+  const selectedMarqueFromParams = params.selectedMarque as string;
+  const marqueIdFromParams = params.marqueId as string;
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const [vehicules, setVehicules] = useState<Vehicule[]>([]);
   const [filteredVehicules, setFilteredVehicules] = useState<Vehicule[]>([]);
@@ -129,6 +133,13 @@ const ListVoiture = () => {
       }
     }
   }, [searchQuery, vehicules, advancedFilters]);
+  // Appliquer la marque sélectionnée depuis les paramètres
+  useEffect(() => {
+    if (selectedMarqueFromParams) {
+      setSearchQuery(selectedMarqueFromParams);
+      // Le filtre se fera automatiquement via l'effet existant de searchQuery
+    }
+  }, [selectedMarqueFromParams]);
 
   const applyAdvancedFilters = (vehicles: Vehicule[]) => {
     let filtered = [...vehicles];
