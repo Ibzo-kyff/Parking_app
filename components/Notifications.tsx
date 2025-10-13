@@ -10,6 +10,7 @@ import {
   SafeAreaView,
   Alert,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   getNotifications,
   markNotificationAsRead,
@@ -32,10 +33,25 @@ const Notifications = () => {
   const [selectedNotification, setSelectedNotification] =
     useState<Notification | null>(null);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [userId, setUserId] = useState<number | null>(null);
 
-  const fetchNotifications = async () => {
+  // 🔁 Récupérer ID utilisateur connecté depuis AsyncStorage
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const id = await AsyncStorage.getItem("userId");
+        if (id) setUserId(Number(id));
+      } catch (err) {
+        console.log("Erreur récupération userId :", err);
+      }
+    };
+    loadUser();
+  }, []);
+
+  // 🔁 Récupérer les notifications
+  const fetchNotifications = async (id: number) => {
     try {
-      const data = await getNotifications();
+      const data = await getNotifications(id);
       const formatted = data.map((n: any) => ({
         id: n.id,
         title: n.title,
@@ -51,15 +67,20 @@ const Notifications = () => {
     }
   };
 
+  // 🔄 Récupération auto toutes les 5s
   useEffect(() => {
-    fetchNotifications();
-  }, []);
+    if (userId) {
+      fetchNotifications(userId);
+      const interval = setInterval(() => fetchNotifications(userId), 5000);
+      return () => clearInterval(interval);
+    }
+  }, [userId]);
 
+  // ✅ Marquer notification comme lue
   const handleMarkAsRead = async (notification: Notification) => {
     if (notification.read) return;
     try {
       await markNotificationAsRead(notification.id);
-      // Met à jour localement pour retirer de l’onglet "Non lues"
       setNotifications((prev) =>
         prev.map((n) => (n.id === notification.id ? { ...n, read: true } : n))
       );
@@ -68,6 +89,7 @@ const Notifications = () => {
     }
   };
 
+  // ✅ Supprimer notification
   const handleDeleteConfirmed = async () => {
     if (!selectedNotification) return;
     try {
@@ -83,11 +105,13 @@ const Notifications = () => {
     }
   };
 
+  // 🔹 Filtrage par onglets
   const filteredNotifications =
     activeTab === "all"
       ? notifications
       : notifications.filter((n) => !n.read);
 
+  // 🔹 Affichage d’un item
   const renderItem = ({ item }: { item: Notification }) => (
     <TouchableOpacity
       style={[styles.card, !item.read && styles.nonLu]}
@@ -111,6 +135,7 @@ const Notifications = () => {
           <Text style={styles.header}>Notifications</Text>
         </View>
 
+        {/* Onglets */}
         <View style={styles.tabs}>
           <TouchableOpacity
             style={[styles.tab, activeTab === "all" && styles.activeTab]}
@@ -140,6 +165,7 @@ const Notifications = () => {
           </TouchableOpacity>
         </View>
 
+        {/* Liste notifications */}
         <FlatList
           data={filteredNotifications}
           keyExtractor={(item) => item.id.toString()}
@@ -147,26 +173,33 @@ const Notifications = () => {
           contentContainerStyle={{ paddingBottom: 20, paddingTop: 10 }}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           ListEmptyComponent={
-            <Text style={{ textAlign: "center", marginTop: 20, color: "#555" }}>
+            <Text
+              style={{ textAlign: "center", marginTop: 20, color: "#555" }}
+            >
               Aucune notification
             </Text>
           }
         />
       </View>
 
-      {/* Modal détails notification */}
+      {/* Modal détails */}
       <Modal visible={!!selectedNotification} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             {selectedNotification && (
               <>
-                <Text style={styles.modalTitle}>{selectedNotification.title}</Text>
-                <Text style={styles.modalMessage}>{selectedNotification.message}</Text>
-                <Text style={{ fontSize: 12, color: "gray", marginBottom: 12 }}>
+                <Text style={styles.modalTitle}>
+                  {selectedNotification.title}
+                </Text>
+                <Text style={styles.modalMessage}>
+                  {selectedNotification.message}
+                </Text>
+                <Text
+                  style={{ fontSize: 12, color: "gray", marginBottom: 12 }}
+                >
                   {selectedNotification.createdAt}
                 </Text>
 
-                {/* Actions */}
                 <View style={styles.modalActions}>
                   <Pressable
                     style={[styles.modalBtn, styles.modalCancel]}
@@ -220,17 +253,41 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8f9fa", paddingHorizontal: 12 },
   header: { fontSize: 22, fontWeight: "bold", textAlign: "center", color: "#333" },
   tabs: { flexDirection: "row", justifyContent: "center", marginBottom: 12 },
-  tab: { paddingVertical: 6, paddingHorizontal: 16, borderRadius: 20, borderWidth: 1, borderColor: "#FF6B00", marginHorizontal: 5 },
+  tab: {
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#FF6B00",
+    marginHorizontal: 5,
+  },
   activeTab: { backgroundColor: "#FF6B00" },
   tabText: { fontSize: 14, fontWeight: "600", color: "#FF6B00" },
   activeTabText: { color: "#fff" },
-  card: { backgroundColor: "#fff", borderRadius: 12, padding: 14, elevation: 2, marginHorizontal: 8 },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 14,
+    elevation: 2,
+    marginHorizontal: 8,
+  },
   nonLu: { borderLeftWidth: 5, borderLeftColor: "#FF6B00" },
   titre: { fontSize: 16, fontWeight: "bold", marginBottom: 4 },
   date: { fontSize: 12, color: "gray", marginBottom: 6 },
   message: { fontSize: 14, color: "#555" },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center" },
-  modalBox: { width: "85%", backgroundColor: "#fff", padding: 16, borderRadius: 10, elevation: 5 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalBox: {
+    width: "85%",
+    backgroundColor: "#fff",
+    padding: 16,
+    borderRadius: 10,
+    elevation: 5,
+  },
   modalTitle: { fontSize: 16, fontWeight: "700", marginBottom: 6 },
   modalMessage: { color: "#555", marginBottom: 12 },
   modalActions: { flexDirection: "row", justifyContent: "flex-end" },
