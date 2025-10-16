@@ -12,13 +12,14 @@ import {
 import { FontAwesome } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import Header from '../Header';
-import { getVehicules, getParkings, API_URL } from "../../components/services/accueil"; 
+import { getVehicules, getParkings, API_URL } from "../../components/services/accueil";
 import { router } from 'expo-router';
 
 type RootStackParamList = {
   Accueil: { firstName?: string; lastName?: string };
   tousLesMarques: undefined;
   pourVous: undefined;
+  parkingDetails: { parking: string }; // Ajouté pour typer la navigation (optionnel si non utilisé)
 };
 
 type AccueilRouteProp = RouteProp<RootStackParamList, 'Accueil'>;
@@ -91,7 +92,7 @@ const Accueil: React.FC = () => {
     const intervalId = setInterval(() => {
       const nextIndex = (currentIndex + 1) % parkings.length;
       setCurrentIndex(nextIndex);
-      scrollViewRef.current?.scrollTo({ x: nextIndex * 300, animated: true });
+      scrollViewRef.current?.scrollTo({ x: nextIndex * 340, animated: true });
     }, 3000);
     return () => clearInterval(intervalId);
   }, [currentIndex, parkings]);
@@ -109,151 +110,168 @@ const Accueil: React.FC = () => {
   const handleImagePress = (index: number, type: string) => {
     if (type === 'vehicule') {
       const selectedVehicule = vehicules[index];
-      // Navigation vers l'écran de détails avec les informations du véhicule
       router.push({
         pathname: '/(Clients)/CreateListingScreen',
         params: { vehicule: JSON.stringify(selectedVehicule) }
       });
-    } else {
-      console.log(`Pressed on ${type} image at index: ${index}`);
+    } else if (type === 'marque') {
+      const selectedMarque = marques[index];
+      router.push({
+        pathname: '/(Clients)/listVoiture',
+        params: { selectedMarque: selectedMarque.name }
+      });
     }
+  };
+
+  const handleParkingPress = (index: number) => {
+    const selectedParking = parkings[index];
+    router.push({
+      pathname: '/(Clients)/parkingDetails', // Adaptez ce chemin à votre route réelle
+      params: { parking: JSON.stringify(selectedParking) }
+    });
   };
 
   return (
     <View style={styles.container}>
       <Header />
-
-      <View style={styles.searchBarContainer}>
-        <FontAwesome name="search" size={24} color="#999" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchBar}
-          placeholder="Recherche..."
-          placeholderTextColor="#999"
-        />
-      </View>
-
-      <View style={styles.carouselContainer}>
-        {loadingParkings ? (
-          <ActivityIndicator size="large" color="#FD6A00" />
-        ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            ref={scrollViewRef}
-            style={styles.carouselScrollView}
-            scrollEventThrottle={16}
-            pagingEnabled
-            snapToInterval={320} 
-            snapToAlignment="center" 
-            decelerationRate="fast" 
-            contentContainerStyle={{
-              paddingHorizontal: 10,
-            }}
-          >
-            {parkings.map((item, index) => (
-              <View key={item.id || index} style={styles.carouselItem}>
-                <Image 
-                  source={{ 
-                    uri: item.logo 
-                      ? item.logo.startsWith('http') 
-                        ? item.logo
-                        : `${API_URL}${item.logo}`
-                      : 'https://via.placeholder.com/150'
-                  }} 
-                  style={styles.carouselImage} 
-                />
-              </View>
-            ))}
-          </ScrollView>
-        )}
-      </View>
-
-      <View style={styles.scrollContainer}>
-        <View style={styles.scrollSection}>
-          <View style={styles.scrollTitleContainer}>
-            <Text style={styles.scrollTitle}>Nos marques</Text>
-            <TouchableOpacity onPress={() => router.replace('(Clients)/tousLesMarques')}>
-              <Text style={styles.seeAllButton}>Voir tout</Text>
-            </TouchableOpacity>
-          </View>
-
-          {loadingMarques ? (
+      <ScrollView style={styles.mainScrollView}> {/* Nouveau ScrollView pour rendre la page scrollable */}
+        <View style={styles.searchBarContainer}>
+          <FontAwesome name="search" size={24} color="#999" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchBar}
+            placeholder="Recherche..."
+            placeholderTextColor="#999"
+          />
+        </View>
+        <View style={styles.carouselContainer}>
+          {loadingParkings ? (
             <ActivityIndicator size="large" color="#FD6A00" />
           ) : (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              style={styles.imageScrollView}
-              contentContainerStyle={styles.scrollViewContent}
+              ref={scrollViewRef}
+              style={styles.carouselScrollView}
+              scrollEventThrottle={16}
+              pagingEnabled
+              snapToInterval={340} // Augmenté pour mieux s'adapter aux écrans
+              snapToAlignment="center"
+              decelerationRate="fast"
+              contentContainerStyle={{
+                paddingHorizontal: 10,
+              }}
             >
-              {marques.map((item, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.imageContainer}
-                  onPress={() => handleImagePress(index, 'marque')}
-                >
-                  <View style={styles.imageWrapper}>
-                    <Image source={item.source} style={styles.scrollImage} />
-                  </View>
-                  <View style={styles.imageOverlay}>
-                    <Text style={styles.imageLabel}>{item.name}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
-
-          <View style={styles.scrollTitleContainer}>
-            <Text style={styles.scrollTitle}>Pour vous</Text>
-            <TouchableOpacity onPress={() => router.push('/(Clients)/listVoiture')}>
-              <Text style={styles.seeAllButton}>Voir tout</Text>
-            </TouchableOpacity>
-          </View>
-
-          {loadingVehicules ? (
-            <ActivityIndicator size="large" color="#FD6A00" />
-          ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              ref={pourVousScrollRef}
-              style={styles.imageScrollView}
-              contentContainerStyle={styles.scrollViewContent}
-            >
-              {vehicules.map((item, index) => (
+              {parkings.map((item, index) => (
                 <TouchableOpacity
                   key={item.id || index}
-                  style={styles.imageContainerLarge}
-                  onPress={() => handleImagePress(index, 'vehicule')}
+                  style={styles.carouselItem}
+                  onPress={() => handleParkingPress(index)} // Navigation vers le parking sélectionné
                 >
-                  <View style={styles.imageWrapperLarge}>
-                    <Image
-                      source={{
-                        uri: item.photos && item.photos.length > 0
-                          ? item.photos[0].startsWith('http')
-                            ? item.photos[0] 
-                            : `${API_URL}${item.photos[0]}` 
-                          : "https://via.placeholder.com/150"
-                      }}
-                      style={styles.scrollImageLarge}
-                    />
-                  </View>
-                  <View style={styles.imageOverlay}>
-                    <Text style={styles.imageLabel}>{item.marque}</Text>
-                    <Text style={styles.imagePrix}>{item.prix} FCFA</Text>
+                  <Image
+                    source={{
+                      uri: item.logo
+                        ? item.logo.startsWith('http')
+                          ? item.logo
+                          : `${API_URL}${item.logo}`
+                        : 'https://via.placeholder.com/150'
+                    }}
+                    style={styles.carouselImage}
+                  />
+                  {/* Exemple d'overlay pour promo ou nom, si disponible dans item */}
+                  <View style={styles.carouselOverlay}>
+                    <Text style={styles.carouselLabel}>{item.name || 'Nouveau Parking'}</Text>
+                    {item.promotion && <Text style={styles.carouselPromo}>{item.promotion}</Text>}
                   </View>
                 </TouchableOpacity>
               ))}
             </ScrollView>
           )}
         </View>
-      </View>
+        <View style={styles.scrollContainer}>
+          <View style={styles.scrollSection}>
+            <View style={styles.scrollTitleContainer}>
+              <Text style={styles.scrollTitle}>Nos marques</Text>
+              <TouchableOpacity onPress={() => router.replace('(Clients)/tousLesMarques')}>
+                <Text style={styles.seeAllButton}>Voir tout</Text>
+              </TouchableOpacity>
+            </View>
+            {loadingMarques ? (
+              <ActivityIndicator size="large" color="#FD6A00" />
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.imageScrollView}
+                contentContainerStyle={styles.scrollViewContent}
+              >
+                {marques.map((item, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.imageContainer}
+                    onPress={() => handleImagePress(index, 'marque')}
+                  >
+                    <View style={styles.imageWrapper}>
+                      <Image source={item.source} style={styles.scrollImage} />
+                    </View>
+                    <View style={styles.imageOverlay}>
+                      <Text style={styles.imageLabel}>{item.name}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            <View style={styles.scrollTitleContainer}>
+              <Text style={styles.scrollTitle}>Pour vous</Text>
+              <TouchableOpacity onPress={() => router.push('/(Clients)/listVoiture')}>
+                <Text style={styles.seeAllButton}>Voir tout</Text>
+              </TouchableOpacity>
+            </View>
+            {loadingVehicules ? (
+              <ActivityIndicator size="large" color="#FD6A00" />
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                ref={pourVousScrollRef}
+                style={styles.imageScrollView}
+                contentContainerStyle={styles.scrollViewContent}
+              >
+                {vehicules.map((item, index) => (
+                  <TouchableOpacity
+                    key={item.id || index}
+                    style={styles.imageContainerLarge}
+                    onPress={() => handleImagePress(index, 'vehicule')}
+                  >
+                    <View style={styles.imageWrapperLarge}>
+                      <Image
+                        source={{
+                          uri: item.photos && item.photos.length > 0
+                            ? item.photos[0].startsWith('http')
+                              ? item.photos[0]
+                              : `${API_URL}${item.photos[0]}`
+                            : "https://via.placeholder.com/150"
+                        }}
+                        style={styles.scrollImageLarge}
+                      />
+                    </View>
+                    <View style={styles.imageOverlay}>
+                      <Text style={styles.imageLabel}>{item.marque}</Text>
+                      <Text style={styles.imagePrix}>{item.prix} FCFA</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f4f3f3', padding: 20 },
+  mainScrollView: { flex: 1 }, // Nouveau style pour le ScrollView principal
   scrollViewContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
   searchBarContainer: {
     flexDirection: 'row',
@@ -269,30 +287,55 @@ const styles = StyleSheet.create({
   },
   searchIcon: { marginRight: 10 },
   searchBar: { flex: 1 },
- carouselContainer: {
-    height: 150,
+  carouselContainer: {
+    height: 200, // Augmenté pour plus de visibilité
     marginBottom: 20,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 10,
-    paddingHorizontal: 0, 
+    paddingHorizontal: 0,
   },
-  carouselScrollView: { 
+  carouselScrollView: {
     flex: 1,
   },
   carouselItem: {
-    width: 320, 
+    width: 340, // Augmenté pour mieux remplir l'écran
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: 2, 
-  },
-  carouselImage: { 
-    width: '100%',
-    height: 130, 
-    resizeMode: 'cover', 
+    marginHorizontal: 5, // Un peu plus d'espace entre les items
     borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#f9f9f9', // Fond léger pour mieux contraster
+  },
+  carouselImage: {
+    width: '100%',
+    height: 180, // Augmenté pour rendre plus visible
+    resizeMode: 'cover',
+    borderRadius: 10,
+  },
+  carouselOverlay: { // Nouvel overlay pour texte promo
+    position: 'absolute',
+    bottom: 10,
+    left: 0,
+    right: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 5,
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
+  },
+  carouselLabel: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  carouselPromo: {
+    color: '#FD6A00',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   seeAllButton: { fontSize: 14, color: '#FD6A00', fontWeight: 'bold' },
   scrollContainer: { paddingBottom: 0, paddingTop: 20 },

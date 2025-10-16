@@ -94,7 +94,7 @@ const AccueilParking = () => {
 
   const fetchParkingData = async (isRetry = false) => {
     try {
-      const response = await axios.get('https://api.parkapp-pi.vercel.app/api/vehicules/parking/management', {
+      const response = await axios.get('https://parkapp-pi.vercel.app/api/vehicules/parking/management', {
         headers: {
           Authorization: `Bearer ${authState.accessToken}`,
         },
@@ -235,8 +235,9 @@ const marques = parkingData.vehicles
     index === self.findIndex(m => m.id === marque.id) // garder seulement la première occurrence
   )
   .slice(0, 5);
-
-
+    // Log des marques pour débogage
+  console.log('Marques extraites:', marques);
+  console.log('Nombre de marques:', marques.length);
 
   return (
     <View style={styles.mainContainer}>
