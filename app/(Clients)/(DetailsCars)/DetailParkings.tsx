@@ -453,11 +453,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-<<<<<<< Updated upstream
     backgroundColor: "#FF9800",
-=======
-    backgroundColor: "rgba(255, 125, 0, 0.1)",
->>>>>>> Stashed changes
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
