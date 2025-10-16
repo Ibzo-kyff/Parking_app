@@ -1,4 +1,3 @@
-<<<<<<< Updated upstream
 import React, { useState, useEffect } from 'react';
 import { 
   View, Text, Image, StyleSheet, TouchableOpacity, ScrollView, 
@@ -226,7 +225,7 @@ const Profile = () => {
 
       {/* Options du menu avec skeleton */}
       <View style={styles.menuContainer}>
-        {[1, 2, 3, 4].map((item) => (
+        {[1, 2, 3].map((item) => (
           <View key={item} style={styles.menuItem}>
             <View style={[styles.menuIcon, styles.skeletonIcon]} />
             <View style={styles.menuTextContainer}>
@@ -246,15 +245,8 @@ const Profile = () => {
   if (loading) {
     return <SkeletonLoader />;
   }
-=======
-import React from "react";
-import { View, StyleSheet } from "react-native";
-import ProfileCard from "../../components/ProfileCard";
->>>>>>> Stashed changes
 
-const ProfileScreen = () => {
   return (
-<<<<<<< Updated upstream
     <ScrollView 
       contentContainerStyle={styles.contentContainer}
       refreshControl={
@@ -340,20 +332,6 @@ const ProfileScreen = () => {
             <Feather name="chevron-right" size={20} color="#999" />
           </TouchableOpacity>
         </Link>
-
-        {/* NOUVEAU : Section Favoris */}
-        <Link href="../(profil)/favoris" asChild>
-          <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
-            <View style={styles.menuIcon}>
-              <FontAwesome name="heart" size={24} color="#FDB913" />
-            </View>
-            <View style={styles.menuTextContainer}>
-              <Text style={styles.menuItemText}>Favoris</Text>
-              <Text style={styles.menuItemSubText}>Vos véhicules favoris</Text>
-            </View>
-            <Feather name="chevron-right" size={20} color="#999" />
-          </TouchableOpacity>
-        </Link>
       </View>
 
       {/* Bouton Déconnexion */}
@@ -410,16 +388,227 @@ const ProfileScreen = () => {
         </View>
       </Modal>
     </ScrollView>
-=======
-    <View style={styles.container}>
-      <ProfileCard />
-    </View>
->>>>>>> Stashed changes
   );
 };
 
+// Les styles restent exactement les mêmes que dans le code précédent
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
+  contentContainer: {
+    flexGrow: 1,
+    backgroundColor: "#f8f9fa",
+    paddingVertical: 20,
+  },
+  profileHeader: {
+    alignItems: 'center',
+    paddingVertical: 30,
+    marginBottom: 20,
+    backgroundColor: 'white',
+    marginHorizontal: 20,
+    borderRadius: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  profileImageContainer: {
+    position: 'relative',
+    marginBottom: 20,
+  },
+  profileImage: {
+    width: 130,
+    height: 130,
+    borderRadius: 75,
+    borderWidth: 3,
+    borderColor: '#FDB913',
+  },
+  uploadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+  },
+  editIcon: {
+    position: 'absolute',
+    right: 5,
+    bottom: 5,
+    backgroundColor: '#fff',
+    width: 35,
+    height: 35,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  userName: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  userTitle: {
+    fontSize: 16,
+    color: '#777',
+    fontStyle: 'italic',
+    marginBottom: 5,
+  },
+  refreshingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  refreshingText: {
+    fontSize: 12,
+    color: '#FDB913',
+    marginLeft: 8,
+  },
+  menuContainer: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    backgroundColor: 'white',
+    borderRadius: 15,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  menuIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(253, 185, 19, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  menuTextContainer: {
+    flex: 1,
+  },
+  menuItemText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
+    marginBottom: 3,
+  },
+  menuItemSubText: {
+    fontSize: 14,
+    color: '#777',
+  },
+  logoutButton: {
+    marginHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    marginBottom: 15,
+  },
+  logoutButtonText: {
+    color: '#FDB913',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  refreshButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  refreshButtonText: {
+    color: '#FDB913',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  centeredView: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalView: {
+    width: width * 0.85,
+    backgroundColor: 'white',
+    borderRadius: 20,
+    paddingTop: 15,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 25,
+    color: '#333',
+  },
+  modalButton: {
+    width: '100%',
+    paddingVertical: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  modalButtonText: {
+    fontSize: 16,
+    marginLeft: 12,
+    color: '#333',
+  },
+  
+  // Styles pour le skeleton loader
+  skeletonImage: {
+    backgroundColor: '#e1e1e1',
+  },
+  skeletonTextContainer: {
+    alignItems: 'center',
+  },
+  skeletonText: {
+    backgroundColor: '#e1e1e1',
+    borderRadius: 4,
+  },
+  skeletonIcon: {
+    backgroundColor: '#e1e1e1',
+  },
+  skeletonChevron: {
+    backgroundColor: '#e1e1e1',
+    borderRadius: 10,
+  },
+  skeletonButton: {
+    backgroundColor: '#e1e1e1',
+  },
 });
 
-export default ProfileScreen;
+export default Profile;
