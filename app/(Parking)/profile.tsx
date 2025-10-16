@@ -1,20 +1,26 @@
 // app/(Parking)/profile.tsx (nouveau fichier)
 // import ProfileScreen from '../../shared/ProfileScreen'; // Ajustez le chemin
 // export default ProfileScreen;
-import React from "react";
-import { View, StyleSheet } from "react-native";
-import ProfileCard from "../../components/ProfileCard";
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 
-const ProfileScreen = () => {
+export default function Reservation() {
   return (
     <View style={styles.container}>
-      <ProfileCard />
+      <Text style={styles.text}>Bienvenue sur l’écran Réservation</Text>
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
+  container: {
+    flex: 1,
+    backgroundColor: '#f4f3f3',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  text: {
+    fontSize: 20,
+    color: '#000',
+  },
 });
-
-export default ProfileScreen;
