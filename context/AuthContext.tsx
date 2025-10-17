@@ -19,6 +19,13 @@ interface AuthContextType {
   clearAuthState: () => void;
   isLoading: boolean;
   refreshAuth: () => Promise<boolean>; // Ajout de refreshAuth
+  // Fournir un objet `user` dérivé pour compatibilité avec le code existant
+  user: {
+    id: number | null;
+    nom: string | null;
+    prenom: string | null;
+    role: string | null;
+  } | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -104,6 +111,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       clearAuthState, 
       isLoading,
       refreshAuth // Ajout de refreshAuth
+      ,
+      // Dériver un objet user depuis authState pour compatibilité
+      user: authState && authState.userId ? {
+        id: authState.userId ? Number(authState.userId) : null,
+        nom: authState.nom,
+        prenom: authState.prenom,
+        role: authState.role,
+      } : null,
     }}>
       {children}
     </AuthContext.Provider>
