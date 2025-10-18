@@ -1,222 +1,198 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  FlatList, 
-  TouchableOpacity, 
-  StyleSheet, 
-  Image,
-  ActivityIndicator,
-  Alert,
-  RefreshControl
-} from 'react-native';
-import { parkingService } from '../../components/services/profileApi';
+
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView, Image } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { useChat } from '../../hooks/useChat';
+import { getParkings, Parking } from '../../components/services/parkingApi';
+import { ChatList } from './../../components/chat/ChatList';
+import { ChatWindow } from './../../components/chat/ChatWindow';
 import { useAuth } from '../../context/AuthContext';
-import { useNavigation } from '@react-navigation/native';
+import { Message } from '../../app/type/chat';
 
-interface Parking {
-  id: string;
-  nom: string;
-  address: string;
-  phone?: string;
-  prix?: number;
-  image?: string;
-}
+interface Props { initialParkingId?: number; }
 
-const ParkingListScreen: React.FC = () => {
-  const { authState } = useAuth(); // Utilisez authState au lieu de déstructurer accessToken directement
+const { width } = Dimensions.get('window');
+const isTablet = width > 768;
+
+const Messages: React.FC<Props> = ({ initialParkingId }) => {
+  const { authState, isLoading } = useAuth();
+  // Déduire un objet user minimal depuis authState
+  const user = authState && authState.userId ? {
+    id: Number(authState.userId),
+    nom: authState.nom,
+    prenom: authState.prenom,
+    role: authState.role,
+  } : null;
+  const {
+    messages, conversations, loading, sendMessage, loadConversation,
+    deleteMessage, updateMessage, setCurrentParkingId,
+  } = useChat(initialParkingId);
+
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [parkingName, setParkingName] = useState<string>('');
+  const [parkingLogo, setParkingLogo] = useState<string | null>(null);
   const [parkings, setParkings] = useState<Parking[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const navigation = useNavigation<any>();
+  const [loadingParkings, setLoadingParkings] = useState(false);
 
-  const fetchParkings = async () => {
-    try {
-      if (!authState.accessToken) {
-        Alert.alert('Erreur', 'Token d\'accès manquant');
-        return;
-      }
-      
-      const data = await parkingService.getParkings(authState.accessToken);
-      setParkings(data);
-    } catch (error) {
-      console.error('Erreur chargement parkings :', error);
-      Alert.alert('Erreur', 'Impossible de charger la liste des parkings');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+  React.useEffect(() => {
+    if (initialParkingId) setCurrentParkingId(initialParkingId);
+  }, [initialParkingId, setCurrentParkingId]);
+
+  const handleSelectConversation = (userId: number, name: string, logo?: string | null, parkingId?: number) => {
+    // Naviguer vers la page de chat (route dédiée) pour garder l'URL/navigabilité
+    // router.push({
+    //   pathname: '/(Clients)/(profil)/chatpage',
+    //   params: {
+    //     userId: userId.toString(),
+    //     userName: name,
+    //     userAvatar: logo || 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
+    //   },
+    // });
+    // pour les écrans large on conserve l'état local si besoin
+    setSelectedUserId(userId);
+    setParkingName(name);
+    setParkingLogo(logo || null);
+    if (parkingId) {
+      setCurrentParkingId(parkingId);
     }
+    loadConversation(userId);
   };
 
-  useEffect(() => {
+  // Charger la liste des parkings pour l'affichage initial
+  React.useEffect(() => {
+    const fetchParkings = async () => {
+      setLoadingParkings(true);
+      try {
+        const data = await getParkings();
+        setParkings(data || []);
+      } catch (err) {
+        console.error('Erreur chargement parkings:', err);
+      } finally {
+        setLoadingParkings(false);
+      }
+    };
+
     fetchParkings();
-  }, [authState.accessToken]); // Dépendance sur authState.accessToken
+  }, []);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchParkings();
-  };
+  if (isLoading) {
+    return <View style={styles.center}><Text>Chargement...</Text></View>;
+  }
 
-  const openChat = (parking: Parking) => {
-    navigation.navigate('chatpage', { 
-      parkingId: parking.id, 
-      parkingName: parking.nom 
-    });
-  };
+  if (!user) {
+    return <View style={styles.center}><Text>Connectez-vous pour chatter</Text></View>;
+  }
 
-  const renderItem = ({ item }: { item: Parking }) => (
-    <View style={styles.card}>
-      {item.image ? (
-        <Image 
-          source={{ uri: item.image }} 
-          style={styles.image} 
-          onError={() => console.log("Erreur de chargement de l'image")}
+  // Mobile layout
+  if (!isTablet) {
+    if (selectedUserId) {
+      return (
+        <ChatWindow
+          messages={messages}
+          onSendMessage={sendMessage}
+          onDeleteMessage={deleteMessage}
+          onUpdateMessage={updateMessage}
+          receiverId={selectedUserId}
+          parkingName={parkingName}
+          loading={loading}
+          onBack={() => setSelectedUserId(null)}
+            parkingLogo={parkingLogo}
         />
-      ) : (
-        <View style={[styles.image, styles.placeholder]}>
-          <Text style={{ color: '#999' }}>Pas d'image</Text>
-        </View>
-      )}
-      <View style={styles.info}>
-        <Text style={styles.nom}>{item.nom}</Text>
-        <Text style={styles.address}>{item.address}</Text>
-        {item.phone && <Text style={styles.phone}>📞 {item.phone}</Text>}
-        {item.prix && <Text style={styles.prix}>{item.prix} FCFA / h</Text>}
+      );
+    }
 
-        <View style={styles.actions}>
-          <TouchableOpacity 
-            style={styles.btnMsg} 
-            onPress={() => openChat(item)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.btnText}>💬 Message</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
+    // Show parkings list first on mobile
+    if (loadingParkings) {
+      return <View style={styles.center}><Text>Chargement des parkings...</Text></View>;
+    }
 
-  if (loading) {
     return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#007bff" />
-        <Text style={styles.loadingText}>Chargement des parkings...</Text>
-      </View>
+      <ScrollView contentContainerStyle={{ padding: 16 }}>
+        <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 12 }}>Parkings</Text>
+        {parkings.map(p => (
+          <TouchableOpacity
+            key={p.id}
+            onPress={() => {
+              if (p.user && p.user.id) {
+                handleSelectConversation(p.user.id, p.name, p.logo, p.id);
+              } else {
+                console.warn('Parking sans utilisateur associé', p.id);
+              }
+            }}
+            style={styles.parkingCard}
+          >
+            <Image
+              source={{ uri: p.logo || 'https://cdn-icons-png.flaticon.com/512/684/684908.png' }}
+              style={styles.parkingLogo}
+            />
+            <View style={styles.parkingInfo}>
+              <Text style={styles.parkingName}>{p.name}</Text>
+              <Text style={styles.parkingMeta}>{p.city} • {p.capacity} places</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#999" />
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
     );
   }
 
   return (
-    <FlatList
-      data={parkings}
-      keyExtractor={(item) => item.id}
-      renderItem={renderItem}
-      contentContainerStyle={parkings.length === 0 ? styles.emptyContainer : styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          colors={['#007bff']}
-          tintColor={'#007bff'}
+    <View style={styles.container}>
+      <View style={styles.sidebar}>
+        <ChatList
+          conversations={conversations}
+          onSelectConversation={(userId, name, parkingId) => handleSelectConversation(userId, name, undefined, parkingId)}
+          currentUserId={user.id}
         />
-      }
-      ListEmptyComponent={
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Aucun parking disponible</Text>
-        </View>
-      }
-    />
+      </View>
+      <View style={styles.main}>
+        {selectedUserId ? (
+          <ChatWindow
+            messages={messages}
+            onSendMessage={sendMessage}
+            onDeleteMessage={deleteMessage}
+            onUpdateMessage={updateMessage}
+            receiverId={selectedUserId}
+            parkingName={parkingName}
+            loading={loading}
+              onBack={() => setSelectedUserId(null)}
+              parkingLogo={parkingLogo}
+          />
+        ) : (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>Sélectionnez une conversation</Text>
+            <Text>ou commencez un nouveau chat avec un parking</Text>
+          </View>
+        )}
+      </View>
+    </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    padding: 12,
-    flexGrow: 1,
-  },
-  card: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginBottom: 12,
-    padding: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  image: {
-    width: 90,
-    height: 90,
-    borderRadius: 10,
-    marginRight: 12,
-    resizeMode: 'cover',
-  },
-  placeholder: {
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  info: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  nom: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#222',
-    marginBottom: 4,
-  },
-  address: {
-    fontSize: 14,
-    color: '#555',
-    marginBottom: 4,
-  },
-  phone: {
-    fontSize: 14,
-    color: '#555',
-    marginBottom: 4,
-  },
-  prix: {
-    fontSize: 14,
-    color: '#007bff',
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  actions: {
-    flexDirection: 'row',
-    marginTop: 8,
-  },
-  btnMsg: {
-    backgroundColor: '#007bff',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  btnText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  loader: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    color: '#007bff',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#999',
-    textAlign: 'center',
-  },
-});
+export default Messages;
 
-export default ParkingListScreen;
+const styles = StyleSheet.create({
+  container: { flex: 1, flexDirection: 'row' },
+  sidebar: { width: 300, borderRightWidth: 1, borderRightColor: '#E5E5EA' },
+  main: { flex: 1 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
+  emptyTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 8 },
+  parkingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 12,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  parkingLogo: { width: 56, height: 56, borderRadius: 8, marginRight: 12, backgroundColor: '#f0f0f0' },
+  parkingInfo: { flex: 1 },
+  parkingName: { fontSize: 16, fontWeight: '600' },
+  parkingMeta: { color: '#666', marginTop: 4 },
+});

@@ -14,7 +14,7 @@ import { useAuth } from "../../context/AuthContext";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "../../app/Header";
-// Define Reservation type based on backend data
+
 export type Reservation = {
   id: number;
   user?: {
@@ -34,6 +34,7 @@ export type Reservation = {
     fuelType: string;
     mileage: number;
     description?: string;
+    status?: string; // Ajouté pour refléter le statut du véhicule
   };
   dateDebut: string | null;
   dateFin: string | null;
@@ -56,6 +57,7 @@ const Reservation: React.FC<ReservationListProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
   const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
+  const [activeTab, setActiveTab] = useState("Actif"); // État pour les onglets
 
   const loadReservations = async () => {
     try {
@@ -82,7 +84,7 @@ const Reservation: React.FC<ReservationListProps> = ({
           onPress: async () => {
             try {
               await cancelReservation(id);
-              setReservations((prev) => prev.filter((r) => r.id !== id));
+              loadReservations(); // Recharger les réservations après annulation
               Alert.alert("Succès", "Réservation annulée avec succès");
             } catch (err: any) {
               console.error("Erreur lors de l'annulation", err);
@@ -125,6 +127,23 @@ const Reservation: React.FC<ReservationListProps> = ({
     loadReservations();
   };
 
+  // Filtrer les réservations selon l'onglet actif
+  const filteredReservations = reservations.filter((item) => {
+    // Différencier achat et location : une location expire à sa date de fin, un achat reste actif
+    const isRental = item.type === "LOCATION";
+    const endDate = item.dateFin ? new Date(item.dateFin) : null;
+    const now = new Date();
+    const rentalExpired = isRental && endDate ? endDate < now : false;
+
+    if (activeTab === "Actif") {
+      return !rentalExpired;
+    }
+    if (activeTab === "Inactif") {
+      return rentalExpired;
+    }
+    return true;
+  });
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -145,169 +164,199 @@ const Reservation: React.FC<ReservationListProps> = ({
   }
 
   return (
-
-     <View style={styles.mainContainer}>
-      {/* Header fixe */}
-      <Header />
-    <ScrollView
-      contentContainerStyle={styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          colors={["#FF6200"]}
-        />
-      }
-    >
-      {reservations.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="calendar-outline" size={64} color="#CCCCCC" />
-          <Text style={styles.emptyText}>Aucune réservation trouvée</Text>
-          <Text style={styles.emptySubText}>Vos réservations apparaîtront ici</Text>
-        </View>
-      ) : (
-        reservations.map((item) => (
-          <View key={item.id} style={styles.card}>
-            {/* Header avec image et informations principales */}
-            <TouchableOpacity 
-              style={styles.cardHeader}
-              onPress={() => toggleExpand(item.id)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.imageContainer}>
-                <Image
-                  source={{
-                    uri:
-                      item.vehicle.photos &&
-                      item.vehicle.photos.length > 0 &&
-                      !imageErrors.has(item.id)
-                        ? item.vehicle.photos[0]
-                        : "https://via.placeholder.com/150",
-                  }}
-                  style={styles.vehicleImage}
-                  resizeMode="cover"
-                  onError={() => handleImageError(item.id)}
-                />
-              </View>
-              
-              <View style={styles.mainInfo}>
-                <View style={styles.titleContainer}>
-                  <Text style={styles.vehicleTitle}>
-                    {item.vehicle.marque} {item.vehicle.model}
-                  </Text>
-                  <View style={[
-                    styles.typeBadge,
-                    item.type === "LOCATION" ? styles.locationBadge : styles.achatBadge
-                  ]}>
-                    <Text style={styles.typeBadgeText}>
-                      {item.type === "LOCATION" ? "LOCATION" : "ACHAT"}
-                    </Text>
-                  </View>
-                </View>
-                
-                <Text style={styles.vehiclePrice}>
-                  {item.vehicle.prix.toLocaleString()} FCFA
-                </Text>
-                
-                {item.vehicle.parking && (
-                  <Text style={styles.parkingText}>
-                    <Ionicons name="location-outline" size={12} color="#666" />
-                    {item.vehicle.parking.nom}
-                  </Text>
-                )}
-                
-                {item.type === "LOCATION" && item.dateDebut && item.dateFin && (
-                  <View style={styles.datePreview}>
-                    <Text style={styles.datePreviewText}>
-                      {new Date(item.dateDebut).toLocaleDateString("fr-FR")} - {" "}
-                      {new Date(item.dateFin).toLocaleDateString("fr-FR")}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              
-              <View style={styles.headerActions}>
-                <TouchableOpacity 
-                  style={styles.expandButton}
-                  onPress={() => toggleExpand(item.id)}
-                >
-                  <Ionicons 
-                    name={expandedCards.has(item.id) ? "chevron-up" : "chevron-down"} 
-                    size={20} 
-                    color="#666" 
+    <View style={styles.mainContainer}>
+      {/* <Header /> */}
+      {/* Onglets Actif/Inactif */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === "Actif" && styles.activeTab]}
+          onPress={() => setActiveTab("Actif")}
+        >
+          <Text style={styles.tabText}>Actif</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === "Inactif" && styles.activeTab]}
+          onPress={() => setActiveTab("Inactif")}
+        >
+          <Text style={styles.tabText}>Inactif</Text>
+        </TouchableOpacity>
+      </View>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#FF6200"]}
+          />
+        }
+      >
+        {filteredReservations.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="calendar-outline" size={64} color="#CCCCCC" />
+            <Text style={styles.emptyText}>Aucune réservation trouvée</Text>
+            <Text style={styles.emptySubText}>Vos réservations apparaîtront ici</Text>
+          </View>
+        ) : (
+          filteredReservations.map((item) => (
+            <View key={item.id} style={styles.card}>
+              <TouchableOpacity
+                style={styles.cardHeader}
+                onPress={() => toggleExpand(item.id)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.imageContainer}>
+                  <Image
+                    source={{
+                      uri:
+                        item.vehicle.photos &&
+                        item.vehicle.photos.length > 0 &&
+                        !imageErrors.has(item.id)
+                          ? item.vehicle.photos[0]
+                          : "https://via.placeholder.com/150",
+                    }}
+                    style={styles.vehicleImage}
+                    resizeMode="cover"
+                    onError={() => handleImageError(item.id)}
                   />
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
+                </View>
 
-            {/* Détails expansibles */}
-            {expandedCards.has(item.id) && (
-              <View style={styles.expandedContent}>
-                <View style={styles.detailsGrid}>
-                  <View style={styles.detailItem}>
-                    <Ionicons name="speedometer-outline" size={16} color="#666" />
-                    <Text style={styles.detailText}>{item.vehicle.mileage} km</Text>
+                <View style={styles.mainInfo}>
+                  <View style={styles.titleContainer}>
+                    <Text style={styles.vehicleTitle}>
+                      {item.vehicle.marque} {item.vehicle.model}
+                    </Text>
+                    <View
+                      style={[
+                        styles.typeBadge,
+                        item.type === "LOCATION" ? styles.locationBadge : styles.achatBadge,
+                      ]}
+                    >
+                      <Text style={styles.typeBadgeText}>
+                        {item.type === "LOCATION" ? "LOCATION" : "ACHAT"}
+                      </Text>
+                    </View>
                   </View>
-                  
-                  <View style={styles.detailItem}>
-                    <Ionicons name="flash-outline" size={16} color="#666" />
-                    <Text style={styles.detailText}>{item.vehicle.fuelType}</Text>
-                  </View>
-                  
-                  {item.user && (
-                    <>
-                      <View style={styles.detailItem}>
-                        <Ionicons name="person-outline" size={16} color="#666" />
-                        <Text style={styles.detailText}>
-                          {item.user.prenom} {item.user.nom}
-                        </Text>
-                      </View>
-                      
-                      <View style={styles.detailItem}>
-                        <Ionicons name="mail-outline" size={16} color="#666" />
-                        <Text style={styles.detailText}>{item.user.email}</Text>
-                      </View>
-                    </>
+
+                  <Text style={styles.vehiclePrice}>
+                    {item.vehicle.prix.toLocaleString()} FCFA
+                  </Text>
+
+                  {item.vehicle.parking && (
+                    <Text style={styles.parkingText}>
+                      <Ionicons name="location-outline" size={12} color="#666" />
+                      {item.vehicle.parking.nom}
+                    </Text>
+                  )}
+
+                  {item.type === "LOCATION" && item.dateDebut && item.dateFin && (
+                    <View style={styles.datePreview}>
+                      <Text style={styles.datePreviewText}>
+                        {new Date(item.dateDebut).toLocaleDateString("fr-FR")} -{" "}
+                        {new Date(item.dateFin).toLocaleDateString("fr-FR")}
+                      </Text>
+                    </View>
                   )}
                 </View>
-                
-                {item.vehicle.description && (
-                  <View style={styles.descriptionContainer}>
-                    <Text style={styles.descriptionLabel}>Description</Text>
-                    <Text style={styles.descriptionText}>{item.vehicle.description}</Text>
+
+                <View style={styles.headerActions}>
+                  <TouchableOpacity
+                    style={styles.expandButton}
+                    onPress={() => toggleExpand(item.id)}
+                  >
+                    <Ionicons
+                      name={expandedCards.has(item.id) ? "chevron-up" : "chevron-down"}
+                      size={20}
+                      color="#666"
+                    />
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+
+              {expandedCards.has(item.id) && (
+                <View style={styles.expandedContent}>
+                  <View style={styles.detailsGrid}>
+                    <View style={styles.detailItem}>
+                      <Ionicons name="speedometer-outline" size={16} color="#666" />
+                      <Text style={styles.detailText}>{item.vehicle.mileage} km</Text>
+                    </View>
+
+                    <View style={styles.detailItem}>
+                      <Ionicons name="flash-outline" size={16} color="#666" />
+                      <Text style={styles.detailText}>{item.vehicle.fuelType}</Text>
+                    </View>
+
+                    {item.user && (
+                      <>
+                        <View style={styles.detailItem}>
+                          <Ionicons name="person-outline" size={16} color="#666" />
+                          <Text style={styles.detailText}>
+                            {item.user.prenom} {item.user.nom}
+                          </Text>
+                        </View>
+
+                        <View style={styles.detailItem}>
+                          <Ionicons name="mail-outline" size={16} color="#666" />
+                          <Text style={styles.detailText}>{item.user.email}</Text>
+                        </View>
+                      </>
+                    )}
                   </View>
-                )}
-                
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={() => handleCancel(item.id)}
-                >
-                  <Ionicons name="close-circle-outline" size={18} color="#D32F2F" />
-                  <Text style={styles.cancelButtonText}>Annuler la réservation</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        ))
-      )}
-    </ScrollView>
-      </View>
+
+                  {item.vehicle.description && (
+                    <View style={styles.descriptionContainer}>
+                      <Text style={styles.descriptionLabel}>Description</Text>
+                      <Text style={styles.descriptionText}>{item.vehicle.description}</Text>
+                    </View>
+                  )}
+
+                  <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={() => handleCancel(item.id)}
+                  >
+                    <Ionicons name="close-circle-outline" size={18} color="#D32F2F" />
+                    <Text style={styles.cancelButtonText}>Annuler la réservation</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          ))
+        )}
+      </ScrollView>
+    </View>
   );
 };
 
-// Styles améliorés
 const styles = StyleSheet.create({
-    mainContainer: {
+  mainContainer: {
     flex: 1,
-    backgroundColor: '#f7f7f7',
+    backgroundColor: "#f7f7f7",
     paddingTop: 25,
   },
-  scrollContainer: {
-    flex: 1,
+  tabContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingVertical: 10,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E0E0",
+  },
+  tabButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#E0E0E0",
+  },
+  activeTab: {
+    backgroundColor: "#FF6200",
+  },
+  tabText: {
+    color: "#666",
+    fontSize: 14,
+    fontWeight: "500",
   },
   container: {
     padding: 16,
-
   },
   center: {
     flex: 1,
@@ -375,8 +424,8 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   vehicleImage: {
-    width: 120, // Image agrandie
-    height: 100, // Image agrandie
+    width: 120,
+    height: 100,
     borderRadius: 12,
     backgroundColor: "#E0E0E0",
   },
@@ -402,10 +451,10 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   locationBadge: {
-    backgroundColor: "#4CAF50", // Vert pour location
+    backgroundColor: "#4CAF50",
   },
   achatBadge: {
-    backgroundColor: "#2196F3", // Bleu pour achat
+    backgroundColor: "#2196F3",
   },
   typeBadgeText: {
     color: "#FFFFFF",

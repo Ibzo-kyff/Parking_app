@@ -15,6 +15,8 @@ import {
   Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import api, { API_URL, getStoredAccessToken } from './services/api';
+import { chatService as chatServiceAxios } from './services/chatServices';
 
 // Interface correspondant à la structure du backend
 interface Message {
@@ -56,35 +58,16 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Récupérer l'utilisateur connecté
+  // Récupérer l'utilisateur connecté via axios `api`
   const fetchCurrentUser = async () => {
     try {
-      console.log('🔍 Récupération de l\'utilisateur connecté...');
-      
-      // Ici, vous devriez récupérer le token depuis votre système d'authentification
-      // Par exemple depuis AsyncStorage ou un contexte d'authentification
-      const token = await getAuthToken(); // À implémenter selon votre système
-      
-      const response = await fetch('https://parkapp-pi.vercel.app/api/auth/users/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      console.log('📡 Réponse utilisateur:', response.status);
-
-      if (response.ok) {
-        const userData = await response.json();
-        console.log('👤 Utilisateur connecté:', userData);
-        setCurrentUserId(userData.id);
-        return userData.id;
-      } else {
-        console.error('❌ Erreur réponse utilisateur:', response.status);
-        throw new Error('Erreur d\'authentification');
-      }
+      console.log('🔍 Récupération de l\'utilisateur connecté (axios)...');
+      const { data } = await api.get('/auth/users/me');
+      console.log('👤 Utilisateur connecté:', data);
+      setCurrentUserId(data.id);
+      return data.id;
     } catch (error) {
-      console.error('💥 Erreur fetchCurrentUser:', error);
+      console.error('💥 Erreur fetchCurrentUser (axios):', error);
       Alert.alert('Erreur', 'Impossible de récupérer vos informations');
       throw error;
     }
@@ -96,27 +79,18 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
       setLoading(true);
       console.log('📨 Récupération des messages pour le contact:', contact.id);
       
-      const token = await getAuthToken();
-      
-      const response = await fetch(`https://parkapp-pi.vercel.app/api/message/conversation/${contact.id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      console.log('📡 Réponse messages:', response.status);
-
-      if (response.ok) {
-        const conversationMessages = await response.json();
-        console.log('💬 Messages reçus:', conversationMessages.length);
-        setMessages(conversationMessages);
-      } else if (response.status === 404) {
-        console.log('💬 Aucun message trouvé, initialisation d\'une nouvelle conversation');
-        setMessages([]);
+      // Utiliser chatService axios centralisé
+      const { data } = await chatServiceAxios.getConversation(contact.id);
+      // backend peut renvoyer { messages: [...] } ou directement un tableau
+      if (Array.isArray(data)) {
+        setMessages(data);
+        console.log('� Messages reçus (array):', data.length);
+      } else if (data && Array.isArray(data.messages)) {
+        setMessages(data.messages);
+        console.log('💬 Messages reçus (data.messages):', data.messages.length);
       } else {
-        console.error('❌ Erreur réponse messages:', response.status);
-        throw new Error('Erreur lors de la récupération des messages');
+        setMessages([]);
+        console.log('💬 Aucun message trouvé, initialisation d\'une nouvelle conversation');
       }
     } catch (error) {
       console.error('💥 Erreur fetchMessages:', error);
@@ -126,20 +100,13 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
     }
   };
 
-  // Fonction pour récupérer le token d'authentification
+  // Fonction pour récupérer le token d'authentification depuis AsyncStorage / api util
   const getAuthToken = async (): Promise<string> => {
     try {
-      // À adapter selon votre système d'authentification
-      // Exemple avec AsyncStorage :
-      // const token = await AsyncStorage.getItem('userToken');
-      
-      // Pour le moment, retournez un token valide ou utilisez une méthode de secours
-      const token = 'your-valid-token-here'; // Remplacez par votre token
-      
+      const token = await getStoredAccessToken();
       if (!token) {
         throw new Error('Token non disponible');
       }
-      
       return token;
     } catch (error) {
       console.error('❌ Erreur récupération token:', error);
@@ -181,31 +148,12 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
       setSending(true);
       console.log('📤 Envoi du message...');
       
-      const token = await getAuthToken();
-      
-      const response = await fetch('https://parkapp-pi.vercel.app/api/message', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          receiverId: contact.id,
-          content: inputMessage.trim(),
-        }),
-      });
-
-      console.log('📡 Réponse envoi message:', response.status);
-
-      if (response.ok) {
-        const newMessage = await response.json();
-        console.log('✅ Message envoyé avec succès');
-        setMessages(prev => [...prev, newMessage]);
-        setInputMessage('');
-      } else {
-        console.error('❌ Erreur envoi message:', response.status);
-        Alert.alert('Erreur', 'Impossible d\'envoyer le message');
-      }
+      // Utiliser chatService axios centralisé
+      const { data } = await chatServiceAxios.sendMessage(contact.id, inputMessage.trim());
+      // data devrait être le message créé
+      setMessages(prev => [...prev, data]);
+      setInputMessage('');
+      console.log('✅ Message envoyé avec succès (axios)');
     } catch (error) {
       console.error('💥 Erreur sendMessage:', error);
       Alert.alert('Erreur', 'Problème de connexion');
