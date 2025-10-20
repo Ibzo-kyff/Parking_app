@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -14,11 +14,12 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { useRoute } from '@react-navigation/native';
+import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { FontAwesome5, MaterialIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { BASE_URL } from './services/listeVoiture';
-import { useAuth } from '../context/AuthContext'; // Ajustez le chemin si nécessaire
+import { useAuth } from '../context/AuthContext';
+import { favorisService } from './services/favorisService';
 
 interface Marque {
   id: number;
@@ -39,9 +40,9 @@ interface Vehicule {
   carteGrise?: boolean;
   assurance?: boolean;
   vignette?: boolean;
-  forRent?: boolean; // Disponible pour location
-  forSale?: boolean; // Disponible pour achat
-  description?: string; // Ajouté pour la description du véhicule
+  forRent?: boolean;
+  forSale?: boolean;
+  description?: string;
 }
 
 const { width } = Dimensions.get('window');
@@ -60,6 +61,9 @@ function CarDetailScreen() {
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  // États pour le favoris - SUPPRIMER le loading pour l'effet immédiat
+  const [isFavorite, setIsFavorite] = useState(false);
+
   const { authState } = useAuth();
 
   // Vérifier si le véhicule est passé
@@ -77,6 +81,55 @@ function CarDetailScreen() {
     }
   }
 
+  // Fonction pour vérifier l'état favoris
+  const checkFavoriteStatus = async () => {
+    if (!vehicule?.id) return;
+    
+    try {
+      const favorite = await favorisService.isInFavoris(vehicule.id);
+      setIsFavorite(favorite);
+    } catch (error) {
+      console.error('Erreur vérification favoris:', error);
+      setIsFavorite(false);
+    }
+  };
+
+  // Vérifier l'état favoris au chargement initial
+  useEffect(() => {
+    checkFavoriteStatus();
+  }, [vehicule?.id]);
+
+  // Re-vérifier l'état favoris quand l'écran redevient actif
+  useFocusEffect(
+    React.useCallback(() => {
+      if (vehicule?.id) {
+        checkFavoriteStatus();
+      }
+    }, [vehicule?.id])
+  );
+
+  const toggleFavorite = async () => {
+    if (!vehicule) return;
+
+    // CHANGEMENT IMMÉDIAT SANS ATTENDRE - comme TikTok
+    const newFavoriteState = !isFavorite;
+    setIsFavorite(newFavoriteState);
+    
+    try {
+      if (!newFavoriteState) {
+        // Retirer des favoris
+        await favorisService.removeFromFavoris(vehicule.id);
+      } else {
+        // Ajouter aux favoris
+        await favorisService.addToFavoris(vehicule);
+      }
+    } catch (error) {
+      // En cas d'erreur, on revert silencieusement
+      setIsFavorite(!newFavoriteState);
+      console.error('Erreur gestion favoris:', error);
+    }
+  };
+
   if (!vehicule) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -88,13 +141,8 @@ function CarDetailScreen() {
     );
   }
 
-<<<<<<< Updated upstream
-  // Préparer photos (avec gestion des valeurs undefined/null dans l'array)
-  const getPhotoUrls = (photos: string[] | string | undefined | null): string[] => {
-=======
   // Préparer photos
   const getPhotoUrls = (photos: string[] | string | undefined): string[] => {
->>>>>>> Stashed changes
     if (!photos) return [];
     if (Array.isArray(photos)) {
       return photos.map(photo => photo.startsWith('http') ? photo : `${BASE_URL}${photo}`);
@@ -104,7 +152,7 @@ function CarDetailScreen() {
 
   const photoUrls = getPhotoUrls(vehicule.photos);
 
-  // Render functions (inchangé)
+  // Render functions
   const renderFeatureItem = (icon: React.ReactNode, label: string, value: any, condition: boolean = true) => {
     if (!condition || value === undefined || value === null || value === '') return null;
     return (
@@ -121,6 +169,21 @@ function CarDetailScreen() {
   const renderImageItem = ({ item }: { item: string }) => (
     <View style={styles.imageContainer}>
       <Image source={{ uri: item }} style={styles.carImage} resizeMode="cover" />
+      {/* Bouton favoris avec effet IMMÉDIAT - pas de loading state */}
+      <TouchableOpacity 
+        style={[
+          styles.favoriteButton,
+          isFavorite && styles.favoriteButtonActive,
+        ]} 
+        onPress={toggleFavorite}
+      >
+        <FontAwesome5 
+          name="heart" 
+          size={24} 
+          color={isFavorite ? "#FFF" : "#FF6F00"} 
+          solid={isFavorite}
+        />
+      </TouchableOpacity>
     </View>
   );
 
@@ -223,7 +286,7 @@ function CarDetailScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {/* Carrousel (inchangé) */}
+        {/* Carrousel avec bouton favoris intégré */}
         {photoUrls.length > 0 ? (
           <View>
             <FlatList
@@ -244,10 +307,25 @@ function CarDetailScreen() {
         ) : (
           <View style={[styles.imageContainer, styles.placeholderImage]}>
             <FontAwesome5 name="car" size={60} color="#ccc" />
+            {/* Bouton favoris pour l'image placeholder */}
+            <TouchableOpacity 
+              style={[
+                styles.favoriteButton,
+                isFavorite && styles.favoriteButtonActive,
+              ]} 
+              onPress={toggleFavorite}
+            >
+              <FontAwesome5 
+                name="heart" 
+                size={24} 
+                color={isFavorite ? "#FFF" : "#FF6F00"} 
+                solid={isFavorite}
+              />
+            </TouchableOpacity>
           </View>
         )}
 
-        {/* En-tête (inchangé) */}
+        {/* En-tête */}
         <View style={styles.headerCard}>
           <Text style={styles.carName}>
             {vehicule.marqueRef?.name || 'Marque inconnue'} {vehicule.model || 'Modèle inconnu'}
@@ -262,12 +340,11 @@ function CarDetailScreen() {
           <Text style={styles.reserveButtonText}>Réserver</Text>
         </TouchableOpacity>
 
-        {/* Détails du véhicule - Ajout de la description */}
+        {/* Détails du véhicule */}
         <View style={styles.detailsCard}>
           <Text style={styles.sectionTitle}>Détails du véhicule</Text>
           
           <View style={styles.featuresGrid}>
-            {/* Première ligne */}
             <View style={styles.featureRow}>
               {renderFeatureItem(
                 <MaterialIcons name="branding-watermark" size={22} color="#FF6F00" />,
@@ -284,7 +361,6 @@ function CarDetailScreen() {
               )}
             </View>
 
-            {/* Deuxième ligne */}
             <View style={styles.featureRow}>
               {renderFeatureItem(
                 <FontAwesome5 name="gas-pump" size={20} color="#FF6F00" />,
@@ -370,7 +446,7 @@ function CarDetailScreen() {
         )}
       </ScrollView>
 
-      {/* Modale de réservation améliorée */}
+      {/* Modale de réservation */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -379,7 +455,6 @@ function CarDetailScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            {/* Bouton de fermeture */}
             <TouchableOpacity style={styles.closeButton} onPress={() => setModalVisible(false)}>
               <MaterialIcons name="close" size={24} color="#666" />
             </TouchableOpacity>
@@ -495,6 +570,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  // Bouton favoris avec effet IMMÉDIAT
+  favoriteButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FFF', // Fond blanc par défaut
+    borderWidth: 2,
+    borderColor: '#FF6F00', // Bordure orange
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  favoriteButtonActive: {
+    backgroundColor: '#FF6F00', // Fond orange quand favori
+    borderColor: '#FF6F00',
+  },
   pagination: {
     flexDirection: 'row',
     position: 'absolute',
@@ -538,9 +636,9 @@ const styles = StyleSheet.create({
     color: '#FF6F00'
   },
   reserveButton: {
-    backgroundColor: '#FF6F00',
     marginHorizontal: 16,
     marginVertical: 16,
+    backgroundColor: '#FF6F00',
     paddingVertical: 16,
     borderRadius: 10,
     alignItems: 'center',
@@ -603,7 +701,6 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center',
   },
-  // Styles ajoutés pour la description
   descriptionSection: {
     marginTop: 16,
     paddingTop: 16,
@@ -663,16 +760,15 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     textAlign: 'center',
   },
-  // Styles pour la modale améliorée
   modalOverlay: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)', // Plus sombre pour meilleur contraste
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
   modalContent: {
     backgroundColor: '#FFF',
-    borderRadius: 16, // Bordures plus arrondies
+    borderRadius: 16,
     padding: 24,
     width: '90%',
     maxWidth: 400,
@@ -751,7 +847,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
-  // Styles ajoutés pour le message de confirmation achat
   confirmMessage: {
     backgroundColor: '#f8f9fa',
     borderRadius: 12,
