@@ -9,32 +9,37 @@ import { useAuth } from '../../context/AuthContext';
 interface Props {
   messages: Message[];
   onSendMessage: (content: string, receiverId: number) => void;
-  onDeleteMessage: (id: number) => void;
-  onUpdateMessage: (id: number, content: string) => void;
   receiverId: number;
   parkingName?: string;
   loading: boolean;
   onBack?: () => void;
   parkingLogo?: string | null;
+  receiverName?: string; // Ajout pour le nom du client
+  receiverAvatar?: string | null; // Ajout pour l'avatar du client
 }
 
 export const ChatWindow: React.FC<Props> = ({
-  messages, onSendMessage, onDeleteMessage, onUpdateMessage, receiverId, parkingName, loading, onBack, parkingLogo,
+  messages, onSendMessage, receiverId, parkingName, loading, onBack, parkingLogo, receiverName, receiverAvatar,
 }) => {
   const { user } = useAuth();
   const flatListRef = useRef<FlatList>(null);
 
-  // Keep messages in natural chronological order (oldest -> newest)
+  // Trier les messages du plus ancien au plus récent
   const displayedMessages = React.useMemo(() => {
-    return [...messages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return [...messages].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
   }, [messages]);
 
+  // Déterminer le nom et l'avatar à afficher dans l'en-tête
+  const displayName = user?.role === 'PARKING' ? receiverName || 'Client inconnu' : parkingName || 'Parking inconnu';
+  const displayAvatar = user?.role === 'PARKING' ? receiverAvatar : parkingLogo;
+
+  // Rendu d’un message individuel
   const renderMessage = ({ item }: { item: Message }) => (
     <MessageBubble
       message={item}
       isOwn={item.senderId === user?.id}
-      onDelete={onDeleteMessage}
-      onEdit={onUpdateMessage}
     />
   );
 
@@ -45,24 +50,26 @@ export const ChatWindow: React.FC<Props> = ({
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 24}
     >
       <SafeAreaView style={styles.safeArea}>
+        {/* En-tête */}
         <View style={styles.header}>
-        {onBack && (
-          <TouchableOpacity onPress={onBack} style={{ marginRight: 12 }}>
-            <Ionicons name="arrow-back" size={24} color="white" />
-          </TouchableOpacity>
-        )}
-        <View style={styles.headerCenter}>
-          <Image
-            source={{ uri: parkingLogo || 'https://cdn-icons-png.flaticon.com/512/684/684908.png' }}
-            style={styles.headerLogo}
-          />
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.headerName} numberOfLines={1}>{parkingName}</Text>
-            <Text style={styles.headerStatus}>En ligne</Text>
+          {onBack && (
+            <TouchableOpacity onPress={onBack} style={{ marginRight: 12 }}>
+              <Ionicons name="arrow-back" size={24} color="white" />
+            </TouchableOpacity>
+          )}
+          <View style={styles.headerCenter}>
+            <Image
+              source={{ uri: displayAvatar || 'https://cdn-icons-png.flaticon.com/512/684/684908.png' }}
+              style={styles.headerLogo}
+            />
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.headerName} numberOfLines={1}>{displayName}</Text>
+              <Text style={styles.headerStatus}>En ligne</Text>
+            </View>
           </View>
         </View>
-        </View>
 
+        {/* Liste des messages */}
         <View style={styles.messagesWrapper}>
           <FlatList
             ref={flatListRef}
@@ -76,10 +83,16 @@ export const ChatWindow: React.FC<Props> = ({
           />
         </View>
 
+        {/* Loader */}
         {loading && <ActivityIndicator style={styles.loading} />}
 
+        {/* Champ d’envoi */}
         <View style={styles.footer}>
-          <MessageInput autoFocus onSend={(content) => onSendMessage(content, receiverId)} disabled={loading} />
+          <MessageInput
+            autoFocus
+            onSend={(content) => onSendMessage(content, receiverId)}
+            disabled={loading}
+          />
         </View>
       </SafeAreaView>
     </KeyboardAvoidingView>
@@ -89,12 +102,13 @@ export const ChatWindow: React.FC<Props> = ({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F2F7' },
   safeArea: { flex: 1 },
-  header: { 
-    flexDirection: 'row', alignItems: 'center', 
-    padding: 16, backgroundColor: '#007AFF', paddingTop: 50 
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#007AFF',
+    paddingTop: 50,
   },
-  headerTitle: { color: 'white', fontSize: 18, fontWeight: 'bold', marginLeft: 8 },
-  status: { color: 'white', fontSize: 14 },
   headerCenter: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   headerLogo: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff' },
   headerTextContainer: { marginLeft: 12, flex: 1 },
@@ -104,5 +118,11 @@ const styles = StyleSheet.create({
   messages: { flex: 1 },
   messagesContent: { padding: 8 },
   loading: { padding: 16 },
-  footer: { backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#E5E5EA', height: 72, justifyContent: 'center' },
+  footer: {
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
+    height: 72,
+    justifyContent: 'center',
+  },
 });

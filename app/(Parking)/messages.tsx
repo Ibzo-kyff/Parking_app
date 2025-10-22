@@ -1,174 +1,211 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, FlatList, TouchableOpacity, Image } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView, Image } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useChat } from '../../hooks/useChat';
+import { getParkings, Parking } from '../../components/services/parkingApi';
+import { ChatList } from './../../components/chat/ChatList';
+import { ChatWindow } from './../../components/chat/ChatWindow';
 import { useAuth } from '../../context/AuthContext';
-import { ChatWindow } from '../../components/chat/ChatWindow';
 import { Message } from '../../app/type/chat';
 
-interface ConversationEntry {
-  userId: number;
-  name: string;
-  avatar?: string | null;
-  lastMessage?: Message;
-}
+interface Props { initialParkingId?: number; }
 
-export default function ParkingMessages() {
-  const { user, isLoading, authState } = useAuth();
+const { width } = Dimensions.get('window');
+const isTablet = width > 768;
+
+const Messages: React.FC<Props> = ({ initialParkingId }) => {
+  const { authState, isLoading } = useAuth();
+  const user = authState && authState.userId ? {
+    id: Number(authState.userId),
+    nom: authState.nom,
+    prenom: authState.prenom,
+    role: authState.role,
+  } : null;
   const {
-    messages,
-    conversations,
-    loading,
-    sendMessage,
-    loadConversation,
-    setCurrentParkingId,
-    currentParkingId,
-  } = useChat();
+    messages, conversations, loading, sendMessage, loadConversation,
+    deleteMessage, updateMessage, setCurrentParkingId,
+  } = useChat(initialParkingId);
 
-  const [selectedConversation, setSelectedConversation] = useState<ConversationEntry | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [parkingName, setParkingName] = useState<string>('');
+  const [parkingLogo, setParkingLogo] = useState<string | null>(null);
+  const [receiverName, setReceiverName] = useState<string>('');
+  const [receiverAvatar, setReceiverAvatar] = useState<string | null>(null);
+  const [parkings, setParkings] = useState<Parking[]>([]);
+  const [loadingParkings, setLoadingParkings] = useState(false);
 
-  useEffect(() => {
-    const pid = authState?.parkingId ? Number(authState.parkingId) : undefined;
-    if (pid) {
-      setCurrentParkingId(pid);
+  React.useEffect(() => {
+    if (initialParkingId) setCurrentParkingId(initialParkingId);
+  }, [initialParkingId, setCurrentParkingId]);
+
+  const handleSelectConversation = (userId: number, name: string, logo?: string | null, parkingId?: number) => {
+    setSelectedUserId(userId);
+    if (user?.role === 'PARKING') {
+      setReceiverName(name); // Nom du client
+      setReceiverAvatar(logo || null); // Avatar du client
+      setParkingName(''); // Pas de nom de parking pour le parking
+      setParkingLogo(null); // Pas de logo de parking
+    } else {
+      setParkingName(name); // Nom du parking
+      setParkingLogo(logo || null); // Logo du parking
+      setReceiverName(''); // Pas de nom de client pour le client
+      setReceiverAvatar(null); // Pas d'avatar de client
     }
-  }, [authState?.parkingId, setCurrentParkingId]);
-
-  useEffect(() => {
-    if (selectedConversation) {
-      void loadConversation(selectedConversation.userId);
+    if (parkingId) {
+      setCurrentParkingId(parkingId);
     }
-  }, [selectedConversation, loadConversation]);
+    loadConversation(userId);
+  };
 
-  const entries = useMemo<ConversationEntry[]>(() => {
-    if (!conversations) return [];
-
-    const unique = new Map<number, ConversationEntry>();
-
-    Object.values(conversations).forEach((conv: any) => {
-      if (conv?.type === 'user' && conv?.targetUser?.id) {
-        const id = Number(conv.targetUser.id);
-        if (!unique.has(id)) {
-          unique.set(id, {
-            userId: id,
-            name: `${conv.targetUser.prenom || ''} ${conv.targetUser.nom || ''}`.trim() || 'Utilisateur',
-            avatar: conv.targetUser.image,
-            lastMessage: conv.lastMessage,
-          });
-        }
+  React.useEffect(() => {
+    const fetchParkings = async () => {
+      setLoadingParkings(true);
+      try {
+        const data = await getParkings();
+        setParkings(data || []);
+      } catch (err) {
+        console.error('Erreur chargement parkings:', err);
+      } finally {
+        setLoadingParkings(false);
       }
+    };
 
-      if (Array.isArray(conv?.messages)) {
-        conv.messages.forEach((msg: Message) => {
-          const other = msg.sender?.role === 'CLIENT' ? msg.sender : msg.receiver;
-          if (other?.id && other.role === 'CLIENT') {
-            const id = Number(other.id);
-            if (!unique.has(id) || new Date(msg.createdAt) > new Date(unique.get(id)?.lastMessage?.createdAt || 0)) {
-              unique.set(id, {
-                userId: id,
-                name: `${other.prenom || ''} ${other.nom || ''}`.trim() || 'Utilisateur',
-                avatar: other.image,
-                lastMessage: msg,
-              });
-            }
-          }
-        });
-      }
-    });
-
-    return Array.from(unique.values()).sort((a, b) => {
-      const aDate = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : 0;
-      const bDate = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
-      return bDate - aDate;
-    });
-  }, [conversations]);
+    fetchParkings();
+  }, []);
 
   if (isLoading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
+    return <View style={styles.center}><Text>Chargement...</Text></View>;
   }
 
   if (!user) {
-    return (
-      <View style={styles.center}>
-        <Text>Connectez-vous pour voir les messages</Text>
-      </View>
-    );
+    return <View style={styles.center}><Text>Connectez-vous pour chatter</Text></View>;
   }
 
-  const handleSelectConversation = (entry: ConversationEntry) => {
-    setSelectedConversation(entry);
-    if (currentParkingId) {
-      setCurrentParkingId(currentParkingId);
+  // Mobile layout
+  if (!isTablet) {
+    if (selectedUserId) {
+      return (
+        <ChatWindow
+          messages={messages}
+          onSendMessage={sendMessage}
+          onDeleteMessage={deleteMessage}
+          onUpdateMessage={updateMessage}
+          receiverId={selectedUserId}
+          parkingName={parkingName}
+          loading={loading}
+          onBack={() => setSelectedUserId(null)}
+          parkingLogo={parkingLogo}
+          receiverName={receiverName}
+          receiverAvatar={receiverAvatar}
+        />
+      );
     }
-  };
 
-  if (selectedConversation) {
-    const safeMessages = Array.isArray(messages) ? messages : [];
+    if (loadingParkings) {
+      return <View style={styles.center}><Text>Chargement des parkings...</Text></View>;
+    }
+
     return (
-      <ChatWindow
-        messages={safeMessages}
-        onSendMessage={sendMessage}
-        onDeleteMessage={() => {}}
-        onUpdateMessage={() => {}}
-        receiverId={selectedConversation.userId}
-        parkingName={selectedConversation.name}
-        loading={loading}
-        onBack={() => setSelectedConversation(null)}
-        parkingLogo={selectedConversation.avatar || null}
-      />
+      <ScrollView contentContainerStyle={{ padding: 16 }}>
+        <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 12 }}>
+          {user.role === 'PARKING' ? 'Clients' : 'Parkings'}
+        </Text>
+        {user.role === 'PARKING' ? (
+          <ChatList
+            conversations={conversations}
+            onSelectConversation={handleSelectConversation}
+            currentUserId={user.id}
+            currentUserRole={user.role}
+          />
+        ) : (
+          parkings.map(p => (
+            <TouchableOpacity
+              key={p.id}
+              onPress={() => {
+                if (p.user && p.user.id) {
+                  handleSelectConversation(p.user.id, p.name, p.logo, p.id);
+                } else {
+                  console.warn('Parking sans utilisateur associé', p.id);
+                }
+              }}
+              style={styles.parkingCard}
+            >
+              <Image
+                source={{ uri: p.logo || 'https://cdn-icons-png.flaticon.com/512/684/684908.png' }}
+                style={styles.parkingLogo}
+              />
+              <View style={styles.parkingInfo}>
+                <Text style={styles.parkingName}>{p.name}</Text>
+                <Text style={styles.parkingMeta}>{p.city} • {p.capacity} places</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#999" />
+            </TouchableOpacity>
+          ))
+        )}
+      </ScrollView>
     );
   }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Messages reçus</Text>
-      {entries.length === 0 ? (
-        <View style={{ padding: 16 }}>
-          <Text>Aucun message reçu pour le moment.</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={entries}
-          keyExtractor={(item) => String(item.userId)}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.row} onPress={() => handleSelectConversation(item)}>
-              <Image
-                source={{ uri: item.avatar || 'https://cdn-icons-png.flaticon.com/512/149/149071.png' }}
-                style={styles.avatar}
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.last} numberOfLines={1}>
-                  {item.lastMessage?.content || 'Nouveau message'}
-                </Text>
-              </View>
-              <Text style={styles.time}>
-                {item.lastMessage ? new Date(item.lastMessage.createdAt).toLocaleTimeString() : ''}
-              </Text>
-            </TouchableOpacity>
-          )}
+      <View style={styles.sidebar}>
+        <ChatList
+          conversations={conversations}
+          onSelectConversation={handleSelectConversation}
+          currentUserId={user.id}
+          currentUserRole={user.role}
         />
-      )}
+      </View>
+      <View style={styles.main}>
+        {selectedUserId ? (
+          <ChatWindow
+            messages={messages}
+            onSendMessage={sendMessage}
+            onDeleteMessage={deleteMessage}
+            onUpdateMessage={updateMessage}
+            receiverId={selectedUserId}
+            parkingName={parkingName}
+            loading={loading}
+            onBack={() => setSelectedUserId(null)}
+            parkingLogo={parkingLogo}
+            receiverName={receiverName}
+            receiverAvatar={receiverAvatar}
+          />
+        ) : (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>Sélectionnez une conversation</Text>
+            <Text>ou commencez un nouveau chat avec {user.role === 'PARKING' ? 'un client' : 'un parking'}</Text>
+          </View>
+        )}
+      </View>
     </View>
   );
-}
+};
+
+export default Messages;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 12, backgroundColor: '#fff' },
+  container: { flex: 1, flexDirection: 'row' },
+  sidebar: { width: 300, borderRightWidth: 1, borderRightColor: '#E5E5EA' },
+  main: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 20, fontWeight: '700', marginBottom: 12 },
-  row: {
+  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
+  emptyTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 8 },
+  parkingCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    padding: 12,
+    marginBottom: 12,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  avatar: { width: 48, height: 48, borderRadius: 24, marginRight: 12, backgroundColor: '#f0f0f0' },
-  name: { fontSize: 16, fontWeight: '600' },
-  last: { color: '#666', marginTop: 4 },
-  time: { color: '#999', fontSize: 12, marginLeft: 8 },
+  parkingLogo: { width: 56, height: 56, borderRadius: 8, marginRight: 12, backgroundColor: '#f0f0f0' },
+  parkingInfo: { flex: 1 },
+  parkingName: { fontSize: 16, fontWeight: '600' },
+  parkingMeta: { color: '#666', marginTop: 4 },
 });
