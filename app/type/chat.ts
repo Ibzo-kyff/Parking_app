@@ -8,6 +8,7 @@ export interface Message {
   createdAt: string;
   deletedAt?: string;
   sender: {
+    image: string | null | undefined;
     id: number;
     nom: string;
     prenom: string;
@@ -15,6 +16,7 @@ export interface Message {
     role: 'CLIENT' | 'PARKING';
   };
   receiver: {
+    image: string | null | undefined;
     id: number;
     nom: string;
     prenom: string;
