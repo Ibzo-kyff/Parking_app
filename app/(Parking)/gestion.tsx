@@ -22,15 +22,19 @@ import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 import Svg, { Circle, G, Rect, Text as SvgText } from 'react-native-svg';
 
-// Types
-type Voiture = {
+// Types adaptés à votre backend
+type Vehicule = {
   id: string;
-  marque: string;
+  marqueRef: {
+    name: string;
+  };
   model: string;
   status: string;
   photos: string[];
   prix: number;
-  stats: {
+  forSale: boolean;
+  forRent: boolean;
+  stats?: {
     vues: number;
     reservations: number;
     favoris: number;
@@ -65,7 +69,7 @@ type ParkingData = {
     monthlySales: number;
     monthlyRentals: number;
   };
-  vehicles: Voiture[];
+  vehicles: Vehicule[];
   charts: {
     monthlyData: {
       labels: string[];
@@ -86,7 +90,7 @@ const MonParkingScreen: React.FC = () => {
   const [parkingData, setParkingData] = useState<ParkingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedBottomFilter, setSelectedBottomFilter] = useState('En vente');
+  const [selectedBottomFilter, setSelectedBottomFilter] = useState('Tous');
   const [sticky, setSticky] = useState(false);
   const [graphType, setGraphType] = useState<'pie' | 'bar'>('pie');
   const [menuVisible, setMenuVisible] = useState(false);
@@ -129,14 +133,46 @@ const MonParkingScreen: React.FC = () => {
     }
   }, [authState.accessToken]);
 
+  // Calcul des statistiques basées sur les données du backend
   const totalVoitures = parkingData?.statistics.total || 0;
-  const voituresLocation = parkingData?.statistics.enLocation || 0;
-  const voituresVente = parkingData?.statistics.vendus || 0;
-  const voituresDisponibles = parkingData?.statistics.disponibles || 0;
+  
+  // Calcul basé sur les véhicules réels du parking
+  const calculateStatisticsFromVehicles = () => {
+    if (!parkingData?.vehicles) {
+      return {
+        voituresVente: 0,
+        voituresLocation: 0,
+        voituresReservation: 0
+      };
+    }
 
+    const vehicles = parkingData.vehicles;
+    
+    const voituresVente = vehicles.filter(v => v.forSale === true && v.status !== 'ACHETE').length;
+    const voituresLocation = vehicles.filter(v => v.forRent === true && v.status !== 'EN_LOCATION').length;
+    const voituresReservation = vehicles.reduce((total, v) => 
+      total + (v.stats?.reservationsActives || 0), 0
+    );
+
+    return {
+      voituresVente,
+      voituresLocation,
+      voituresReservation
+    };
+  };
+
+  const { voituresVente, voituresLocation, voituresReservation } = calculateStatisticsFromVehicles();
+
+  // Calcul des pourcentages pour le graphique
   const pourcentageLocation = totalVoitures ? (voituresLocation / totalVoitures) * 100 : 0;
   const pourcentageVente = totalVoitures ? (voituresVente / totalVoitures) * 100 : 0;
-  const pourcentageDisponibles = totalVoitures ? (voituresDisponibles / totalVoitures) * 100 : 0;
+  const pourcentageReservation = totalVoitures ? (voituresReservation / totalVoitures) * 100 : 0;
+
+  // Ajustement pour que la somme fasse 100%
+  const totalPourcentage = pourcentageLocation + pourcentageVente + pourcentageReservation;
+  const adjustedPourcentageLocation = totalPourcentage > 0 ? (pourcentageLocation / totalPourcentage) * 100 : 0;
+  const adjustedPourcentageVente = totalPourcentage > 0 ? (pourcentageVente / totalPourcentage) * 100 : 0;
+  const adjustedPourcentageReservation = totalPourcentage > 0 ? (pourcentageReservation / totalPourcentage) * 100 : 0;
 
   const size = 180;
   const strokeWidth = 20;
@@ -144,37 +180,64 @@ const MonParkingScreen: React.FC = () => {
   const circumference = 2 * Math.PI * radius;
 
   const segments = [
-    { value: pourcentageLocation, color: '#FD6A00', label: 'En location', count: voituresLocation },
-    { value: pourcentageVente, color: '#FFD1A3', label: 'En vente', count: voituresVente },
-    { value: pourcentageDisponibles, color: '#f1f1f1', label: 'Disponibles', count: voituresDisponibles },
+    { 
+      value: adjustedPourcentageLocation, 
+      color: '#FD6A00', 
+      label: 'En location', 
+      count: voituresLocation,
+      originalPercentage: pourcentageLocation
+    },
+    { 
+      value: adjustedPourcentageVente, 
+      color: '#FFD1A3', 
+      label: 'En vente', 
+      count: voituresVente,
+      originalPercentage: pourcentageVente
+    },
+    { 
+      value: adjustedPourcentageReservation, 
+      color: '#f1f1f1', 
+      label: 'En réservation', 
+      count: voituresReservation,
+      originalPercentage: pourcentageReservation
+    },
   ];
 
+  // Filtrage des voitures selon votre backend
   const filteredVoitures = parkingData?.vehicles.filter(v => {
-    if (selectedBottomFilter === 'En vente') return v.status === 'ACHETE';
-    if (selectedBottomFilter === 'En location') return v.status === 'EN_LOCATION';
-    if (selectedBottomFilter === 'Disponibles') return v.status === 'DISPONIBLE';
+    if (selectedBottomFilter === 'En vente') return v.forSale === true && v.status !== 'ACHETE';
+    if (selectedBottomFilter === 'En location') return v.forRent === true && v.status !== 'EN_LOCATION';
+    if (selectedBottomFilter === 'Tous') return true; // Affiche toutes les voitures du parking
     return true;
   }).filter(v =>
-    v.marque.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    v.marqueRef.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     v.model.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
 
-  const getImageSource = (status: string) => {
-    if (status === 'EN_LOCATION') return require('../../assets/images/location.jpeg');
-    if (status === 'ACHETE') return require('../../assets/images/vente.png');
-    if (status === 'DISPONIBLE') return require('../../assets/images/disponible.png');
-    return require('../../assets/images/tout.jpg');
+  const getImageSource = (forSale: boolean, forRent: boolean) => {
+    if (forRent) return require('../../assets/images/location.jpeg');
+    if (forSale) return require('../../assets/images/vente.png');
+    return require('../../assets/images/disponible.png');
   };
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'EN_LOCATION': return 'En location';
-      case 'ACHETE': return 'Vendu';
-      case 'DISPONIBLE': return 'Disponible';
-      case 'EN_MAINTENANCE': return 'Maintenance';
-      case 'INDISPONIBLE': return 'Indisponible';
-      default: return status;
+  const getStatusLabel = (forSale: boolean, forRent: boolean, status: string) => {
+    // Si le véhicule a un statut spécifique, on l'utilise
+    if (status && status !== 'DISPONIBLE') {
+      switch (status) {
+        case 'EN_LOCATION': return 'En location';
+        case 'ACHETE': return 'Vendu';
+        case 'DISPONIBLE': return 'Disponible';
+        case 'EN_MAINTENANCE': return 'Maintenance';
+        case 'INDISPONIBLE': return 'Indisponible';
+        default: return status;
+      }
     }
+    
+    // Sinon, on détermine le statut basé sur forSale et forRent
+    if (forSale && forRent) return 'Vente & Location';
+    if (forSale) return 'En vente';
+    if (forRent) return 'En location';
+    return 'Disponible';
   };
 
   const handleScroll = Animated.event(
@@ -187,9 +250,19 @@ const MonParkingScreen: React.FC = () => {
     }
   );
 
+  // FONCTION MODIFIÉE : Navigation vers CarDetailScreen
+  const handleVoiturePress = (vehicule: Vehicule) => {
+    router.push({
+      pathname: "/(Clients)/CreateListingScreen",
+      params: { 
+        vehicule: JSON.stringify(vehicule)
+      }
+    });
+  };
+
   const renderBottomButtons = () => (
     <View style={styles.bottomButtonsContainer}>
-      {['En vente', 'En location', 'Disponibles'].map(filter => (
+      {['Tous', 'En vente', 'En location'].map(filter => (
         <TouchableOpacity
           key={filter}
           style={[styles.bottomButton, selectedBottomFilter === filter && styles.bottomButtonActive]}
@@ -374,6 +447,9 @@ const MonParkingScreen: React.FC = () => {
               <View style={styles.centerText}>
                 <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#333' }}>{totalVoitures}</Text>
                 <Text style={{ fontSize: 12, color: '#666' }}>Voitures</Text>
+                <Text style={{ fontSize: 10, color: '#999', marginTop: 4 }}>
+                  {voituresVente + voituresLocation} actives
+                </Text>
               </View>
             </View>
 
@@ -382,7 +458,9 @@ const MonParkingScreen: React.FC = () => {
                 <View key={index} style={styles.legendItem}>
                   <View style={[styles.legendCircle, { backgroundColor: segment.color }]} />
                   <View style={{ flexDirection: 'column' }}>
-                    <Text style={styles.legendPercentage}>{segment.value.toFixed(0)}%</Text>
+                    <Text style={styles.legendPercentage}>
+                      {segment.originalPercentage.toFixed(0)}%
+                    </Text>
                     <Text style={styles.legendStatus}>{segment.label}</Text>
                   </View>
                   <Text style={styles.legendCount}>{segment.count}</Text>
@@ -430,33 +508,53 @@ const MonParkingScreen: React.FC = () => {
         {!sticky && renderBottomButtons()}
 
         <View style={{ marginTop: 20 }}>
-          {filteredVoitures.map(voiture => (
-            <TouchableOpacity 
-              key={voiture.id} 
-              style={styles.voitureCard}
-              onPress={() => router.push({ 
-                pathname: "/(Clients)/CreateListingSreen", 
-                params: { voiture: JSON.stringify(voiture) } 
-              })}
-            >
-              <Image
-                source={voiture.photos && voiture.photos.length > 0 ? { uri: voiture.photos[0] } : getImageSource(voiture.status)}
-                style={styles.voitureImageClickable}
-              />
-              <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={{ fontSize: 18, fontWeight: 'bold' }}>
-                  {voiture.marque} {voiture.model}
-                </Text>
-                <Text style={{ fontSize: 14, color: '#666' }}>{getStatusLabel(voiture.status)}</Text>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FD6A00' }}>{voiture.prix} FCFA</Text>
-                {voiture.nextReservation && (
-                  <Text style={{ fontSize: 12, color: '#666' }}>
-                    Prochaine réservation: {new Date(voiture.nextReservation.date).toLocaleDateString()}
+          {filteredVoitures.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="car-outline" size={50} color="#ccc" />
+              <Text style={styles.emptyStateText}>
+                {selectedBottomFilter === 'Tous' 
+                  ? 'Aucune voiture dans votre parking' 
+                  : `Aucune voiture ${selectedBottomFilter.toLowerCase()}`
+                }
+              </Text>
+            </View>
+          ) : (
+            filteredVoitures.map(voiture => (
+              <TouchableOpacity 
+                key={voiture.id} 
+                style={styles.voitureCard}
+                onPress={() => handleVoiturePress(voiture)}
+              >
+                <Image
+                  source={voiture.photos && voiture.photos.length > 0 ? { uri: voiture.photos[0] } : getImageSource(voiture.forSale, voiture.forRent)}
+                  style={styles.voitureImageClickable}
+                  defaultSource={getImageSource(voiture.forSale, voiture.forRent)}
+                />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={{ fontSize: 18, fontWeight: 'bold' }}>
+                    {voiture.marqueRef.name} {voiture.model}
                   </Text>
-                )}
-              </View>
-            </TouchableOpacity>
-          ))}
+                  <Text style={{ fontSize: 14, color: '#666' }}>
+                    {getStatusLabel(voiture.forSale, voiture.forRent, voiture.status)}
+                  </Text>
+                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FD6A00' }}>{voiture.prix.toLocaleString()} FCFA</Text>
+                  
+                  {/* Affichage du nombre de réservations actives */}
+                  {voiture.stats && voiture.stats.reservationsActives > 0 && (
+                    <Text style={{ fontSize: 12, color: '#f1f1f1', fontWeight: 'bold' }}>
+                      {voiture.stats.reservationsActives} réservation(s) active(s)
+                    </Text>
+                  )}
+                  
+                  {voiture.nextReservation && (
+                    <Text style={{ fontSize: 12, color: '#666' }}>
+                      Prochaine réservation: {new Date(voiture.nextReservation.date).toLocaleDateString()}
+                    </Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -643,11 +741,6 @@ const styles = StyleSheet.create({
     marginTop: 15,
     paddingHorizontal: 20,
   },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 15,
-  },
   legendColor: {
     width: 12,
     height: 12,
@@ -657,6 +750,17 @@ const styles = StyleSheet.create({
   legendText: {
     fontSize: 12,
     color: '#666',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  emptyStateText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
   },
 });
 
