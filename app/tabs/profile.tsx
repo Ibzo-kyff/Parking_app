@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 import React, { useState, useEffect } from 'react';
 import { 
   View, Text, Image, StyleSheet, TouchableOpacity, ScrollView, 
@@ -402,6 +403,20 @@ const Profile = () => {
         </View>
       </Modal>
     </ScrollView>
+=======
+// app/(Parking)/profile.tsx (nouveau fichier)
+// import ProfileScreen from '../../shared/ProfileScreen'; // Ajustez le chemin
+// export default ProfileScreen;
+import React from "react";
+import { View, StyleSheet } from "react-native";
+import ProfileCard from "../../components/ProfileCard";
+
+const Profile = () => {
+  return (
+    <View style={styles.container}>
+      <ProfileCard />
+    </View>
+>>>>>>> Stashed changes
   );
 };
 
@@ -625,4 +640,8 @@ const styles = StyleSheet.create({
   },
 });
 
+<<<<<<< Updated upstream
 export default Profile;
+=======
+export default Profile;
+>>>>>>> Stashed changes
