@@ -99,7 +99,7 @@ export default function ParkingDetails() {
     if (parking?.user) {
       const user = parking.user as ExtendedUser;
       router.navigate({
-        pathname: "../(profil)/chatpage",
+        pathname: "../components/chat/ChatWindow",
         params: {
           userId: user.id.toString(),
           userName: `${user.nom} ${user.prenom}`,

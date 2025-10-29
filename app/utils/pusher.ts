@@ -3,13 +3,6 @@ import { API_URL, getStoredAccessToken } from '../../components/services/api';
 
 let pusherInstance: any = null;
 
-/**
- * Dynamically load the appropriate Pusher implementation based on runtime.
- * - In React Native environments we try to load 'pusher-js/react-native'
- * - In web/browser environments we load 'pusher-js'
- * This avoids bundlers from statically pulling native-only packages like
- * '@react-native-community/netinfo' into web builds.
- */
 const loadPusher = () => {
   // Use eval('require') to avoid Metro/webpack statically resolving native-only packages
   const dynamicRequire = (name: string) => {
