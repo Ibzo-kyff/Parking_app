@@ -172,13 +172,13 @@ const Reservation: React.FC<ReservationListProps> = ({
           style={[styles.tabButton, activeTab === "Actif" && styles.activeTab]}
           onPress={() => setActiveTab("Actif")}
         >
-          <Text style={styles.tabText}>Actif</Text>
+          <Text style={styles.tabText}>En cours</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tabButton, activeTab === "Inactif" && styles.activeTab]}
           onPress={() => setActiveTab("Inactif")}
         >
-          <Text style={styles.tabText}>Inactif</Text>
+          <Text style={styles.tabText}>Historique</Text>
         </TouchableOpacity>
       </View>
       <ScrollView
