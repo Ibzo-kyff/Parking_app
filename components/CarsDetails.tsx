@@ -20,6 +20,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { BASE_URL } from './services/listeVoiture';
 import { useAuth } from '../context/AuthContext';
 import { favorisService } from './services/favorisService';
+import { viewsService } from './services/viewsService';
 
 interface Marque {
   id: number;
@@ -43,6 +44,14 @@ interface Vehicule {
   forRent?: boolean;
   forSale?: boolean;
   description?: string;
+  stats?: {
+    id: number;
+    vehicleId: number;
+    vues: number;
+    reservations: number;
+    createdAt: string;
+    updatedAt: string;
+  };
 }
 
 const { width } = Dimensions.get('window');
@@ -61,7 +70,7 @@ function CarDetailScreen() {
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // États pour le favoris - SUPPRIMER le loading pour l'effet immédiat
+  // États pour le favoris
   const [isFavorite, setIsFavorite] = useState(false);
 
   const { authState } = useAuth();
@@ -80,6 +89,13 @@ function CarDetailScreen() {
       console.error('Erreur parsing véhicule:', error);
     }
   }
+
+  // AJOUT: Incrémenter les vues au chargement de la page
+  useEffect(() => {
+    if (vehicule?.id) {
+      viewsService.incrementViews(vehicule.id);
+    }
+  }, [vehicule?.id]);
 
   // Fonction pour vérifier l'état favoris
   const checkFavoriteStatus = async () => {
