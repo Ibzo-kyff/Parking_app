@@ -23,8 +23,9 @@ const ProfileCard = () => {
     prenom: "",
     userId: ""
   });
+  const [userRole, setUserRole] = useState<string>(''); // Ajout d'un état pour le rôle
 
-  const { authState, clearAuthState } = useAuth();
+  const { authState, setAuthState, clearAuthState, refreshAuth } = useAuth();
 
   // Fonction pour récupérer les données utilisateur
   const fetchUserData = async (isRefreshing = false) => {
@@ -46,7 +47,7 @@ const ProfileCard = () => {
       
       // Mettre à jour l'image de profil
       if (userInfo.image) {
-        setProfileImage(`https://parkapp-pi.vercel.app${userInfo.image}?t=${Date.now()}`);
+        setProfileImage(`${userInfo.image}?t=${Date.now()}`);  // ← Correction : pas de préfixe 'https://parkapp-pi.vercel.app'
       }
       
       setUserData({
@@ -55,10 +56,32 @@ const ProfileCard = () => {
         userId: userInfo.id || ""
       });
       
+      setUserRole(userInfo.role || ''); // Mise à jour du rôle
+      
     } catch (error: any) {
       console.error('Erreur:', error);
       
-      if (error.status === 401) {
+      if (error.status === 401 || error.message.includes('Token invalide ou expiré')) {  // ← AJOUT : Vérifiez aussi le message pour robustesse
+        const refreshed = await refreshAuth();  // ← AJOUT : Tentez refresh
+        if (refreshed) {
+          // Réessayez avec le nouveau token
+          try {
+            const userInfo = await userService.getCurrentUser(authState.accessToken!);  // Note : ! car refresh a réussi
+            if (userInfo.image) {
+              setProfileImage(`${userInfo.image}?t=${Date.now()}`);
+            }
+            setUserData({
+              nom: userInfo.nom || "Prénom",
+              prenom: userInfo.prenom || "Nom",
+              userId: userInfo.id || ""
+            });
+            setUserRole(userInfo.role || ''); // Mise à jour du rôle après refresh
+            return;  // Succès, pas d'alerte
+          } catch (retryError) {
+            console.error('Erreur après refresh:', retryError);
+          }
+        }
+        // Si refresh échoue, déconnectez
         Alert.alert('Session expirée', 'Veuillez vous reconnecter');
         clearAuthState();
         router.replace('/(auth)/LoginScreen');
@@ -76,7 +99,7 @@ const ProfileCard = () => {
     
     const interval = setInterval(() => {
       fetchUserData(true);
-    }, 30000);
+    }, 300000);
     
     return () => clearInterval(interval);
   }, []);
@@ -99,7 +122,7 @@ const ProfileCard = () => {
       
       // Mettre à jour l'image affichée
       if (result.image) {
-        setProfileImage(`https://parkapp-pi.vercel.app${result.image}?t=${Date.now()}`);
+        setProfileImage(`${result.image}?t=${Date.now()}`);  // ← Correction : pas de préfixe
       }
       
       return true;
@@ -122,56 +145,68 @@ const ProfileCard = () => {
     }
   };
 
-  const pickImage = async () => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission requise', 'Nous avons besoin de votre permission pour accéder à votre galerie');
-        return;
-      }
-
-      let result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.7,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        await uploadImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Erreur sélection image:', error);
-      Alert.alert('Erreur', 'Impossible de sélectionner l\'image');
-    } finally {
-      setModalVisible(false);
+const pickImage = async () => {
+  try {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission requise', 'Nous avons besoin de votre permission pour accéder à votre galerie');
+      return;
     }
-  };
 
-  const takePhoto = async () => {
-    try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission requise', 'Nous avons besoin de votre permission pour accéder à votre caméra');
-        return;
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      const newUri = result.assets[0].uri;
+      const previousImage = profileImage; // Store previous for revert on fail
+      setProfileImage(newUri); // Update immediately for instant UX
+      const uploadSuccess = await uploadImage(newUri);
+      if (!uploadSuccess) {
+        setProfileImage(previousImage); // Revert if upload fails
       }
-
-      let result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.7,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        await uploadImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Erreur prise photo:', error);
-      Alert.alert('Erreur', 'Impossible de prendre une photo');
-    } finally {
-      setModalVisible(false);
     }
-  };
+  } catch (error) {
+    console.error('Erreur sélection image:', error);
+    Alert.alert('Erreur', 'Impossible de sélectionner l\'image');
+  } finally {
+    setModalVisible(false);
+  }
+};
+
+const takePhoto = async () => {
+  try {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission requise', 'Nous avons besoin de votre permission pour accéder à votre caméra');
+      return;
+    }
+
+    let result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      const newUri = result.assets[0].uri;
+      const previousImage = profileImage; // Store previous for revert on fail
+      setProfileImage(newUri); // Update immediately for instant UX
+      const uploadSuccess = await uploadImage(newUri);
+      if (!uploadSuccess) {
+        setProfileImage(previousImage); // Revert if upload fails
+      }
+    }
+  } catch (error) {
+    console.error('Erreur prise photo:', error);
+    Alert.alert('Erreur', 'Impossible de prendre une photo');
+  } finally {
+    setModalVisible(false);
+  }
+};
 
   const handleLogout = async () => {
     Alert.alert(
@@ -322,6 +357,21 @@ const ProfileCard = () => {
             <Feather name="chevron-right" size={20} color="#999" />
           </TouchableOpacity>
         </Link>
+        {userRole === 'CLIENT' && (
+          /* NOUVEAU : Section Favoris */
+          <Link href="../(profil)/favoris" asChild>
+            <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
+              <View style={styles.menuIcon}>
+                <FontAwesome name="heart" size={24} color="#FDB913" />
+              </View>
+              <View style={styles.menuTextContainer}>
+                <Text style={styles.menuItemText}>Favoris</Text>
+                <Text style={styles.menuItemSubText}>Vos véhicules favoris</Text>
+              </View>
+              <Feather name="chevron-right" size={20} color="#999" />
+            </TouchableOpacity>
+          </Link>
+        )}
       </View>
 
       <TouchableOpacity style={styles.logoutButton} activeOpacity={0.8} onPress={handleLogout}>

@@ -1,4 +1,4 @@
-const BASE_URL = "https://parkapp-pi.vercel.app/"; // À remplacer par une variable d'environnement dans un projet en production
+const BASE_URL = "https://parkapp-pi.vercel.app/"; 
 
 interface ApiResponse<T> {
   data?: T;

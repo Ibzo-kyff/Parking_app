@@ -171,7 +171,7 @@ export default function FavorisScreen() {
               <FontAwesome name="tachometer" size={12} color="#666" /> {item.mileage?.toLocaleString()} km
             </Text>
             <Text style={styles.carDetail}>
-              <FontAwesome name="gas-pump" size={12} color="#666" /> {item.fuelType}
+              <FontAwesome name="car" size={12} color="#666" /> {item.fuelType}
             </Text>
           </View>
 

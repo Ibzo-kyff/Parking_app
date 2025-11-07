@@ -57,15 +57,10 @@ const Infopersonnel = () => {
           setLoading(false);
           setTokenError(true);
           return;
-        }
-
-        console.log("Envoi de la requête à l'API...");
-        
+        }        
         // Utilisation du service API
         const data = await userService.getUserDetails(token);
-        
-        console.log("Données utilisateur reçues:", data);
-        
+           
         // Structure correcte des données (suppression des doublons)
         const userInfo = {
           nom: data.nom || '',

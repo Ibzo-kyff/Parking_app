@@ -2,9 +2,11 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAuthToken, refreshToken } from '../components/services/api';
+import { authService } from '../components/services/profileApi';
 
 interface AuthState {
   accessToken: string | null;
+  refreshToken: string | null;  // ← AJOUT : Stockez le refreshToken
   role: string | null;
   userId: string | null;
   parkingId: string | null;
@@ -33,6 +35,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [authState, setAuthState] = useState<AuthState>({
     accessToken: null,
+    refreshToken: null,
     role: null,
     userId: null,
     parkingId: null,
@@ -76,6 +79,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const clearAuthState = async () => {
     setAuthState({
       accessToken: null,
+      refreshToken: null,
       role: null,
       userId: null,
       parkingId: null,
@@ -92,17 +96,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Ajout de la fonction refreshAuth
   const refreshAuth = async (): Promise<boolean> => {
-    try {
-      const newAccessToken = await refreshToken();
-      await updateAuthState({ accessToken: newAccessToken });
-      setAuthToken(newAccessToken);
-      return true;
-    } catch (error) {
-      console.error('Erreur lors du rafraîchissement du token:', error);
-      clearAuthState();
-      return false;
-    }
-  };
+  if (!authState.refreshToken) {
+    console.error('Pas de refreshToken disponible');
+    return false;
+  }
+
+  try {
+    const newTokens = await authService.refreshToken(authState.refreshToken);  // ← AJOUT : Passez refreshToken
+    await updateAuthState({
+      accessToken: newTokens.accessToken,
+      refreshToken: newTokens.refreshToken,  // ← AJOUT : Mettez à jour avec le nouveau refreshToken (rotation)
+    });
+    setAuthToken(newTokens.accessToken);
+    return true;
+  } catch (error) {
+    console.error('Erreur lors du rafraîchissement du token:', error);
+    clearAuthState();
+    return false;
+  }
+};
 
   return (
     <AuthContext.Provider value={{ 
