@@ -68,26 +68,20 @@ export const login = async (credentials: { email: string; password: string }): P
   try {
     const response = await api.post('/auth/login', credentials);
 
-    // Le refreshToken n'est plus dans la réponse, il est dans un cookie HTTP-only
-    const { accessToken, role, emailVerified, nom, prenom, id, parkingId } = response.data || {};
+    const { accessToken, refreshToken, role, emailVerified, nom, prenom, id, parkingId } = response.data || {};  // ← AJOUT : Extrayez refreshToken
 
-    // Stocker accessToken
     if (accessToken) await setAuthToken(accessToken);
 
-    // Stocker infos utilisateur
     await AsyncStorage.setItem('role', role || '');
     await AsyncStorage.setItem('emailVerified', emailVerified ? 'true' : 'false');
     await AsyncStorage.setItem('nom', nom || 'Inconnu');
     await AsyncStorage.setItem('prenom', prenom || 'Inconnu');
-
-    // Stocker id et parkingId
     if (id) await AsyncStorage.setItem('userId', String(id));
     if (parkingId) await AsyncStorage.setItem('parkingId', String(parkingId));
 
-    // Mettre à jour le state d'authentification
     const authState = {
       accessToken,
-      refreshToken: null, // Plus besoin de stocker le refreshToken côté client
+      refreshToken,  // ← CHANGEMENT : Utilisez le refreshToken extrait au lieu de null
       role,
       userId: id ? String(id) : null,
       parkingId: parkingId ? String(parkingId) : null,

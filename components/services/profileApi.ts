@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-const API_BASE_URL = 'https://parkapp-pi.vercel.app/api';
+const API_BASE_URL = 'http://192.168.137.14:5000/api';
 
 // Interface pour les données utilisateur
 export interface User {
@@ -40,22 +40,25 @@ class ApiError extends Error {
 export const apiService = {
   // Méthode générique pour les requêtes
   async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`;
-    
-    const defaultHeaders: HeadersInit = {
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const url = `${API_BASE_URL}${endpoint}`;
+  
+  let headers: HeadersInit = { ...options.headers }; // Commence sans default
+
+  // Ajoutez Content-Type JSON seulement si PAS FormData
+  if (!(options.body instanceof FormData)) {
+    headers = {
+      ...headers,
       'Content-Type': 'application/json',
     };
+  }
 
-    const config: RequestInit = {
-      ...options,
-      headers: {
-        ...defaultHeaders,
-        ...options.headers,
-      },
-    };
+  const config: RequestInit = {
+    ...options,
+    headers,
+  };
 
     try {
       const response = await fetch(url, config);
@@ -114,40 +117,35 @@ export const apiService = {
 
 // Service d'authentification
 export const authService = {
-  // Connexion
-  async login(email: string, password: string): Promise<{ user: User; token: string }> {
-    return apiService.request<{ user: User; token: string }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-  },
-
-  // Inscription
-  async register(userData: {
-    email: string;
-    password: string;
-    nom: string;
-    prenom: string;
-    role: string;
-  }): Promise<{ user: User; token: string }> {
-    return apiService.request<{ user: User; token: string }>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(userData),
-    });
-  },
-
-  // Vérification d'email
-  async verifyEmail(token: string): Promise<{ message: string }> {
-    return apiService.request<{ message: string }>(`/auth/verify-email/${token}`, {
-      method: 'GET',
-    });
-  },
 
   // Mot de passe oublié
   async forgotPassword(email: string): Promise<{ message: string }> {
     return apiService.request<{ message: string }>('/auth/forgot-password', {
       method: 'POST',
       body: JSON.stringify({ email }),
+    });
+  },
+   // Rafraîchir le token
+  async refreshToken(refreshToken: string): Promise<{ 
+    accessToken: string; 
+    refreshToken: string;
+  }> {
+    return apiService.request<{ 
+      accessToken: string; 
+      refreshToken: string;
+    }>('/auth/refresh', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refreshToken }), // ← IMPORTANT: envoyer dans le body
+    });
+  },
+
+  // Déconnexion
+  async logout(token: string): Promise<{ message: string }> {
+    return apiService.authenticatedRequest<{ message: string }>('/auth/logout', token, {
+      method: 'POST',
     });
   },
 
@@ -254,79 +252,6 @@ export const userService = {
       token,
       {
         method: 'DELETE',
-      }
-    );
-  },
-};
-
-// Service parking (si nécessaire)
-export const parkingService = {
-  // Récupérer tous les parkings
-  async getParkings(token: string): Promise<any[]> {
-    return apiService.authenticatedRequest<any[]>('/parkings', token, {
-      method: 'GET',
-    });
-  },
-
-  // Récupérer un parking spécifique
-  async getParking(token: string, parkingId: string): Promise<any> {
-    return apiService.authenticatedRequest<any>(`/parkings/${parkingId}`, token, {
-      method: 'GET',
-    });
-  },
-
-  // Créer un parking
-  async createParking(token: string, parkingData: any): Promise<any> {
-    return apiService.authenticatedRequest<any>('/parkings', token, {
-      method: 'POST',
-      body: JSON.stringify(parkingData),
-    });
-  },
-
-  // Mettre à jour un parking
-  async updateParking(token: string, parkingId: string, parkingData: any): Promise<any> {
-    return apiService.authenticatedRequest<any>(`/parkings/${parkingId}`, token, {
-      method: 'PUT',
-      body: JSON.stringify(parkingData),
-    });
-  },
-
-  // Supprimer un parking
-  async deleteParking(token: string, parkingId: string): Promise<{ message: string }> {
-    return apiService.authenticatedRequest<{ message: string }>(
-      `/parkings/${parkingId}`,
-      token,
-      {
-        method: 'DELETE',
-      }
-    );
-  },
-};
-
-// Service réservation (si nécessaire)
-export const bookingService = {
-  // Récupérer les réservations de l'utilisateur
-  async getUserBookings(token: string): Promise<any[]> {
-    return apiService.authenticatedRequest<any[]>('/bookings/user', token, {
-      method: 'GET',
-    });
-  },
-
-  // Créer une réservation
-  async createBooking(token: string, bookingData: any): Promise<any> {
-    return apiService.authenticatedRequest<any>('/bookings', token, {
-      method: 'POST',
-      body: JSON.stringify(bookingData),
-    });
-  },
-
-  // Annuler une réservation
-  async cancelBooking(token: string, bookingId: string): Promise<{ message: string }> {
-    return apiService.authenticatedRequest<{ message: string }>(
-      `/bookings/${bookingId}/cancel`,
-      token,
-      {
-        method: 'POST',
       }
     );
   },
