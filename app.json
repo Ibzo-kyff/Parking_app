@@ -12,7 +12,9 @@
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff",
-      "plugins": ["@react-native-async-storage/async-storage"]
+      "plugins": [
+        "@react-native-async-storage/async-storage"
+      ]
     },
     "ios": {
       "supportsTablet": true
@@ -30,7 +32,8 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "expo-secure-store"
     ]
   }
 }

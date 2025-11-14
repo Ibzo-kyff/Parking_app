@@ -9,6 +9,7 @@ import {
   Pressable,
   SafeAreaView,
   Alert,
+  RefreshControl,
 } from "react-native";
 import {
   getNotifications,
@@ -22,16 +23,16 @@ interface Notification {
   message: string;
   createdAt: string;
   read: boolean;
-  type?: "reservation" | "paiement" | "update";
-  louee?: boolean;
+  type?: string;
 }
 
-const Notifications = () => {
+const NotificationsScreen = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [activeTab, setActiveTab] = useState<"all" | "unread">("all");
   const [selectedNotification, setSelectedNotification] =
     useState<Notification | null>(null);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchNotifications = async () => {
     try {
@@ -43,7 +44,6 @@ const Notifications = () => {
         createdAt: new Date(n.createdAt).toLocaleDateString(),
         read: n.read,
         type: n.type,
-        louee: n.louee,
       }));
       setNotifications(formatted);
     } catch (err) {
@@ -55,11 +55,16 @@ const Notifications = () => {
     fetchNotifications();
   }, []);
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchNotifications();
+    setRefreshing(false);
+  };
+
   const handleMarkAsRead = async (notification: Notification) => {
     if (notification.read) return;
     try {
       await markNotificationAsRead(notification.id);
-      // Met à jour localement pour retirer de l’onglet "Non lues"
       setNotifications((prev) =>
         prev.map((n) => (n.id === notification.id ? { ...n, read: true } : n))
       );
@@ -78,15 +83,12 @@ const Notifications = () => {
       setSelectedNotification(null);
       setConfirmVisible(false);
     } catch (err) {
-      console.log("Erreur suppression :", err);
       Alert.alert("Erreur", "Impossible de supprimer la notification");
     }
   };
 
   const filteredNotifications =
-    activeTab === "all"
-      ? notifications
-      : notifications.filter((n) => !n.read);
+    activeTab === "all" ? notifications : notifications.filter((n) => !n.read);
 
   const renderItem = ({ item }: { item: Notification }) => (
     <TouchableOpacity
@@ -98,7 +100,7 @@ const Notifications = () => {
     >
       <Text style={styles.titre}>{item.title}</Text>
       <Text style={styles.date}>{item.createdAt}</Text>
-      <Text numberOfLines={1} style={styles.message}>
+      <Text numberOfLines={2} style={styles.message}>
         {item.message}
       </Text>
     </TouchableOpacity>
@@ -107,9 +109,7 @@ const Notifications = () => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={{ flex: 1 }}>
-        <View style={{ marginTop: 40, marginBottom: 20 }}>
-          <Text style={styles.header}>Notifications</Text>
-        </View>
+        <Text style={styles.header}>Mes Notifications</Text>
 
         <View style={styles.tabs}>
           <TouchableOpacity
@@ -144,17 +144,20 @@ const Notifications = () => {
           data={filteredNotifications}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 20, paddingTop: 10 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          contentContainerStyle={{ paddingBottom: 30, paddingTop: 10 }}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           ListEmptyComponent={
-            <Text style={{ textAlign: "center", marginTop: 20, color: "#555" }}>
+            <Text style={{ textAlign: "center", marginTop: 20, color: "#666" }}>
               Aucune notification
             </Text>
           }
         />
       </View>
 
-      {/* Modal détails notification */}
+      {/* MODAL DÉTAILS */}
       <Modal visible={!!selectedNotification} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
@@ -162,11 +165,7 @@ const Notifications = () => {
               <>
                 <Text style={styles.modalTitle}>{selectedNotification.title}</Text>
                 <Text style={styles.modalMessage}>{selectedNotification.message}</Text>
-                <Text style={{ fontSize: 12, color: "gray", marginBottom: 12 }}>
-                  {selectedNotification.createdAt}
-                </Text>
-
-                {/* Actions */}
+                <Text style={styles.modalDate}>{selectedNotification.createdAt}</Text>
                 <View style={styles.modalActions}>
                   <Pressable
                     style={[styles.modalBtn, styles.modalCancel]}
@@ -187,7 +186,7 @@ const Notifications = () => {
         </View>
       </Modal>
 
-      {/* Modal confirmation suppression */}
+      {/* MODAL CONFIRMATION */}
       <Modal visible={confirmVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
@@ -218,21 +217,22 @@ const Notifications = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8f9fa", paddingHorizontal: 12 },
-  header: { fontSize: 22, fontWeight: "bold", textAlign: "center", color: "#333" },
+  header: { fontSize: 22, fontWeight: "bold", textAlign: "center", marginVertical: 20 },
   tabs: { flexDirection: "row", justifyContent: "center", marginBottom: 12 },
   tab: { paddingVertical: 6, paddingHorizontal: 16, borderRadius: 20, borderWidth: 1, borderColor: "#FF6B00", marginHorizontal: 5 },
   activeTab: { backgroundColor: "#FF6B00" },
   tabText: { fontSize: 14, fontWeight: "600", color: "#FF6B00" },
   activeTabText: { color: "#fff" },
-  card: { backgroundColor: "#fff", borderRadius: 12, padding: 14, elevation: 2, marginHorizontal: 8 },
+  card: { backgroundColor: "#fff", borderRadius: 12, padding: 14, elevation: 2 },
   nonLu: { borderLeftWidth: 5, borderLeftColor: "#FF6B00" },
   titre: { fontSize: 16, fontWeight: "bold", marginBottom: 4 },
   date: { fontSize: 12, color: "gray", marginBottom: 6 },
   message: { fontSize: 14, color: "#555" },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center" },
   modalBox: { width: "85%", backgroundColor: "#fff", padding: 16, borderRadius: 10, elevation: 5 },
-  modalTitle: { fontSize: 16, fontWeight: "700", marginBottom: 6 },
-  modalMessage: { color: "#555", marginBottom: 12 },
+  modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 6 },
+  modalMessage: { color: "#555", marginBottom: 10 },
+  modalDate: { fontSize: 12, color: "gray", marginBottom: 12 },
   modalActions: { flexDirection: "row", justifyContent: "flex-end" },
   modalBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 6, marginLeft: 10 },
   modalCancel: { backgroundColor: "#F1F3F4" },
@@ -241,4 +241,4 @@ const styles = StyleSheet.create({
   modalDeleteText: { color: "#fff", fontWeight: "700" },
 });
 
-export default Notifications;
+export default NotificationsScreen;

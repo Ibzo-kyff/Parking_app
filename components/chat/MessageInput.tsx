@@ -33,6 +33,7 @@ export const MessageInput: React.FC<Props> = ({ onSend, disabled, autoFocus = fa
         value={content}
         onChangeText={setContent}
         placeholder="Tapez votre message..."
+        placeholderTextColor="#999"
         multiline
         blurOnSubmit={false}
         onSubmitEditing={handleSend}
@@ -50,16 +51,31 @@ export const MessageInput: React.FC<Props> = ({ onSend, disabled, autoFocus = fa
 };
 
 const styles = StyleSheet.create({
-  container: { 
-    flexDirection: 'row', padding: 12, backgroundColor: 'white', alignItems: 'flex-end' 
+  container: {
+    flexDirection: 'row',
+    padding: 20,
+    backgroundColor: '#fff',
+    alignItems: 'flex-end',
   },
-  input: { 
-    flex: 1, borderWidth: 1, borderColor: '#E5E5EA', 
-    borderRadius: 20, padding: 12, maxHeight: 100 
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: '#000',
+    backgroundColor: '#f9f9f9',
+    maxHeight: 100,
   },
-  sendBtn: { 
-    backgroundColor: '#007AFF', borderRadius: 20, 
-    width: 40, height: 40, justifyContent: 'center', 
-    alignItems: 'center', marginLeft: 8 
+  sendBtn: {
+    backgroundColor: '#007AFF',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
 });

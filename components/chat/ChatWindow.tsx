@@ -1,18 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  ActivityIndicator,
-  TouchableOpacity,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  SafeAreaView,
-  Modal,
-  Animated,
-  Dimensions,
+  View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity,
+  KeyboardAvoidingView, Platform, SafeAreaView, Modal, Animated, Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MessageBubble } from './MessageBubble';
@@ -24,15 +13,15 @@ const { height } = Dimensions.get('window');
 
 interface Props {
   messages: Message[];
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, receiverId: number) => void;
   onDeleteMessage: (id: number) => void;
   onUpdateMessage: (id: number, text: string) => void;
   receiverId: number;
-  receiverName: string;
+  parkingName?: string;
+  receiverName?: string;
   receiverAvatar?: string | null;
   loading: boolean;
   onBack?: () => void;
-  currentUserRole: 'CLIENT' | 'PARKING';
 }
 
 export const ChatWindow: React.FC<Props> = ({
@@ -42,7 +31,6 @@ export const ChatWindow: React.FC<Props> = ({
   parkingName,
   loading,
   onBack,
-  parkingLogo,
   receiverName,
   receiverAvatar,
 }) => {
@@ -57,29 +45,21 @@ export const ChatWindow: React.FC<Props> = ({
     );
   }, [messages]);
 
-  // 🔹 Détermination du nom à afficher selon le rôle
   const displayName = useMemo(() => {
-    if (user?.role === 'PARKING') {
-      return receiverName?.trim() || 'Client inconnu';
-    }
+    if (user?.role === 'PARKING') return receiverName?.trim() || 'Client inconnu';
     return parkingName?.trim() || 'Parking inconnu';
   }, [user?.role, receiverName, parkingName]);
 
-  // 🔹 Fonction pour récupérer les initiales du nom et prénom
   const getInitials = useCallback((name: string) => {
     const cleaned = name.trim();
     if (!cleaned) return '?';
     const words = cleaned.split(' ').filter(Boolean);
-    if (words.length >= 2) {
-      return `${words[0][0]}${words[1][0]}`.toUpperCase();
-    }
+    if (words.length >= 2) return `${words[0][0]}${words[1][0]}`.toUpperCase();
     return cleaned.slice(0, 2).toUpperCase();
   }, []);
 
-  // 🔹 Même si un avatar ou logo existe, on privilégie les initiales
   const displayInitials = getInitials(displayName);
 
-  // Animation du menu contextuel
   const openMenu = () => {
     setShowMenu(true);
     Animated.spring(slideAnim, {
@@ -129,20 +109,19 @@ export const ChatWindow: React.FC<Props> = ({
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 70}
     >
-      <SafeAreaView style={styles.safeArea}>
-        {/* HEADER */}
+      {/* HEADER */}
+      <SafeAreaView style={styles.safeAreaHeader}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             {onBack && (
-              <TouchableOpacity onPress={onBack} style={styles.backButton} accessibilityLabel="Retour">
+              <TouchableOpacity onPress={onBack} style={styles.backButton}>
                 <Ionicons name="arrow-back" size={24} color="#fff" />
               </TouchableOpacity>
             )}
           </View>
 
-          {/* 🔹 Remplacement du logo/avatar par les initiales */}
           <View style={styles.headerCenter}>
             <View style={[styles.headerLogo, styles.fallbackAvatar]}>
               <Text style={styles.fallbackAvatarText}>{displayInitials}</Text>
@@ -156,82 +135,82 @@ export const ChatWindow: React.FC<Props> = ({
           </View>
 
           <View style={styles.headerRight}>
-            <TouchableOpacity onPress={openMenu} style={styles.menuButton} accessibilityLabel="Options">
+            <TouchableOpacity onPress={openMenu} style={styles.menuButton}>
               <Ionicons name="ellipsis-vertical" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* MENU CONTEXTUEL */}
-        <Modal visible={showMenu} transparent animationType="none" onRequestClose={closeMenu}>
-          <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={closeMenu}>
-            <Animated.View
-              style={[
-                styles.menuContainer,
-                { transform: [{ translateY: slideAnim }] },
-              ]}
-            >
-              {[
-                { icon: 'person-outline', label: 'Voir le profil', action: 'profile' },
-                { icon: 'trash-outline', label: 'Effacer la conversation', action: 'clear' },
-                { icon: 'ban-outline', label: 'Bloquer', action: 'block' },
-                { icon: 'flag-outline', label: 'Signaler', action: 'report' },
-              ].map((item) => (
-                <TouchableOpacity
-                  key={item.action}
-                  style={styles.menuItem}
-                  onPress={() => handleMenuAction(item.action)}
-                  accessibilityLabel={item.label}
-                >
-                  <Ionicons name={item.icon as any} size={18} color="#1F2A44" />
-                  <Text style={styles.menuItemText}>{item.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </Animated.View>
-          </TouchableOpacity>
-        </Modal>
-
-        {/* MESSAGES */}
-        <View style={styles.messagesWrapper}>
-          <FlatList
-            ref={flatListRef}
-            data={displayedMessages}
-            renderItem={renderMessage}
-            keyExtractor={keyExtractor}
-            contentContainerStyle={styles.messagesContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            initialNumToRender={15}
-            maxToRenderPerBatch={10}
-            windowSize={21}
-            removeClippedSubviews={true}
-            onContentSizeChange={scrollToEnd}
-          />
-        </View>
-
-        {/* LOADER */}
-        {loading && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color="#ff7d00" />
-          </View>
-        )}
-
-        {/* INPUT */}
-        <View style={styles.footer}>
-          <MessageInput
-            onSend={(content) => onSendMessage(content, receiverId)}
-            disabled={loading}
-            autoFocus={false}
-          />
-        </View>
       </SafeAreaView>
+
+      {/* MESSAGES */}
+      <View style={styles.messagesWrapper}>
+        <FlatList
+          ref={flatListRef}
+          data={displayedMessages}
+          renderItem={renderMessage}
+          keyExtractor={keyExtractor}
+          contentContainerStyle={styles.messagesContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          initialNumToRender={15}
+          maxToRenderPerBatch={10}
+          windowSize={21}
+          removeClippedSubviews={true}
+          onContentSizeChange={scrollToEnd}
+        />
+      </View>
+
+      {/* LOADER */}
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#ff7d00" />
+        </View>
+      )}
+
+      {/* INPUT */}
+      <View style={styles.footer}>
+        <MessageInput
+          onSend={(content) => onSendMessage(content, receiverId)}
+          disabled={loading}
+          autoFocus={false}
+        />
+      </View>
+
+      {/* MENU MODAL */}
+      <Modal visible={showMenu} transparent animationType="none" onRequestClose={closeMenu}>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={closeMenu}>
+          <Animated.View
+            style={[
+              styles.menuContainer,
+              { transform: [{ translateY: slideAnim }] },
+            ]}
+          >
+            {[
+              { icon: 'person-outline', label: 'Voir le profil', action: 'profile' },
+              { icon: 'trash-outline', label: 'Effacer la conversation', action: 'clear' },
+              { icon: 'ban-outline', label: 'Bloquer', action: 'block' },
+              { icon: 'flag-outline', label: 'Signaler', action: 'report' },
+            ].map((item) => (
+              <TouchableOpacity
+                key={item.action}
+                style={styles.menuItem}
+                onPress={() => handleMenuAction(item.action)}
+              >
+                <Ionicons name={item.icon as any} size={18} color="#1F2A44" />
+                <Text style={styles.menuItemText}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F7F9FC' },
-  safeArea: { flex: 1 },
+  container: { flex: 10, backgroundColor: '#F7F9FC' },
+
+  safeAreaHeader: { backgroundColor: '#ce8754ff' },
 
   header: {
     flexDirection: 'row',
@@ -239,7 +218,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#ce8754ff',
     borderBottomWidth: 0.5,
     borderBottomColor: 'rgba(255, 255, 255, 0.3)',
     paddingTop: Platform.OS === 'ios' ? 50 : 40,
@@ -247,8 +225,8 @@ const styles = StyleSheet.create({
   headerLeft: { flex: 1, alignItems: 'flex-start' },
   headerCenter: { flexDirection: 'row', alignItems: 'center', flex: 3, justifyContent: 'center' },
   headerRight: { flex: 1, alignItems: 'flex-end' },
-  backButton: { padding: 8, borderRadius: 12, },
-  menuButton: { padding: 8, borderRadius: 12, },
+  backButton: { padding: 8, borderRadius: 12 },
+  menuButton: { padding: 8, borderRadius: 12 },
 
   headerLogo: {
     width: 42,
@@ -285,12 +263,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 0.5,
     borderTopColor: 'rgba(0, 0, 0, 0.1)',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 3,
+    paddingTop: 8,
+    paddingBottom: 0, // ← plus de padding bottom
   },
   menuOverlay: {
     flex: 1,
