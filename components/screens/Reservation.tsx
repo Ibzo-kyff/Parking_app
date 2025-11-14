@@ -1,3 +1,552 @@
+// import React, { useEffect, useState } from "react";
+// import {
+//   View,
+//   Text,
+//   ScrollView,
+//   RefreshControl,
+//   ActivityIndicator,
+//   StyleSheet,
+//   Image,
+//   TouchableOpacity,
+//   Alert,
+// } from "react-native";
+// import { useAuth } from "../../context/AuthContext";
+// import { router } from "expo-router";
+// import { Ionicons } from "@expo/vector-icons";
+// import Header from "../../app/Header";
+
+// export type Reservation = {
+//   id: number;
+//   user?: {
+//     nom: string;
+//     prenom: string;
+//     email: string;
+//   };
+//   vehicle: {
+//     id: number;
+//     marque: string;
+//     model: string;
+//     photos: string[];
+//     parking?: {
+//       nom: string;
+//     };
+//     prix: number;
+//     fuelType: string;
+//     mileage: number;
+//     description?: string;
+//     status?: string; // Ajouté pour refléter le statut du véhicule
+//   };
+//   dateDebut: string | null;
+//   dateFin: string | null;
+//   type: "ACHAT" | "LOCATION";
+// };
+
+// type ReservationListProps = {
+//   fetchReservations: () => Promise<Reservation[]>;
+//   cancelReservation: (id: number) => Promise<void>;
+// };
+
+// const Reservation: React.FC<ReservationListProps> = ({
+//   fetchReservations,
+//   cancelReservation,
+// }) => {
+//   const { authState } = useAuth();
+//   const [reservations, setReservations] = useState<Reservation[]>([]);
+//   const [loading, setLoading] = useState(true);
+//   const [refreshing, setRefreshing] = useState(false);
+//   const [error, setError] = useState<string | null>(null);
+//   const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
+//   const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
+//   const [activeTab, setActiveTab] = useState("Actif"); // État pour les onglets
+
+//   const loadReservations = async () => {
+//     try {
+//       setError(null);
+//       const data = await fetchReservations();
+//       setReservations(data);
+//     } catch (err: any) {
+//       console.error("Erreur lors du chargement des réservations", err);
+//       setError(err.response?.data?.message || "Impossible de charger les réservations");
+//     } finally {
+//       setLoading(false);
+//       setRefreshing(false);
+//     }
+//   };
+
+//   const handleCancel = (id: number) => {
+//     Alert.alert(
+//       "Annuler la réservation",
+//       "Êtes-vous sûr de vouloir annuler cette réservation ?",
+//       [
+//         { text: "Non", style: "cancel" },
+//         {
+//           text: "Oui",
+//           onPress: async () => {
+//             try {
+//               await cancelReservation(id);
+//               loadReservations(); // Recharger les réservations après annulation
+//               Alert.alert("Succès", "Réservation annulée avec succès");
+//             } catch (err: any) {
+//               console.error("Erreur lors de l'annulation", err);
+//               Alert.alert(
+//                 "Erreur",
+//                 err.response?.data?.message || "Impossible d'annuler la réservation"
+//               );
+//             }
+//           },
+//         },
+//       ]
+//     );
+//   };
+
+//   const handleImageError = (reservationId: number) => {
+//     setImageErrors((prev) => new Set(prev).add(reservationId));
+//   };
+
+//   const toggleExpand = (id: number) => {
+//     const newExpanded = new Set(expandedCards);
+//     if (newExpanded.has(id)) {
+//       newExpanded.delete(id);
+//     } else {
+//       newExpanded.add(id);
+//     }
+//     setExpandedCards(newExpanded);
+//   };
+
+//   useEffect(() => {
+//     if (!authState.accessToken) {
+//       Alert.alert("Erreur", "Veuillez vous connecter pour voir vos réservations.");
+//       router.push("/(auth)/LoginScreen");
+//       return;
+//     }
+//     loadReservations();
+//   }, [authState.accessToken]);
+
+//   const onRefresh = () => {
+//     setRefreshing(true);
+//     loadReservations();
+//   };
+
+//   // Filtrer les réservations selon l'onglet actif
+//   const filteredReservations = reservations.filter((item) => {
+//     // Différencier achat et location : une location expire à sa date de fin, un achat reste actif
+//     const isRental = item.type === "LOCATION";
+//     const endDate = item.dateFin ? new Date(item.dateFin) : null;
+//     const now = new Date();
+//     const rentalExpired = isRental && endDate ? endDate < now : false;
+
+//     if (activeTab === "Actif") {
+//       return !rentalExpired;
+//     }
+//     if (activeTab === "Inactif") {
+//       return rentalExpired;
+//     }
+//     return true;
+//   });
+
+//   if (loading) {
+//     return (
+//       <View style={styles.center}>
+//         <ActivityIndicator size="large" color="#FF6200" />
+//       </View>
+//     );
+//   }
+
+//   if (error) {
+//     return (
+//       <View style={styles.center}>
+//         <Text style={styles.errorText}>{error}</Text>
+//         <TouchableOpacity style={styles.retryButton} onPress={loadReservations}>
+//           <Text style={styles.retryButtonText}>Réessayer</Text>
+//         </TouchableOpacity>
+//       </View>
+//     );
+//   }
+
+//   return (
+//     <View style={styles.mainContainer}>
+//       {/* <Header /> */}
+//       {/* Onglets Actif/Inactif */}
+//       <View style={styles.tabContainer}>
+//         <TouchableOpacity
+//           style={[styles.tabButton, activeTab === "Actif" && styles.activeTab]}
+//           onPress={() => setActiveTab("Actif")}
+//         >
+//           <Text style={styles.tabText}>En cours</Text>
+//         </TouchableOpacity>
+//         <TouchableOpacity
+//           style={[styles.tabButton, activeTab === "Inactif" && styles.activeTab]}
+//           onPress={() => setActiveTab("Inactif")}
+//         >
+//           <Text style={styles.tabText}>Historique</Text>
+//         </TouchableOpacity>
+//       </View>
+//       <ScrollView
+//         contentContainerStyle={styles.container}
+//         refreshControl={
+//           <RefreshControl
+//             refreshing={refreshing}
+//             onRefresh={onRefresh}
+//             colors={["#FF6200"]}
+//           />
+//         }
+//       >
+//         {filteredReservations.length === 0 ? (
+//           <View style={styles.emptyContainer}>
+//             <Ionicons name="calendar-outline" size={64} color="#CCCCCC" />
+//             <Text style={styles.emptyText}>Aucune réservation trouvée</Text>
+//             <Text style={styles.emptySubText}>Vos réservations apparaîtront ici</Text>
+//           </View>
+//         ) : (
+//           filteredReservations.map((item) => (
+//             <View key={item.id} style={styles.card}>
+//               <TouchableOpacity
+//                 style={styles.cardHeader}
+//                 onPress={() => toggleExpand(item.id)}
+//                 activeOpacity={0.7}
+//               >
+//                 <View style={styles.imageContainer}>
+//                   <Image
+//                     source={{
+//                       uri:
+//                         item.vehicle.photos &&
+//                         item.vehicle.photos.length > 0 &&
+//                         !imageErrors.has(item.id)
+//                           ? item.vehicle.photos[0]
+//                           : "https://via.placeholder.com/150",
+//                     }}
+//                     style={styles.vehicleImage}
+//                     resizeMode="cover"
+//                     onError={() => handleImageError(item.id)}
+//                   />
+//                 </View>
+
+//                 <View style={styles.mainInfo}>
+//                   <View style={styles.titleContainer}>
+//                     <Text style={styles.vehicleTitle}>
+//                       {item.vehicle.marque} {item.vehicle.model}
+//                     </Text>
+//                     <View
+//                       style={[
+//                         styles.typeBadge,
+//                         item.type === "LOCATION" ? styles.locationBadge : styles.achatBadge,
+//                       ]}
+//                     >
+//                       <Text style={styles.typeBadgeText}>
+//                         {item.type === "LOCATION" ? "LOCATION" : "ACHAT"}
+//                       </Text>
+//                     </View>
+//                   </View>
+
+//                   <Text style={styles.vehiclePrice}>
+//                     {item.vehicle.prix.toLocaleString()} FCFA
+//                   </Text>
+
+//                   {item.vehicle.parking && (
+//                     <Text style={styles.parkingText}>
+//                       <Ionicons name="location-outline" size={12} color="#666" />
+//                       {item.vehicle.parking.nom}
+//                     </Text>
+//                   )}
+
+//                   {item.type === "LOCATION" && item.dateDebut && item.dateFin && (
+//                     <View style={styles.datePreview}>
+//                       <Text style={styles.datePreviewText}>
+//                         {new Date(item.dateDebut).toLocaleDateString("fr-FR")} -{" "}
+//                         {new Date(item.dateFin).toLocaleDateString("fr-FR")}
+//                       </Text>
+//                     </View>
+//                   )}
+//                 </View>
+
+//                 <View style={styles.headerActions}>
+//                   <TouchableOpacity
+//                     style={styles.expandButton}
+//                     onPress={() => toggleExpand(item.id)}
+//                   >
+//                     <Ionicons
+//                       name={expandedCards.has(item.id) ? "chevron-up" : "chevron-down"}
+//                       size={20}
+//                       color="#666"
+//                     />
+//                   </TouchableOpacity>
+//                 </View>
+//               </TouchableOpacity>
+
+//               {expandedCards.has(item.id) && (
+//                 <View style={styles.expandedContent}>
+//                   <View style={styles.detailsGrid}>
+//                     <View style={styles.detailItem}>
+//                       <Ionicons name="speedometer-outline" size={16} color="#666" />
+//                       <Text style={styles.detailText}>{item.vehicle.mileage} km</Text>
+//                     </View>
+
+//                     <View style={styles.detailItem}>
+//                       <Ionicons name="flash-outline" size={16} color="#666" />
+//                       <Text style={styles.detailText}>{item.vehicle.fuelType}</Text>
+//                     </View>
+
+//                     {item.user && (
+//                       <>
+//                         <View style={styles.detailItem}>
+//                           <Ionicons name="person-outline" size={16} color="#666" />
+//                           <Text style={styles.detailText}>
+//                             {item.user.prenom} {item.user.nom}
+//                           </Text>
+//                         </View>
+
+//                         <View style={styles.detailItem}>
+//                           <Ionicons name="mail-outline" size={16} color="#666" />
+//                           <Text style={styles.detailText}>{item.user.email}</Text>
+//                         </View>
+//                       </>
+//                     )}
+//                   </View>
+
+//                   {item.vehicle.description && (
+//                     <View style={styles.descriptionContainer}>
+//                       <Text style={styles.descriptionLabel}>Description</Text>
+//                       <Text style={styles.descriptionText}>{item.vehicle.description}</Text>
+//                     </View>
+//                   )}
+
+//                   <TouchableOpacity
+//                     style={styles.cancelButton}
+//                     onPress={() => handleCancel(item.id)}
+//                   >
+//                     <Ionicons name="close-circle-outline" size={18} color="#D32F2F" />
+//                     <Text style={styles.cancelButtonText}>Annuler la réservation</Text>
+//                   </TouchableOpacity>
+//                 </View>
+//               )}
+//             </View>
+//           ))
+//         )}
+//       </ScrollView>
+//     </View>
+//   );
+// };
+
+// const styles = StyleSheet.create({
+//   mainContainer: {
+//     flex: 1,
+//     backgroundColor: "#f7f7f7",
+//     paddingTop: 25,
+//   },
+//   tabContainer: {
+//     flexDirection: "row",
+//     justifyContent: "space-around",
+//     paddingVertical: 10,
+//     backgroundColor: "#FFFFFF",
+//     borderBottomWidth: 1,
+//     borderBottomColor: "#E0E0E0",
+//   },
+//   tabButton: {             
+//     paddingVertical: 8,
+//     borderRadius: 20,
+//     backgroundColor: "#E0E0E0",
+//   },
+//   activeTab: {
+//     backgroundColor: "#FF6200",
+//   },
+//   tabText: {
+//     color: "#666",
+//     fontSize: 14,
+//     fontWeight: "500",
+//   },
+//   container: {
+//     padding: 16,
+//   },
+//   center: {
+//     flex: 1,
+//     justifyContent: "center",
+//     alignItems: "center",
+//     backgroundColor: "#F8F9FA",
+//   },
+//   errorText: {
+//     color: "#D32F2F",
+//     fontSize: 16,
+//     fontWeight: "600",
+//     textAlign: "center",
+//     marginBottom: 16,
+//   },
+//   retryButton: {
+//     backgroundColor: "#FF6200",
+//     paddingHorizontal: 20,
+//     paddingVertical: 12,
+//     borderRadius: 8,
+//     shadowColor: "#000",
+//     shadowOffset: { width: 0, height: 2 },
+//     shadowOpacity: 0.1,
+//     shadowRadius: 3,
+//     elevation: 3,
+//   },
+//   retryButtonText: {
+//     color: "#FFFFFF",
+//     fontSize: 16,
+//     fontWeight: "600",
+//   },
+//   emptyContainer: {
+//     alignItems: "center",
+//     justifyContent: "center",
+//     paddingVertical: 60,
+//   },
+//   emptyText: {
+//     fontSize: 18,
+//     fontWeight: "700",
+//     color: "#333333",
+//     marginTop: 16,
+//     marginBottom: 8,
+//   },
+//   emptySubText: {
+//     fontSize: 14,
+//     color: "#666666",
+//     textAlign: "center",
+//   },
+//   card: {
+//     backgroundColor: "#FFFFFF",
+//     borderRadius: 16,
+//     marginBottom: 16,
+//     overflow: "hidden",
+//     shadowColor: "#000",
+//     shadowOffset: { width: 0, height: 2 },
+//     shadowOpacity: 0.1,
+//     shadowRadius: 8,
+//     elevation: 4,
+//   },
+//   cardHeader: {
+//     flexDirection: "row",
+//     padding: 16,
+//     alignItems: "center",
+//   },
+//   imageContainer: {
+//     marginRight: 16,
+//   },
+//   vehicleImage: {
+//     width: 120,
+//     height: 100,
+//     borderRadius: 12,
+//     backgroundColor: "#E0E0E0",
+//   },
+//   mainInfo: {
+//     flex: 1,
+//   },
+//   titleContainer: {
+//     flexDirection: "row",
+//     alignItems: "center",
+//     justifyContent: "space-between",
+//     marginBottom: 6,
+//   },
+//   vehicleTitle: {
+//     fontSize: 18,
+//     fontWeight: "700",
+//     color: "#1A1A1A",
+//     flex: 1,
+//     marginRight: 8,
+//   },
+//   typeBadge: {
+//     paddingHorizontal: 8,
+//     paddingVertical: 4,
+//     borderRadius: 6,
+//   },
+//   locationBadge: {
+//     backgroundColor: "#4CAF50",
+//   },
+//   achatBadge: {
+//     backgroundColor: "#2196F3",
+//   },
+//   typeBadgeText: {
+//     color: "#FFFFFF",
+//     fontSize: 10,
+//     fontWeight: "700",
+//   },
+//   vehiclePrice: {
+//     fontSize: 16,
+//     fontWeight: "600",
+//     color: "#FF6200",
+//     marginBottom: 6,
+//   },
+//   parkingText: {
+//     fontSize: 12,
+//     color: "#666666",
+//     marginBottom: 6,
+//     flexDirection: "row",
+//     alignItems: "center",
+//   },
+//   datePreview: {
+//     marginTop: 4,
+//   },
+//   datePreviewText: {
+//     fontSize: 12,
+//     color: "#666666",
+//     fontStyle: "italic",
+//   },
+//   headerActions: {
+//     alignItems: "center",
+//   },
+//   expandButton: {
+//     padding: 4,
+//   },
+//   expandedContent: {
+//     padding: 16,
+//     paddingTop: 0,
+//     borderTopWidth: 1,
+//     borderTopColor: "#F0F0F0",
+//   },
+//   detailsGrid: {
+//     flexDirection: "row",
+//     flexWrap: "wrap",
+//     marginBottom: 12,
+//   },
+//   detailItem: {
+//     flexDirection: "row",
+//     alignItems: "center",
+//     marginRight: 16,
+//     marginBottom: 8,
+//   },
+//   detailText: {
+//     fontSize: 12,
+//     color: "#666666",
+//     marginLeft: 6,
+//   },
+//   descriptionContainer: {
+//     marginBottom: 16,
+//   },
+//   descriptionLabel: {
+//     fontSize: 14,
+//     fontWeight: "600",
+//     color: "#333333",
+//     marginBottom: 4,
+//   },
+//   descriptionText: {
+//     fontSize: 12,
+//     color: "#666666",
+//     lineHeight: 16,
+//   },
+//   cancelButton: {
+//     flexDirection: "row",
+//     alignItems: "center",
+//     justifyContent: "center",
+//     backgroundColor: "#FFEBEE",
+//     paddingHorizontal: 16,
+//     paddingVertical: 10,
+//     borderRadius: 8,
+//     borderWidth: 1,
+//     borderColor: "#FFCDD2",
+//   },
+//   cancelButtonText: {
+//     color: "#D32F2F",
+//     fontSize: 14,
+//     fontWeight: "600",
+//     marginLeft: 6,
+//   },
+// });
+
+// export default Reservation;
+
+
+
+// components/Reservation.tsx
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -14,6 +563,10 @@ import { useAuth } from "../../context/AuthContext";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "../../app/Header";
+import {
+  createReservationNotification,
+  showLocalNotification,
+} from "../../components/services/Notification"; // ← IMPORT
 
 export type Reservation = {
   id: number;
@@ -28,13 +581,14 @@ export type Reservation = {
     model: string;
     photos: string[];
     parking?: {
+      id: number;
       nom: string;
     };
     prix: number;
     fuelType: string;
     mileage: number;
     description?: string;
-    status?: string; // Ajouté pour refléter le statut du véhicule
+    status?: string;
   };
   dateDebut: string | null;
   dateFin: string | null;
@@ -57,7 +611,7 @@ const Reservation: React.FC<ReservationListProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
   const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
-  const [activeTab, setActiveTab] = useState("Actif"); // État pour les onglets
+  const [activeTab, setActiveTab] = useState<"Actif" | "Inactif">("Actif");
 
   const loadReservations = async () => {
     try {
@@ -65,7 +619,7 @@ const Reservation: React.FC<ReservationListProps> = ({
       const data = await fetchReservations();
       setReservations(data);
     } catch (err: any) {
-      console.error("Erreur lors du chargement des réservations", err);
+      console.error("Erreur chargement réservations", err);
       setError(err.response?.data?.message || "Impossible de charger les réservations");
     } finally {
       setLoading(false);
@@ -73,25 +627,71 @@ const Reservation: React.FC<ReservationListProps> = ({
     }
   };
 
+  // === NOTIFICATION APRÈS CRÉATION (appelée depuis CarDetailScreen) ===
+  // Tu peux appeler cette fonction depuis l'écran de réservation
+  // Mais ici, on l'appelle après annulation aussi
+  const sendReservationNotifications = async (reservation: Reservation, isCancellation = false) => {
+    const userName = authState.user?.prenom || "Utilisateur";
+    const vehicleName = `${reservation.vehicle.marque} ${reservation.vehicle.model}`;
+    const parkingId = reservation.vehicle.parking?.id;
+
+    if (!parkingId) {
+      console.warn("Aucun parking associé");
+      return;
+    }
+
+    // === 1. NOTIFICATION LOCALE À L'UTILISATEUR ===
+    try {
+      await showLocalNotification(
+        isCancellation ? "Réservation annulée" : "Réservation confirmée !",
+        isCancellation
+          ? `Votre ${reservation.type.toLowerCase()} de ${vehicleName} a été annulée.`
+          : `Votre ${reservation.type.toLowerCase()} de ${vehicleName} est confirmée !`,
+        { type: isCancellation ? "CANCEL" : "RESERVATION", reservationId: reservation.id }
+      );
+    } catch (err) {
+      console.warn("Notification locale échouée:", err);
+    }
+
+    // === 2. PUSH AU PARKING VIA BACKEND ===
+    try {
+      const success = await createReservationNotification({
+        title: isCancellation ? "RÉSERVATION ANNULÉE" : "NOUVELLE RÉSERVATION !",
+        message: isCancellation
+          ? `${userName} a annulé sa réservation pour ${vehicleName}.`
+          : `${userName} a réservé ${vehicleName} pour ${reservation.type.toLowerCase()}. Prix: ${reservation.vehicle.prix.toLocaleString()} FCFA`,
+        parkingId,
+        type: isCancellation ? "CANCEL" : "RESERVATION"
+      });
+
+      if (!success) {
+        console.warn("Push parking échoué");
+      }
+    } catch (err) {
+      console.error("Erreur push parking:", err);
+    }
+  };
+
+  // === ANNULATION ===
   const handleCancel = (id: number) => {
     Alert.alert(
       "Annuler la réservation",
-      "Êtes-vous sûr de vouloir annuler cette réservation ?",
+      "Êtes-vous sûr ?",
       [
         { text: "Non", style: "cancel" },
         {
           text: "Oui",
           onPress: async () => {
             try {
+              const reservation = reservations.find(r => r.id === id);
+              if (!reservation) return;
+
               await cancelReservation(id);
-              loadReservations(); // Recharger les réservations après annulation
-              Alert.alert("Succès", "Réservation annulée avec succès");
+              await sendReservationNotifications(reservation, true); // ← NOTIF ANNULATION
+              loadReservations();
+              Alert.alert("Succès", "Réservation annulée");
             } catch (err: any) {
-              console.error("Erreur lors de l'annulation", err);
-              Alert.alert(
-                "Erreur",
-                err.response?.data?.message || "Impossible d'annuler la réservation"
-              );
+              Alert.alert("Erreur", err.response?.data?.message || "Échec annulation");
             }
           },
         },
@@ -99,23 +699,21 @@ const Reservation: React.FC<ReservationListProps> = ({
     );
   };
 
-  const handleImageError = (reservationId: number) => {
-    setImageErrors((prev) => new Set(prev).add(reservationId));
+  const handleImageError = (id: number) => {
+    setImageErrors(prev => new Set(prev).add(id));
   };
 
   const toggleExpand = (id: number) => {
-    const newExpanded = new Set(expandedCards);
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id);
-    } else {
-      newExpanded.add(id);
-    }
-    setExpandedCards(newExpanded);
+    setExpandedCards(prev => {
+      const newSet = new Set(prev);
+      newSet.has(id) ? newSet.delete(id) : newSet.add(id);
+      return newSet;
+    });
   };
 
   useEffect(() => {
     if (!authState.accessToken) {
-      Alert.alert("Erreur", "Veuillez vous connecter pour voir vos réservations.");
+      Alert.alert("Connexion requise", "Connectez-vous pour voir vos réservations.");
       router.push("/(auth)/LoginScreen");
       return;
     }
@@ -127,21 +725,13 @@ const Reservation: React.FC<ReservationListProps> = ({
     loadReservations();
   };
 
-  // Filtrer les réservations selon l'onglet actif
   const filteredReservations = reservations.filter((item) => {
-    // Différencier achat et location : une location expire à sa date de fin, un achat reste actif
     const isRental = item.type === "LOCATION";
     const endDate = item.dateFin ? new Date(item.dateFin) : null;
     const now = new Date();
-    const rentalExpired = isRental && endDate ? endDate < now : false;
+    const expired = isRental && endDate ? endDate < now : false;
 
-    if (activeTab === "Actif") {
-      return !rentalExpired;
-    }
-    if (activeTab === "Inactif") {
-      return rentalExpired;
-    }
-    return true;
+    return activeTab === "Actif" ? !expired : expired;
   });
 
   if (loading) {
@@ -165,58 +755,43 @@ const Reservation: React.FC<ReservationListProps> = ({
 
   return (
     <View style={styles.mainContainer}>
-      {/* <Header /> */}
-      {/* Onglets Actif/Inactif */}
       <View style={styles.tabContainer}>
         <TouchableOpacity
           style={[styles.tabButton, activeTab === "Actif" && styles.activeTab]}
           onPress={() => setActiveTab("Actif")}
         >
-          <Text style={styles.tabText}>En cours</Text>
+          <Text style={[styles.tabText, activeTab === "Actif" && styles.activeTabText]}>En cours</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tabButton, activeTab === "Inactif" && styles.activeTab]}
           onPress={() => setActiveTab("Inactif")}
         >
-          <Text style={styles.tabText}>Historique</Text>
+          <Text style={[styles.tabText, activeTab === "Inactif" && styles.activeTabText]}>Historique</Text>
         </TouchableOpacity>
       </View>
+
       <ScrollView
         contentContainerStyle={styles.container}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={["#FF6200"]}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#FF6200"]} />}
       >
         {filteredReservations.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="calendar-outline" size={64} color="#CCCCCC" />
-            <Text style={styles.emptyText}>Aucune réservation trouvée</Text>
+            <Text style={styles.emptyText}>Aucune réservation</Text>
             <Text style={styles.emptySubText}>Vos réservations apparaîtront ici</Text>
           </View>
         ) : (
           filteredReservations.map((item) => (
             <View key={item.id} style={styles.card}>
-              <TouchableOpacity
-                style={styles.cardHeader}
-                onPress={() => toggleExpand(item.id)}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={styles.cardHeader} onPress={() => toggleExpand(item.id)}>
                 <View style={styles.imageContainer}>
                   <Image
                     source={{
-                      uri:
-                        item.vehicle.photos &&
-                        item.vehicle.photos.length > 0 &&
-                        !imageErrors.has(item.id)
-                          ? item.vehicle.photos[0]
-                          : "https://via.placeholder.com/150",
+                      uri: item.vehicle.photos?.[0] && !imageErrors.has(item.id)
+                        ? item.vehicle.photos[0]
+                        : "https://via.placeholder.com/150",
                     }}
                     style={styles.vehicleImage}
-                    resizeMode="cover"
                     onError={() => handleImageError(item.id)}
                   />
                 </View>
@@ -226,15 +801,8 @@ const Reservation: React.FC<ReservationListProps> = ({
                     <Text style={styles.vehicleTitle}>
                       {item.vehicle.marque} {item.vehicle.model}
                     </Text>
-                    <View
-                      style={[
-                        styles.typeBadge,
-                        item.type === "LOCATION" ? styles.locationBadge : styles.achatBadge,
-                      ]}
-                    >
-                      <Text style={styles.typeBadgeText}>
-                        {item.type === "LOCATION" ? "LOCATION" : "ACHAT"}
-                      </Text>
+                    <View style={[styles.typeBadge, item.type === "LOCATION" ? styles.locationBadge : styles.achatBadge]}>
+                      <Text style={styles.typeBadgeText}>{item.type}</Text>
                     </View>
                   </View>
 
@@ -250,27 +818,15 @@ const Reservation: React.FC<ReservationListProps> = ({
                   )}
 
                   {item.type === "LOCATION" && item.dateDebut && item.dateFin && (
-                    <View style={styles.datePreview}>
-                      <Text style={styles.datePreviewText}>
-                        {new Date(item.dateDebut).toLocaleDateString("fr-FR")} -{" "}
-                        {new Date(item.dateFin).toLocaleDateString("fr-FR")}
-                      </Text>
-                    </View>
+                    <Text style={styles.datePreviewText}>
+                      {new Date(item.dateDebut).toLocaleDateString("fr-FR")} - {new Date(item.dateFin).toLocaleDateString("fr-FR")}
+                    </Text>
                   )}
                 </View>
 
-                <View style={styles.headerActions}>
-                  <TouchableOpacity
-                    style={styles.expandButton}
-                    onPress={() => toggleExpand(item.id)}
-                  >
-                    <Ionicons
-                      name={expandedCards.has(item.id) ? "chevron-up" : "chevron-down"}
-                      size={20}
-                      color="#666"
-                    />
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity style={styles.expandButton} onPress={() => toggleExpand(item.id)}>
+                  <Ionicons name={expandedCards.has(item.id) ? "chevron-up" : "chevron-down"} size={20} color="#666" />
+                </TouchableOpacity>
               </TouchableOpacity>
 
               {expandedCards.has(item.id) && (
@@ -280,21 +836,16 @@ const Reservation: React.FC<ReservationListProps> = ({
                       <Ionicons name="speedometer-outline" size={16} color="#666" />
                       <Text style={styles.detailText}>{item.vehicle.mileage} km</Text>
                     </View>
-
                     <View style={styles.detailItem}>
                       <Ionicons name="flash-outline" size={16} color="#666" />
                       <Text style={styles.detailText}>{item.vehicle.fuelType}</Text>
                     </View>
-
                     {item.user && (
                       <>
                         <View style={styles.detailItem}>
                           <Ionicons name="person-outline" size={16} color="#666" />
-                          <Text style={styles.detailText}>
-                            {item.user.prenom} {item.user.nom}
-                          </Text>
+                          <Text style={styles.detailText}>{item.user.prenom} {item.user.nom}</Text>
                         </View>
-
                         <View style={styles.detailItem}>
                           <Ionicons name="mail-outline" size={16} color="#666" />
                           <Text style={styles.detailText}>{item.user.email}</Text>
@@ -310,12 +861,9 @@ const Reservation: React.FC<ReservationListProps> = ({
                     </View>
                   )}
 
-                  <TouchableOpacity
-                    style={styles.cancelButton}
-                    onPress={() => handleCancel(item.id)}
-                  >
+                  <TouchableOpacity style={styles.cancelButton} onPress={() => handleCancel(item.id)}>
                     <Ionicons name="close-circle-outline" size={18} color="#D32F2F" />
-                    <Text style={styles.cancelButtonText}>Annuler la réservation</Text>
+                    <Text style={styles.cancelButtonText}>Annuler</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -327,220 +875,46 @@ const Reservation: React.FC<ReservationListProps> = ({
   );
 };
 
+// === STYLES (inchangés) ===
 const styles = StyleSheet.create({
-  mainContainer: {
-    flex: 1,
-    backgroundColor: "#f7f7f7",
-    paddingTop: 25,
-  },
-  tabContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    paddingVertical: 10,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E0E0E0",
-  },
-  tabButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#E0E0E0",
-  },
-  activeTab: {
-    backgroundColor: "#FF6200",
-  },
-  tabText: {
-    color: "#666",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  container: {
-    padding: 16,
-  },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#F8F9FA",
-  },
-  errorText: {
-    color: "#D32F2F",
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 16,
-  },
-  retryButton: {
-    backgroundColor: "#FF6200",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  retryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#333333",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptySubText: {
-    fontSize: 14,
-    color: "#666666",
-    textAlign: "center",
-  },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    marginBottom: 16,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    padding: 16,
-    alignItems: "center",
-  },
-  imageContainer: {
-    marginRight: 16,
-  },
-  vehicleImage: {
-    width: 120,
-    height: 100,
-    borderRadius: 12,
-    backgroundColor: "#E0E0E0",
-  },
-  mainInfo: {
-    flex: 1,
-  },
-  titleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 6,
-  },
-  vehicleTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1A1A1A",
-    flex: 1,
-    marginRight: 8,
-  },
-  typeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  locationBadge: {
-    backgroundColor: "#4CAF50",
-  },
-  achatBadge: {
-    backgroundColor: "#2196F3",
-  },
-  typeBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  vehiclePrice: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#FF6200",
-    marginBottom: 6,
-  },
-  parkingText: {
-    fontSize: 12,
-    color: "#666666",
-    marginBottom: 6,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  datePreview: {
-    marginTop: 4,
-  },
-  datePreviewText: {
-    fontSize: 12,
-    color: "#666666",
-    fontStyle: "italic",
-  },
-  headerActions: {
-    alignItems: "center",
-  },
-  expandButton: {
-    padding: 4,
-  },
-  expandedContent: {
-    padding: 16,
-    paddingTop: 0,
-    borderTopWidth: 1,
-    borderTopColor: "#F0F0F0",
-  },
-  detailsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginBottom: 12,
-  },
-  detailItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 16,
-    marginBottom: 8,
-  },
-  detailText: {
-    fontSize: 12,
-    color: "#666666",
-    marginLeft: 6,
-  },
-  descriptionContainer: {
-    marginBottom: 16,
-  },
-  descriptionLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#333333",
-    marginBottom: 4,
-  },
-  descriptionText: {
-    fontSize: 12,
-    color: "#666666",
-    lineHeight: 16,
-  },
-  cancelButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFEBEE",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#FFCDD2",
-  },
-  cancelButtonText: {
-    color: "#D32F2F",
-    fontSize: 14,
-    fontWeight: "600",
-    marginLeft: 6,
-  },
+  mainContainer: { flex: 1, backgroundColor: "#f7f7f7", paddingTop: 25 },
+  tabContainer: { flexDirection: "row", justifyContent: "space-around", paddingVertical: 10, backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#E0E0E0" },
+  tabButton: { paddingVertical: 8, paddingHorizontal: 20, borderRadius: 20, backgroundColor: "#E0E0E0" },
+  activeTab: { backgroundColor: "#FF6200" },
+  tabText: { color: "#666", fontSize: 14, fontWeight: "500" },
+  activeTabText: { color: "#FFF", fontWeight: "700" },
+  container: { padding: 16 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F8F9FA" },
+  errorText: { color: "#D32F2F", fontSize: 16, fontWeight: "600", textAlign: "center", marginBottom: 16 },
+  retryButton: { backgroundColor: "#FF6200", paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8, elevation: 3 },
+  retryButtonText: { color: "#FFF", fontSize: 16, fontWeight: "600" },
+  emptyContainer: { alignItems: "center", justifyContent: "center", paddingVertical: 60 },
+  emptyText: { fontSize: 18, fontWeight: "700", color: "#333", marginTop: 16 },
+  emptySubText: { fontSize: 14, color: "#666", textAlign: "center" },
+  card: { backgroundColor: "#FFF", borderRadius: 16, marginBottom: 16, overflow: "hidden", elevation: 4, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8 },
+  cardHeader: { flexDirection: "row", padding: 16, alignItems: "center" },
+  imageContainer: { marginRight: 16 },
+  vehicleImage: { width: 120, height: 100, borderRadius: 12, backgroundColor: "#E0E0E0" },
+  mainInfo: { flex: 1 },
+  titleContainer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
+  vehicleTitle: { fontSize: 18, fontWeight: "700", color: "#1A1A1A", flex: 1, marginRight: 8 },
+  typeBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  locationBadge: { backgroundColor: "#4CAF50" },
+  achatBadge: { backgroundColor: "#2196F3" },
+  typeBadgeText: { color: "#FFF", fontSize: 10, fontWeight: "700" },
+  vehiclePrice: { fontSize: 16, fontWeight: "600", color: "#FF6200", marginBottom: 6 },
+  parkingText: { fontSize: 12, color: "#666", flexDirection: "row", alignItems: "center", marginBottom: 6 },
+  datePreviewText: { fontSize: 12, color: "#666", fontStyle: "italic" },
+  expandButton: { padding: 4 },
+  expandedContent: { padding: 16, paddingTop: 0, borderTopWidth: 1, borderTopColor: "#F0F0F0" },
+  detailsGrid: { flexDirection: "row", flexWrap: "wrap", marginBottom: 12 },
+  detailItem: { flexDirection: "row", alignItems: "center", marginRight: 16, marginBottom: 8 },
+  detailText: { fontSize: 12, color: "#666", marginLeft: 6 },
+  descriptionContainer: { marginBottom: 16 },
+  descriptionLabel: { fontSize: 14, fontWeight: "600", color: "#333", marginBottom: 4 },
+  descriptionText: { fontSize: 12, color: "#666", lineHeight: 16 },
+  cancelButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#FFEBEE", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: "#FFCDD2" },
+  cancelButtonText: { color: "#D32F2F", fontSize: 14, fontWeight: "600", marginLeft: 6 },
 });
 
 export default Reservation;
