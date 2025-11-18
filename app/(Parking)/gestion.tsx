@@ -45,6 +45,14 @@ type Vehicule = {
     date: string;
     client: string;
   };
+  // NOUVEAUX CHAMPS POUR LES DÉTAILS
+  dureeGarantie?: number;
+  mileage?: number;
+  fuelType?: string;
+  carteGrise?: boolean;
+  assurance?: boolean;
+  vignette?: boolean;
+  description?: string;
 };
 
 type ParkingData = {
@@ -103,21 +111,43 @@ const MonParkingScreen: React.FC = () => {
       setLoading(true);
       try {
         if (authState.accessToken) {
+          console.log('🔑 Token présent, récupération données...');
           setAuthToken(authState.accessToken);
           const data = await getParkingManagementData();
+          
+          // DEBUG: Vérifier la structure des données
+          console.log('✅ Données parking reçues:', {
+            parking: data.parking,
+            nbVehicles: data.vehicles?.length,
+            statistics: data.statistics
+          });
+          
+          // DEBUG: Vérifier le premier véhicule pour voir tous les champs
+          if (data.vehicles && data.vehicles.length > 0) {
+            console.log('🚗 Premier véhicule complet:', data.vehicles[0]);
+            console.log('📋 Champs disponibles:', Object.keys(data.vehicles[0]));
+          }
+          
           setParkingData(data);
+        } else {
+          console.warn('❌ Token absent');
         }
       } catch (error: any) {
-        console.error('Erreur API gestion parking:', error);
+        console.error('❌ Erreur API gestion parking:', {
+          message: error.message,
+          status: error.response?.status,
+          data: error.response?.data
+        });
+        
         if (error.response?.status === 403) {
-          console.log("Tentative de rafraîchissement...");
+          console.log("🔄 Tentative de rafraîchissement...");
           const success = await refreshAuth();
           if (success && authState.accessToken) {
             setAuthToken(authState.accessToken);
             const data = await getParkingManagementData();
             setParkingData(data);
           } else {
-            console.error('Rafraîchissement échoué');
+            console.error('❌ Rafraîchissement échoué');
           }
         }
       } finally {
@@ -128,7 +158,7 @@ const MonParkingScreen: React.FC = () => {
     if (authState.accessToken) {
       fetchParkingData();
     } else {
-      console.error('Token absent, requête non effectuée');
+      console.error('❌ Token absent, requête non effectuée');
       setLoading(false);
     }
   }, [authState.accessToken]);
@@ -207,7 +237,7 @@ const MonParkingScreen: React.FC = () => {
   const filteredVoitures = parkingData?.vehicles.filter(v => {
     if (selectedBottomFilter === 'En vente') return v.forSale === true && v.status !== 'ACHETE';
     if (selectedBottomFilter === 'En location') return v.forRent === true && v.status !== 'EN_LOCATION';
-    if (selectedBottomFilter === 'Tous') return true; // Affiche toutes les voitures du parking
+    if (selectedBottomFilter === 'Tous') return true;
     return true;
   }).filter(v =>
     v.marqueRef.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -221,7 +251,6 @@ const MonParkingScreen: React.FC = () => {
   };
 
   const getStatusLabel = (forSale: boolean, forRent: boolean, status: string) => {
-    // Si le véhicule a un statut spécifique, on l'utilise
     if (status && status !== 'DISPONIBLE') {
       switch (status) {
         case 'EN_LOCATION': return 'En location';
@@ -233,11 +262,37 @@ const MonParkingScreen: React.FC = () => {
       }
     }
     
-    // Sinon, on détermine le statut basé sur forSale et forRent
     if (forSale && forRent) return 'Vente & Location';
     if (forSale) return 'En vente';
     if (forRent) return 'En location';
     return 'Disponible';
+  };
+
+  // FONCTION AMÉLIORÉE : Afficher les détails supplémentaires
+  const renderAdditionalDetails = (vehicule: Vehicule) => {
+    const details = [];
+    
+    if (vehicule.mileage) {
+      details.push(`${vehicule.mileage.toLocaleString()} km`);
+    }
+    
+    if (vehicule.fuelType) {
+      details.push(vehicule.fuelType);
+    }
+    
+    if (vehicule.dureeGarantie) {
+      details.push(`Garantie ${vehicule.dureeGarantie} mois`);
+    }
+    
+    if (details.length > 0) {
+      return (
+        <Text style={styles.additionalDetails}>
+          {details.join(' • ')}
+        </Text>
+      );
+    }
+    
+    return null;
   };
 
   const handleScroll = Animated.event(
@@ -250,12 +305,14 @@ const MonParkingScreen: React.FC = () => {
     }
   );
 
-  // FONCTION MODIFIÉE : Navigation vers CarDetailScreen
+  // FONCTION POUR VOIR LES DÉTAILS COMPLETS
   const handleVoiturePress = (vehicule: Vehicule) => {
+    console.log('🚗 Navigation vers détails:', vehicule);
     router.push({
       pathname: "/(Clients)/CreateListingScreen",
       params: { 
-        vehicule: JSON.stringify(vehicule)
+        vehicule: JSON.stringify(vehicule),
+        isParkingView: 'true'
       }
     });
   };
@@ -295,7 +352,6 @@ const MonParkingScreen: React.FC = () => {
           contentContainerStyle={{ paddingHorizontal: chartPadding }}
         >
           <Svg width={totalWidth + chartPadding * 2} height={chartHeight + 60}>
-            {/* Lignes de grille */}
             {[0, 25, 50, 75, 100].map((percent, index) => {
               const y = chartHeight - (percent / 100) * chartHeight;
               return (
@@ -317,7 +373,6 @@ const MonParkingScreen: React.FC = () => {
 
               return (
                 <View key={index}>
-                  {/* Barre des ventes */}
                   <Rect
                     x={x}
                     y={chartHeight - salesHeight}
@@ -326,7 +381,6 @@ const MonParkingScreen: React.FC = () => {
                     fill="#FD6A00"
                     rx={4}
                   />
-                  {/* Barre des locations */}
                   <Rect
                     x={x + barWidth + 2}
                     y={chartHeight - rentalsHeight}
@@ -336,7 +390,6 @@ const MonParkingScreen: React.FC = () => {
                     rx={4}
                   />
                   
-                  {/* Valeurs des ventes - Toujours affichées même si 0 */}
                   <SvgText
                     x={x + barWidth / 2}
                     y={chartHeight - salesHeight - 5}
@@ -348,7 +401,6 @@ const MonParkingScreen: React.FC = () => {
                     {monthlyData.sales[index]}
                   </SvgText>
                   
-                  {/* Valeurs des locations - Toujours affichées même si 0 */}
                   <SvgText
                     x={x + barWidth * 1.5 + 2}
                     y={chartHeight - rentalsHeight - 5}
@@ -360,7 +412,6 @@ const MonParkingScreen: React.FC = () => {
                     {monthlyData.rentals[index]}
                   </SvgText>
                   
-                  {/* Labels des mois */}
                   <SvgText
                     x={x + barWidth}
                     y={chartHeight + 20}
@@ -376,7 +427,6 @@ const MonParkingScreen: React.FC = () => {
           </Svg>
         </ScrollView>
         
-        {/* Légende */}
         <View style={styles.chartLegend}>
           <View style={styles.legendItem}>
             <View style={[styles.legendColor, { backgroundColor: '#FD6A00' }]} />
@@ -525,32 +575,36 @@ const MonParkingScreen: React.FC = () => {
                 style={styles.voitureCard}
                 onPress={() => handleVoiturePress(voiture)}
               >
-                <Image
-                  source={voiture.photos && voiture.photos.length > 0 ? { uri: voiture.photos[0] } : getImageSource(voiture.forSale, voiture.forRent)}
-                  style={styles.voitureImageClickable}
-                  defaultSource={getImageSource(voiture.forSale, voiture.forRent)}
-                />
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={{ fontSize: 18, fontWeight: 'bold' }}>
-                    {voiture.marqueRef.name} {voiture.model}
-                  </Text>
-                  <Text style={{ fontSize: 14, color: '#666' }}>
-                    {getStatusLabel(voiture.forSale, voiture.forRent, voiture.status)}
-                  </Text>
-                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FD6A00' }}>{voiture.prix.toLocaleString()} FCFA</Text>
-                  
-                  {/* Affichage du nombre de réservations actives */}
-                  {voiture.stats && voiture.stats.reservationsActives > 0 && (
-                    <Text style={{ fontSize: 12, color: '#f1f1f1', fontWeight: 'bold' }}>
-                      {voiture.stats.reservationsActives} réservation(s) active(s)
+                <View style={styles.voitureInfo}>
+                  <Image
+                    source={voiture.photos && voiture.photos.length > 0 ? { uri: voiture.photos[0] } : getImageSource(voiture.forSale, voiture.forRent)}
+                    style={styles.voitureImageClickable}
+                    defaultSource={getImageSource(voiture.forSale, voiture.forRent)}
+                  />
+                  <View style={styles.voitureDetails}>
+                    <Text style={styles.voitureName}>
+                      {voiture.marqueRef.name} {voiture.model}
                     </Text>
-                  )}
-                  
-                  {voiture.nextReservation && (
-                    <Text style={{ fontSize: 12, color: '#666' }}>
-                      Prochaine réservation: {new Date(voiture.nextReservation.date).toLocaleDateString()}
+                    <Text style={styles.voitureStatus}>
+                      {getStatusLabel(voiture.forSale, voiture.forRent, voiture.status)}
                     </Text>
-                  )}
+                    <Text style={styles.voiturePrice}>{voiture.prix.toLocaleString()} FCFA</Text>
+                    
+                    {/* AFFICHER LES DÉTAILS SUPPLÉMENTAIRES */}
+                    {renderAdditionalDetails(voiture)}
+                    
+                    {voiture.stats && voiture.stats.reservationsActives > 0 && (
+                      <Text style={styles.reservationActive}>
+                        {voiture.stats.reservationsActives} réservation(s) active(s)
+                      </Text>
+                    )}
+                    
+                    {voiture.nextReservation && (
+                      <Text style={styles.nextReservation}>
+                        Prochaine réservation: {new Date(voiture.nextReservation.date).toLocaleDateString()}
+                      </Text>
+                    )}
+                  </View>
                 </View>
               </TouchableOpacity>
             ))
@@ -614,8 +668,6 @@ const styles = StyleSheet.create({
   bottomButtonText: { color: '#FD6A00', fontWeight: 'bold', fontSize: 12 },
   bottomButtonTextActive: { color: '#fff' },
   voitureCard: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
     marginBottom: 12, 
     padding: 12, 
     backgroundColor: '#fff', 
@@ -626,11 +678,53 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 1,
   },
+  voitureInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   voitureImageClickable: { 
     width: 100, 
     height: 80, 
     borderRadius: 10, 
     resizeMode: 'cover' 
+  },
+  voitureDetails: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  voitureName: { 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  voitureStatus: { 
+    fontSize: 14, 
+    color: '#666',
+    marginTop: 2,
+  },
+  voiturePrice: { 
+    fontSize: 16, 
+    fontWeight: 'bold', 
+    color: '#FD6A00',
+    marginTop: 4,
+  },
+  // NOUVEAU STYLE POUR LES DÉTAILS SUPPLÉMENTAIRES
+  additionalDetails: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  reservationActive: {
+    fontSize: 12, 
+    color: '#666', 
+    fontWeight: 'bold',
+    marginTop: 2,
+  },
+  nextReservation: {
+    fontSize: 12, 
+    color: '#666',
+    marginTop: 2,
   },
   errorText: { 
     textAlign: 'center', 

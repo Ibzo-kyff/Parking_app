@@ -15,6 +15,7 @@ import {
   Alert,
 } from 'react-native';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
+import { router } from 'expo-router';
 import { FontAwesome5, MaterialIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { BASE_URL } from './services/listeVoiture';
@@ -22,6 +23,8 @@ import { useAuth } from '../context/AuthContext';
 import { favorisService } from './services/favorisService';
 import { viewsService } from './services/viewsService';
 import { createReservationNotification } from './services/Notification';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
 
 interface Marque {
   id: number;
@@ -33,6 +36,7 @@ interface Marque {
 interface Vehicule {
   id: number;
   marqueRef?: Marque;
+  marque?: string;
   model: string;
   prix: number;
   photos: string[] | string;
@@ -57,6 +61,9 @@ interface Vehicule {
     id: number;
     nom: string;
   };
+  garantie?: boolean;
+  chauffeur?: boolean;
+  dureeAssurance?: number;
 }
 
 const { width } = Dimensions.get('window');
@@ -78,9 +85,15 @@ function CarDetailScreen() {
   // États pour le favoris
   const [isFavorite, setIsFavorite] = useState(false);
 
+  // Vérifier si c'est le parking qui consulte
+  const [isParkingView, setIsParkingView] = useState(false);
+
+  // États pour le menu de modification/suppression
+  const [actionMenuVisible, setActionMenuVisible] = useState(false);
+
   const { authState } = useAuth();
 
-  // Vérifier si le véhicule est passé
+  // Vérifier si le véhicule est passé et si c'est une vue parking
   let vehicule: Vehicule | null = null;
   
   if (route.params?.vehicule) {
@@ -90,21 +103,102 @@ function CarDetailScreen() {
       } else {
         vehicule = route.params.vehicule;
       }
+      console.log('🚗 Véhicule reçu:', vehicule);
     } catch (error) {
       console.error('Erreur parsing véhicule:', error);
     }
   }
 
-  // AJOUT: Incrémenter les vues au chargement de la page
+  // Vérifier si c'est le parking qui consulte
   useEffect(() => {
-    if (vehicule?.id) {
-      viewsService.incrementViews(vehicule.id);
+    if (route.params?.isParkingView) {
+      setIsParkingView(route.params.isParkingView === 'true');
     }
-  }, [vehicule?.id]);
+    
+    // Vérifier également par le rôle de l'utilisateur
+    if (authState.role === 'PARKING') {
+      setIsParkingView(true);
+    }
+  }, [route.params, authState.role]);
 
-  // Fonction pour vérifier l'état favoris
+  // Debug des données du véhicule
+  useEffect(() => {
+    console.log('🔍 DONNÉES VÉHICULE COMPLÈTES:', {
+      id: vehicule?.id,
+      marque: vehicule?.marque,
+      marqueRef: vehicule?.marqueRef,
+      model: vehicule?.model,
+      prix: vehicule?.prix,
+      photos: vehicule?.photos,
+      photosUrls: getPhotoUrls(vehicule?.photos),
+      forSale: vehicule?.forSale,
+      forRent: vehicule?.forRent,
+      mileage: vehicule?.mileage,
+      fuelType: vehicule?.fuelType,
+      dureeGarantie: vehicule?.dureeGarantie,
+      description: vehicule?.description,
+      carteGrise: vehicule?.carteGrise,
+      assurance: vehicule?.assurance,
+      vignette: vehicule?.vignette,
+      garantie: vehicule?.garantie,
+      chauffeur: vehicule?.chauffeur,
+      dureeAssurance: vehicule?.dureeAssurance
+    });
+  }, [vehicule]);
+
+  // Setup notifications
+  useEffect(() => {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+      }),
+    });
+
+    registerForPushNotificationsAsync();
+  }, []);
+
+  async function registerForPushNotificationsAsync() {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
+    }
+
+    if (Device.isDevice) {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== 'granted') {
+        alert('Failed to get permission for notifications!');
+        return;
+      }
+    } else {
+      alert('Must use physical device for Notifications');
+    }
+  }
+
+  async function showLocalNotification(title: string, body: string, data: any) {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data,
+      },
+      trigger: null,
+    });
+  }
+
+  // Fonction pour vérifier l'état favoris (seulement si pas parking)
   const checkFavoriteStatus = async () => {
-    if (!vehicule?.id) return;
+    if (!vehicule?.id || isParkingView) return;
     
     try {
       const favorite = await favorisService.isInFavoris(vehicule.id);
@@ -118,19 +212,19 @@ function CarDetailScreen() {
   // Vérifier l'état favoris au chargement initial
   useEffect(() => {
     checkFavoriteStatus();
-  }, [vehicule?.id]);
+  }, [vehicule?.id, isParkingView]);
 
   // Re-vérifier l'état favoris quand l'écran redevient actif
   useFocusEffect(
     React.useCallback(() => {
-      if (vehicule?.id) {
+      if (vehicule?.id && !isParkingView) {
         checkFavoriteStatus();
       }
-    }, [vehicule?.id])
+    }, [vehicule?.id, isParkingView])
   );
 
   const toggleFavorite = async () => {
-    if (!vehicule) return;
+    if (!vehicule || isParkingView) return;
 
     const newFavoriteState = !isFavorite;
     setIsFavorite(newFavoriteState);
@@ -147,37 +241,197 @@ function CarDetailScreen() {
     }
   };
 
+  // Fonction améliorée pour gérer les photos
+  const getPhotoUrls = (photos: string[] | string | undefined): string[] => {
+    if (!photos) return [];
+    
+    try {
+      if (Array.isArray(photos)) {
+        return photos
+          .filter(photo => photo && photo !== "" && photo !== null)
+          .map(photo => {
+            if (photo.startsWith('http')) return photo;
+            if (photo.startsWith('file://')) return photo;
+            return `${BASE_URL}${photo.startsWith('/') ? '' : '/'}${photo}`;
+          });
+      }
+      
+      if (typeof photos === 'string') {
+        const photoArray = photos.split(',').filter(p => p && p !== "");
+        return photoArray.map(photo => {
+          if (photo.startsWith('http')) return photo;
+          if (photo.startsWith('file://')) return photo;
+          return `${BASE_URL}${photo.startsWith('/') ? '' : '/'}${photo}`;
+        });
+      }
+      
+      return [];
+    } catch (error) {
+      console.error('Erreur formatage photos:', error);
+      return [];
+    }
+  };
+
+  const photoUrls = getPhotoUrls(vehicule?.photos);
+
+  // FONCTION DE SUPPRESSION CORRIGÉE
+  const handleDelete = () => {
+    setActionMenuVisible(false);
+    if (!vehicule) return;
+
+    Alert.alert(
+      "Supprimer le véhicule",
+      `Êtes-vous sûr de vouloir supprimer ${vehicule.marqueRef?.name || vehicule.marque || 'Marque'} ${vehicule.model || 'Modèle'} ? Cette action est irréversible.`,
+      [
+        {
+          text: "Annuler",
+          style: "cancel"
+        },
+        {
+          text: "Supprimer",
+          style: "destructive",
+          onPress: confirmDelete
+        }
+      ]
+    );
+  };
+
+  const confirmDelete = async () => {
+    if (!vehicule?.id) return;
+
+    try {
+      const token = authState.accessToken;
+      if (!token) {
+        Alert.alert('Erreur', 'Token d\'authentification manquant');
+        return;
+      }
+
+      setIsLoading(true);
+      
+      console.log('🗑️ Tentative de suppression du véhicule:', vehicule.id);
+      
+      const response = await fetch(`${BASE_URL}/vehicules/${vehicule.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('📡 Réponse suppression:', response.status);
+
+      if (response.ok) {
+        Alert.alert(
+          'Succès ✅',
+          'Véhicule supprimé avec succès',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Retour à l'écran précédent après suppression
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace('/(tabs)/Accueil');
+                }
+              }
+            }
+          ]
+        );
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Erreur suppression:', errorText);
+        let errorMessage = 'Erreur lors de la suppression';
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          // Si ce n'est pas du JSON, utiliser le texte brut
+          errorMessage = errorText || errorMessage;
+        }
+        
+        throw new Error(errorMessage);
+      }
+    } catch (error: any) {
+      console.error('❌ Erreur complète suppression:', error);
+      Alert.alert('Erreur ❌', error.message || 'Erreur lors de la suppression du véhicule');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // FONCTION DE MODIFICATION
+  const handleModify = () => {
+    setActionMenuVisible(false);
+    if (!vehicule) return;
+    
+    console.log('✏️ Navigation vers modification:', vehicule);
+    
+    // Préparer les données pour l'écran de modification
+    const vehicleDataForEdit = {
+      id: vehicule.id,
+      marque: vehicule.marqueRef ? {
+        id: vehicule.marqueRef.id,
+        name: vehicule.marqueRef.name,
+        logoUrl: vehicule.marqueRef.logoUrl,
+        isCustom: vehicule.marqueRef.isCustom
+      } : vehicule.marque || '',
+      model: vehicule.model,
+      prix: vehicule.prix,
+      photos: vehicule.photos,
+      dureeGarantie: vehicule.dureeGarantie,
+      mileage: vehicule.mileage,
+      fuelType: vehicule.fuelType,
+      carteGrise: vehicule.carteGrise,
+      assurance: vehicule.assurance,
+      vignette: vehicule.vignette,
+      forRent: vehicule.forRent,
+      forSale: vehicule.forSale,
+      description: vehicule.description,
+      garantie: vehicule.garantie,
+      chauffeur: vehicule.chauffeur,
+      dureeAssurance: vehicule.dureeAssurance
+    };
+
+    // Navigation vers l'écran de modification
+    router.push({
+      pathname: "/AjoutParking",
+      params: { 
+        vehicleToEdit: JSON.stringify(vehicleDataForEdit),
+        mode: 'edit'
+      }
+    } as any);
+  };
+
   if (!vehicule) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color="#FF6F00" />
-          <Text style={{ marginTop: 10 }}>Chargement...</Text>
+          <Text style={{ marginTop: 10 }}>Chargement des détails du véhicule...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  // Préparer photos
-  const getPhotoUrls = (photos: string[] | string | undefined): string[] => {
-    if (!photos) return [];
-    if (Array.isArray(photos)) {
-      return photos.map(photo => photo.startsWith('http') ? photo : `${BASE_URL}${photo}`);
-    }
-    return [photos.startsWith('http') ? photos : `${BASE_URL}${photos}`];
-  };
-
-  const photoUrls = getPhotoUrls(vehicule.photos);
-
-  // Render functions
+  // Render functions avec gestion des données manquantes
   const renderFeatureItem = (icon: React.ReactNode, label: string, value: any, condition: boolean = true) => {
-    if (!condition || value === undefined || value === null || value === '') return null;
+    if (!condition) return null;
+    
+    const displayValue = value === undefined || value === null || value === '' 
+      ? 'Non spécifié' 
+      : (typeof value === 'boolean' ? (value ? 'Oui' : 'Non') : value);
+    
     return (
       <View style={styles.featureItem}>
         {icon}
         <Text style={styles.featureLabel}>{label}</Text>
-        <Text style={styles.featureValue}>
-          {typeof value === 'boolean' ? (value ? 'Oui' : 'Non') : value}
+        <Text style={[
+          styles.featureValue,
+          (value === undefined || value === null || value === '') && styles.unknownValue
+        ]}>
+          {displayValue}
         </Text>
       </View>
     );
@@ -185,21 +439,29 @@ function CarDetailScreen() {
 
   const renderImageItem = ({ item }: { item: string }) => (
     <View style={styles.imageContainer}>
-      <Image source={{ uri: item }} style={styles.carImage} resizeMode="cover" />
-      <TouchableOpacity 
-        style={[
-          styles.favoriteButton,
-          isFavorite && styles.favoriteButtonActive,
-        ]} 
-        onPress={toggleFavorite}
-      >
-        <FontAwesome5 
-          name="heart" 
-          size={24} 
-          color={isFavorite ? "#FFF" : "#FF6F00"} 
-          solid={isFavorite}
-        />
-      </TouchableOpacity>
+      <Image 
+        source={{ uri: item }} 
+        style={styles.carImage} 
+        resizeMode="cover"
+        onError={(error) => console.log('Erreur chargement image:', error.nativeEvent.error)}
+      />
+      {/* Bouton favoris - CACHÉ si c'est le parking */}
+      {!isParkingView && (
+        <TouchableOpacity 
+          style={[
+            styles.favoriteButton,
+            isFavorite && styles.favoriteButtonActive,
+          ]} 
+          onPress={toggleFavorite}
+        >
+          <FontAwesome5 
+            name="heart" 
+            size={24} 
+            color={isFavorite ? "#FFF" : "#FF6F00"} 
+            solid={isFavorite}
+          />
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -214,8 +476,9 @@ function CarDetailScreen() {
     );
   };
 
-  // Ouvrir modale
+  // Ouvrir modale (seulement si pas parking)
   const handleReservePress = () => {
+    if (isParkingView) return;
     setModalVisible(true);
   };
 
@@ -256,7 +519,6 @@ function CarDetailScreen() {
     }
   };
 
-  // ⭐⭐ FONCTION CRITIQUE CORRIGÉE : Confirmer réservation avec notifications
   const confirmReservation = async () => {
     if (!reservationType) return Alert.alert('Erreur', 'Sélectionnez un type de réservation');
     if (reservationType === 'LOCATION' && (!startDate || !endDate)) {
@@ -315,7 +577,7 @@ function CarDetailScreen() {
       const newReservation = await response.json();
       console.log('✅ Réservation créée:', newReservation);
 
-      // ⭐⭐ NOTIFICATION LOCALE POUR L'UTILISATEUR
+      // NOTIFICATION LOCALE POUR L'UTILISATEUR
       try {
         await showLocalNotification(
           "🎉 Réservation confirmée !",
@@ -331,7 +593,7 @@ function CarDetailScreen() {
         console.warn('⚠️ Notification locale échouée:', notificationError);
       }
 
-      // ⭐⭐ NOTIFICATION AU PARKING SPÉCIFIQUE - VERSION AMÉLIORÉE
+      // NOTIFICATION AU PARKING
       if (vehicule?.parking?.id) {
         try {
           const userInfo = authState.user || { prenom: 'Utilisateur', nom: '', id: 0 };
@@ -375,10 +637,66 @@ function CarDetailScreen() {
     }
   };
 
+  // Rendu du menu d'actions pour le parking
+  const renderActionMenu = () => {
+    if (!isParkingView) return null;
+
+    return (
+      <View style={styles.actionMenuContainer}>
+        <TouchableOpacity 
+          style={styles.actionMenuButton}
+          onPress={() => setActionMenuVisible(true)}
+        >
+          <MaterialIcons name="more-vert" size={24} color="#666" />
+        </TouchableOpacity>
+
+        <Modal
+          transparent
+          visible={actionMenuVisible}
+          animationType="fade"
+          onRequestClose={() => setActionMenuVisible(false)}
+        >
+          <TouchableOpacity 
+            style={styles.actionMenuOverlay}
+            activeOpacity={1}
+            onPress={() => setActionMenuVisible(false)}
+          >
+            <View style={styles.actionMenuContent}>
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={handleModify}
+              >
+                <MaterialIcons name="edit" size={20} color="#FF6F00" />
+                <Text style={styles.menuItemText}>Modifier</Text>
+              </TouchableOpacity>
+
+              <View style={styles.menuDivider} />
+
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={handleDelete}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <ActivityIndicator size="small" color="#FF4444" />
+                ) : (
+                  <>
+                    <MaterialIcons name="delete" size={20} color="#FF4444" />
+                    <Text style={[styles.menuItemText, styles.deleteText]}>Supprimer</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {/* Carrousel avec bouton favoris intégré */}
+        {/* Carrousel avec bouton favoris intégré - CACHÉ si parking */}
         {photoUrls.length > 0 ? (
           <View>
             <FlatList
@@ -399,27 +717,31 @@ function CarDetailScreen() {
         ) : (
           <View style={[styles.imageContainer, styles.placeholderImage]}>
             <FontAwesome5 name="car" size={60} color="#ccc" />
-            <TouchableOpacity 
-              style={[
-                styles.favoriteButton,
-                isFavorite && styles.favoriteButtonActive,
-              ]} 
-              onPress={toggleFavorite}
-            >
-              <FontAwesome5 
-                name="heart" 
-                size={24} 
-                color={isFavorite ? "#FFF" : "#FF6F00"} 
-                solid={isFavorite}
-              />
-            </TouchableOpacity>
+            <Text style={styles.noImageText}>Aucune photo disponible</Text>
+            {/* Bouton favoris pour l'image placeholder - CACHÉ si parking */}
+            {!isParkingView && (
+              <TouchableOpacity 
+                style={[
+                  styles.favoriteButton,
+                  isFavorite && styles.favoriteButtonActive,
+                ]} 
+                onPress={toggleFavorite}
+              >
+                <FontAwesome5 
+                  name="heart" 
+                  size={24} 
+                  color={isFavorite ? "#FFF" : "#FF6F00"} 
+                  solid={isFavorite}
+                />
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
         {/* En-tête */}
         <View style={styles.headerCard}>
           <Text style={styles.carName}>
-            {vehicule.marqueRef?.name || 'Marque inconnue'} {vehicule.model || 'Modèle inconnu'}
+            {vehicule.marqueRef?.name || vehicule.marque || 'Marque inconnue'} {vehicule.model || 'Modèle inconnu'}
           </Text>
           <Text style={styles.priceValue}>
             {vehicule.prix ? `${vehicule.prix.toLocaleString()} FCFA` : 'Prix non disponible'}
@@ -429,31 +751,59 @@ function CarDetailScreen() {
               📍 {vehicule.parking.nom}
             </Text>
           )}
+          {/* Badges pour vente/location avec fallback */}
+          <View style={styles.badgesContainer}>
+            {vehicule.forSale && (
+              <View style={[styles.badge, styles.saleBadge]}>
+                <Text style={styles.badgeText}>À vendre</Text>
+              </View>
+            )}
+            {vehicule.forRent && (
+              <View style={[styles.badge, styles.rentBadge]}>
+                <Text style={styles.badgeText}>À louer</Text>
+              </View>
+            )}
+          </View>
         </View>
 
-        {/* Bouton réservation */}
-        <TouchableOpacity style={styles.reserveButton} onPress={handleReservePress}>
-          <Text style={styles.reserveButtonText}>Réserver maintenant</Text>
-        </TouchableOpacity>
+        {/* Bouton réservation - CACHÉ si c'est le parking */}
+        {!isParkingView && (
+          <TouchableOpacity style={styles.reserveButton} onPress={handleReservePress}>
+            <Text style={styles.reserveButtonText}>Réserver maintenant</Text>
+          </TouchableOpacity>
+        )}
 
-        {/* Détails du véhicule */}
+        {/* Message spécial pour le parking */}
+        {isParkingView && (
+          <View style={styles.parkingMessage}>
+            <MaterialIcons name="business" size={24} color="#FF6F00" />
+            <Text style={styles.parkingMessageText}>
+              Vue gestion - Votre véhicule
+            </Text>
+          </View>
+        )}
+
+        {/* Détails du véhicule avec menu d'actions */}
         <View style={styles.detailsCard}>
-          <Text style={styles.sectionTitle}>Détails du véhicule</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Détails du véhicule</Text>
+            {renderActionMenu()}
+          </View>
           
           <View style={styles.featuresGrid}>
             <View style={styles.featureRow}>
               {renderFeatureItem(
                 <MaterialIcons name="branding-watermark" size={22} color="#FF6F00" />,
                 'Marque',
-                vehicule.marqueRef?.name,
-                !!vehicule.marqueRef
+                vehicule.marqueRef?.name || vehicule.marque,
+                !!(vehicule.marqueRef?.name || vehicule.marque)
               )}
               
               {renderFeatureItem(
                 <FontAwesome5 name="tachometer-alt" size={20} color="#FF6F00" />,
                 'Kilométrage',
                 vehicule.mileage ? `${vehicule.mileage.toLocaleString()} km` : null,
-                vehicule.mileage !== undefined
+                vehicule.mileage !== undefined && vehicule.mileage !== null
               )}
             </View>
 
@@ -468,8 +818,24 @@ function CarDetailScreen() {
               {renderFeatureItem(
                 <FontAwesome5 name="shield-alt" size={20} color="#FF6F00" />,
                 'Garantie',
-                vehicule.dureeGarantie ? `${vehicule.dureeGarantie} mois` : null,
-                vehicule.dureeGarantie !== undefined
+                vehicule.dureeGarantie ? `${vehicule.dureeGarantie} mois` : (vehicule.garantie ? 'Incluse' : 'Non incluse'),
+                vehicule.dureeGarantie !== undefined || vehicule.garantie !== undefined
+              )}
+            </View>
+
+            <View style={styles.featureRow}>
+              {renderFeatureItem(
+                <FontAwesome5 name="user-tie" size={20} color="#FF6F00" />,
+                'Chauffeur',
+                vehicule.chauffeur,
+                vehicule.chauffeur !== undefined
+              )}
+              
+              {renderFeatureItem(
+                <FontAwesome5 name="file-contract" size={20} color="#FF6F00" />,
+                'Assurance',
+                vehicule.dureeAssurance ? `${vehicule.dureeAssurance} mois` : (vehicule.assurance ? 'Incluse' : 'Non incluse'),
+                vehicule.dureeAssurance !== undefined || vehicule.assurance !== undefined
               )}
             </View>
           </View>
@@ -484,52 +850,44 @@ function CarDetailScreen() {
         </View>
 
         {/* Options supplémentaires */}
-        {(vehicule.carteGrise !== undefined || vehicule.assurance !== undefined || vehicule.vignette !== undefined) && (
-          <View style={styles.optionsCard}>
-            <Text style={styles.sectionTitle}>Options</Text>
+        <View style={styles.optionsCard}>
+          <Text style={styles.sectionTitle}>Options incluses</Text>
+          
+          <View style={styles.optionsList}>
+            <View style={styles.optionItem}>
+              <MaterialIcons 
+                name={vehicule.carteGrise ? "check-circle" : "cancel"} 
+                size={20} 
+                color={vehicule.carteGrise ? "#28a745" : "#dc3545"} 
+              />
+              <Text style={styles.optionText}>
+                Carte Grise: {vehicule.carteGrise ? 'Disponible' : 'Non disponible'}
+              </Text>
+            </View>
             
-            <View style={styles.optionsList}>
-              {vehicule.carteGrise !== undefined && (
-                <View style={styles.optionItem}>
-                  <MaterialIcons 
-                    name={vehicule.carteGrise ? "check-circle" : "cancel"} 
-                    size={20} 
-                    color={vehicule.carteGrise ? "#28a745" : "#dc3545"} 
-                  />
-                  <Text style={styles.optionText}>
-                    Carte Grise: {vehicule.carteGrise ? 'Disponible' : 'Non disponible'}
-                  </Text>
-                </View>
-              )}
-              
-              {vehicule.assurance !== undefined && (
-                <View style={styles.optionItem}>
-                  <MaterialIcons 
-                    name={vehicule.assurance ? "check-circle" : "cancel"} 
-                    size={20} 
-                    color={vehicule.assurance ? "#28a745" : "#dc3545"} 
-                  />
-                  <Text style={styles.optionText}>
-                    Assurance: {vehicule.assurance ? 'Incluse' : 'Non incluse'}
-                  </Text>
-                </View>
-              )}
-              
-              {vehicule.vignette !== undefined && (
-                <View style={styles.optionItem}>
-                  <MaterialIcons 
-                    name={vehicule.vignette ? "check-circle" : "cancel"} 
-                    size={20} 
-                    color={vehicule.vignette ? "#28a745" : "#dc3545"} 
-                  />
-                  <Text style={styles.optionText}>
-                    Vignette: {vehicule.vignette ? 'Valide' : 'Non valide'}
-                  </Text>
-                </View>
-              )}
+            <View style={styles.optionItem}>
+              <MaterialIcons 
+                name={vehicule.assurance ? "check-circle" : "cancel"} 
+                size={20} 
+                color={vehicule.assurance ? "#28a745" : "#dc3545"} 
+              />
+              <Text style={styles.optionText}>
+                Assurance: {vehicule.assurance ? 'Incluse' : 'Non incluse'}
+              </Text>
+            </View>
+            
+            <View style={styles.optionItem}>
+              <MaterialIcons 
+                name={vehicule.vignette ? "check-circle" : "cancel"} 
+                size={20} 
+                color={vehicule.vignette ? "#28a745" : "#dc3545"} 
+              />
+              <Text style={styles.optionText}>
+                Vignette: {vehicule.vignette ? 'Valide' : 'Non valide'}
+              </Text>
             </View>
           </View>
-        )}
+        </View>
 
         {/* Statistiques */}
         {vehicule.stats && (
@@ -551,123 +909,124 @@ function CarDetailScreen() {
         )}
       </ScrollView>
 
-      {/* Modale de réservation */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <TouchableOpacity style={styles.closeButton} onPress={() => setModalVisible(false)}>
-              <MaterialIcons name="close" size={24} color="#666" />
-            </TouchableOpacity>
-
-            <Text style={styles.modalTitle}>
-              Réserver {vehicule.marqueRef?.name || 'Marque'} {vehicule.model || 'Modèle'}
-            </Text>
-
-            <View style={styles.typeButtons}>
-              <TouchableOpacity
-                style={[styles.typeButton, reservationType === 'ACHAT' && styles.typeButtonSelected]}
-                onPress={() => selectType('ACHAT')}
-              >
-                <FontAwesome5 name="shopping-cart" size={20} color={reservationType === 'ACHAT' ? '#FFF' : '#FF6F00'} style={styles.typeIcon} />
-                <Text style={[styles.typeButtonText, reservationType === 'ACHAT' && styles.typeButtonTextSelected]}>Achat</Text>
+      {/* Modale de réservation - CACHÉE si parking */}
+      {!isParkingView && (
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={modalVisible}
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <TouchableOpacity style={styles.closeButton} onPress={() => setModalVisible(false)}>
+                <MaterialIcons name="close" size={24} color="#666" />
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.typeButton, reservationType === 'LOCATION' && styles.typeButtonSelected]}
-                onPress={() => selectType('LOCATION')}
-              >
-                <FontAwesome5 name="calendar-alt" size={20} color={reservationType === 'LOCATION' ? '#FFF' : '#FF6F00'} style={styles.typeIcon} />
-                <Text style={[styles.typeButtonText, reservationType === 'LOCATION' && styles.typeButtonTextSelected]}>Location</Text>
-              </TouchableOpacity>
-            </View>
 
-            {reservationType === 'LOCATION' && (
-              <View style={styles.datePickers}>
-                <Text style={styles.dateLabel}>Date de début</Text>
-                <TouchableOpacity style={styles.dateButton} onPress={() => setShowStartPicker(true)}>
-                  <FontAwesome5 name="calendar" size={16} color="#666" style={styles.dateIcon} />
-                  <Text style={styles.dateButtonText}>
-                    {startDate ? startDate.toLocaleDateString() : 'Sélectionner une date'}
-                  </Text>
-                </TouchableOpacity>
-                {showStartPicker && (
-                  <DateTimePicker
-                    value={startDate || new Date()}
-                    mode="date"
-                    display="default"
-                    onChange={onStartDateChange}
-                    minimumDate={new Date()}
-                  />
-                )}
+              <Text style={styles.modalTitle}>
+                Réserver {vehicule.marqueRef?.name || vehicule.marque || 'Marque'} {vehicule.model || 'Modèle'}
+              </Text>
 
-                <Text style={styles.dateLabel}>Date de fin</Text>
-                <TouchableOpacity style={styles.dateButton} onPress={() => setShowEndPicker(true)}>
-                  <FontAwesome5 name="calendar" size={16} color="#666" style={styles.dateIcon} />
-                  <Text style={styles.dateButtonText}>
-                    {endDate ? endDate.toLocaleDateString() : 'Sélectionner une date'}
-                  </Text>
+              <View style={styles.typeButtons}>
+                <TouchableOpacity
+                  style={[styles.typeButton, reservationType === 'ACHAT' && styles.typeButtonSelected]}
+                  onPress={() => selectType('ACHAT')}
+                >
+                  <FontAwesome5 name="shopping-cart" size={20} color={reservationType === 'ACHAT' ? '#FFF' : '#FF6F00'} style={styles.typeIcon} />
+                  <Text style={[styles.typeButtonText, reservationType === 'ACHAT' && styles.typeButtonTextSelected]}>Achat</Text>
                 </TouchableOpacity>
-                {showEndPicker && (
-                  <DateTimePicker
-                    value={endDate || new Date()}
-                    mode="date"
-                    display="default"
-                    onChange={onEndDateChange}
-                    minimumDate={startDate ? new Date(startDate.getTime() + 86400000) : new Date()}
-                  />
-                )}
+                <TouchableOpacity
+                  style={[styles.typeButton, reservationType === 'LOCATION' && styles.typeButtonSelected]}
+                  onPress={() => selectType('LOCATION')}
+                >
+                  <FontAwesome5 name="calendar-alt" size={20} color={reservationType === 'LOCATION' ? '#FFF' : '#FF6F00'} style={styles.typeIcon} />
+                  <Text style={[styles.typeButtonText, reservationType === 'LOCATION' && styles.typeButtonTextSelected]}>Location</Text>
+                </TouchableOpacity>
               </View>
-            )}
 
-            {reservationType === 'ACHAT' && (
-              <View style={styles.confirmMessage}>
-                <FontAwesome5 name="info-circle" size={20} color="#FF6F00" style={styles.confirmIcon} />
-                <Text style={styles.confirmText}>
-                  Vous êtes sur le point d'acheter ce véhicule pour {vehicule.prix ? `${vehicule.prix.toLocaleString()} FCFA` : 'le prix indiqué'}. Confirmez pour procéder.
+              {reservationType === 'LOCATION' && (
+                <View style={styles.datePickers}>
+                  <Text style={styles.dateLabel}>Date de début</Text>
+                  <TouchableOpacity style={styles.dateButton} onPress={() => setShowStartPicker(true)}>
+                    <FontAwesome5 name="calendar" size={16} color="#666" style={styles.dateIcon} />
+                    <Text style={styles.dateButtonText}>
+                      {startDate ? startDate.toLocaleDateString('fr-FR') : 'Sélectionner une date'}
+                    </Text>
+                  </TouchableOpacity>
+                  {showStartPicker && (
+                    <DateTimePicker
+                      value={startDate || new Date()}
+                      mode="date"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={onStartDateChange}
+                      minimumDate={new Date()}
+                    />
+                  )}
+
+                  <Text style={styles.dateLabel}>Date de fin</Text>
+                  <TouchableOpacity style={styles.dateButton} onPress={() => setShowEndPicker(true)}>
+                    <FontAwesome5 name="calendar" size={16} color="#666" style={styles.dateIcon} />
+                    <Text style={styles.dateButtonText}>
+                      {endDate ? endDate.toLocaleDateString('fr-FR') : 'Sélectionner une date'}
+                    </Text>
+                  </TouchableOpacity>
+                  {showEndPicker && (
+                    <DateTimePicker
+                      value={endDate || new Date()}
+                      mode="date"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={onEndDateChange}
+                      minimumDate={startDate ? new Date(startDate.getTime() + 86400000) : new Date()}
+                    />
+                  )}
+                </View>
+              )}
+
+              {reservationType === 'ACHAT' && (
+                <View style={styles.confirmMessage}>
+                  <FontAwesome5 name="info-circle" size={20} color="#FF6F00" style={styles.confirmIcon} />
+                  <Text style={styles.confirmText}>
+                    Vous êtes sur le point d'acheter ce véhicule pour {vehicule.prix ? `${vehicule.prix.toLocaleString()} FCFA` : 'le prix indiqué'}. Confirmez pour procéder.
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.notificationInfo}>
+                <MaterialIcons name="notifications" size={16} color="#FF6F00" />
+                <Text style={styles.notificationInfoText}>
+                  Vous recevrez une confirmation par notification
                 </Text>
               </View>
-            )}
 
-            <View style={styles.notificationInfo}>
-              <MaterialIcons name="notifications" size={16} color="#FF6F00" />
-              <Text style={styles.notificationInfoText}>
-                Vous recevrez une confirmation par notification
-              </Text>
-            </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
-                <Text style={styles.cancelButtonText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[
-                  styles.confirmButton, 
-                  isLoading && styles.confirmButtonDisabled
-                ]} 
-                onPress={confirmReservation} 
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <ActivityIndicator size="small" color="#FFF" />
-                ) : (
-                  <Text style={styles.confirmButtonText}>
-                    Confirmer {reservationType === 'ACHAT' ? 'l\'achat' : 'la location'}
-                  </Text>
-                )}
-              </TouchableOpacity>
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
+                  <Text style={styles.cancelButtonText}>Annuler</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[
+                    styles.confirmButton, 
+                    isLoading && styles.confirmButtonDisabled
+                  ]} 
+                  onPress={confirmReservation} 
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <Text style={styles.confirmButtonText}>
+                      Confirmer {reservationType === 'ACHAT' ? 'l\'achat' : 'la location'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
 
-// STYLES COMPLETS (inchangés)
 const styles = StyleSheet.create({
   safeArea: { 
     flex: 1,
@@ -683,6 +1042,7 @@ const styles = StyleSheet.create({
     width: width,
     height: 250,
     backgroundColor: '#f0f0f0',
+    position: 'relative',
   },
   carImage: {
     width: '100%',
@@ -692,13 +1052,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  noImageText: {
+    marginTop: 10,
+    color: '#666',
+    fontSize: 16,
+  },
   favoriteButton: {
     position: 'absolute',
     top: 16,
     right: 16,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: '#FFF',
     borderWidth: 2,
     borderColor: '#FF6F00',
@@ -755,12 +1120,52 @@ const styles = StyleSheet.create({
     fontSize: 22, 
     fontWeight: 'bold',
     color: '#FF6F00',
-    marginBottom: 4,
+    marginBottom: 12,
   },
   parkingName: {
     fontSize: 14,
     color: '#666',
     marginTop: 4,
+  },
+  badgesContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  badge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginHorizontal: 4,
+  },
+  saleBadge: {
+    backgroundColor: '#28a745',
+  },
+  rentBadge: {
+    backgroundColor: '#17a2b8',
+  },
+  badgeText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  parkingMessage: {
+    backgroundColor: '#FFF3E0',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginVertical: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FF6F00',
+  },
+  parkingMessageText: {
+    fontSize: 16,
+    color: '#FF6F00',
+    fontWeight: 'bold',
+    marginLeft: 10,
   },
   reserveButton: {
     marginHorizontal: 16,
@@ -791,14 +1196,65 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 16,
     paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    flex: 1,
+  },
+  actionMenuContainer: {
+    position: 'relative',
+  },
+  actionMenuButton: {
+    padding: 4,
+    borderRadius: 20,
+  },
+  actionMenuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionMenuContent: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 8,
+    width: 180,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  menuItemText: {
+    fontSize: 16,
+    color: '#333',
+    marginLeft: 12,
+    fontWeight: '500',
+  },
+  deleteText: {
+    color: '#FF4444',
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: '#f0f0f0',
+    marginHorizontal: 8,
   },
   featuresGrid: {
     marginBottom: 16,
@@ -827,6 +1283,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     textAlign: 'center',
+  },
+  unknownValue: {
+    fontStyle: 'italic',
+    color: '#999',
   },
   descriptionSection: {
     marginTop: 16,
@@ -1060,6 +1520,10 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  buttonDisabled: {
+    backgroundColor: '#ccc',
+    opacity: 0.6,
   },
 });
 
