@@ -21,6 +21,10 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { BASE_URL } from './services/listeVoiture';
 import { useAuth } from '../context/AuthContext';
 import { favorisService } from './services/favorisService';
+import { viewsService } from './services/viewsService';
+import { createReservationNotification } from './services/Notification';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
 
 interface Marque {
   id: number;
@@ -45,6 +49,18 @@ interface Vehicule {
   forRent?: boolean;
   forSale?: boolean;
   description?: string;
+  stats?: {
+    id: number;
+    vehicleId: number;
+    vues: number;
+    reservations: number;
+    createdAt: string;
+    updatedAt: string;
+  };
+  parking?: {
+    id: number;
+    nom: string;
+  };
   garantie?: boolean;
   chauffeur?: boolean;
   dureeAssurance?: number;
@@ -130,6 +146,56 @@ function CarDetailScreen() {
     });
   }, [vehicule]);
 
+  // Setup notifications
+  useEffect(() => {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+      }),
+    });
+
+    registerForPushNotificationsAsync();
+  }, []);
+
+  async function registerForPushNotificationsAsync() {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
+    }
+
+    if (Device.isDevice) {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== 'granted') {
+        alert('Failed to get permission for notifications!');
+        return;
+      }
+    } else {
+      alert('Must use physical device for Notifications');
+    }
+  }
+
+  async function showLocalNotification(title: string, body: string, data: any) {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data,
+      },
+      trigger: null,
+    });
+  }
+
   // Fonction pour vérifier l'état favoris (seulement si pas parking)
   const checkFavoriteStatus = async () => {
     if (!vehicule?.id || isParkingView) return;
@@ -170,7 +236,6 @@ function CarDetailScreen() {
         await favorisService.addToFavoris(vehicule);
       }
     } catch (error) {
-      // En cas d'erreur, on revert silencieusement
       setIsFavorite(!newFavoriteState);
       console.error('Erreur gestion favoris:', error);
     }
@@ -454,17 +519,29 @@ function CarDetailScreen() {
     }
   };
 
-  // Confirmer réservation (appel API)
   const confirmReservation = async () => {
-    if (!reservationType) return Alert.alert('Erreur', 'Veuillez sélectionner un type de réservation');
-    if (reservationType === 'LOCATION' && (!startDate || !endDate)) return Alert.alert('Erreur', 'Veuillez sélectionner les dates de location');
-    if (reservationType === 'LOCATION' && !vehicule.forRent) return Alert.alert('Erreur', 'Ce véhicule n\'est pas disponible à la location');
-    if (reservationType === 'ACHAT' && !vehicule.forSale) return Alert.alert('Erreur', 'Ce véhicule n\'est pas disponible à la vente');
+    if (!reservationType) return Alert.alert('Erreur', 'Sélectionnez un type de réservation');
+    if (reservationType === 'LOCATION' && (!startDate || !endDate)) {
+      return Alert.alert('Erreur', 'Les dates sont requises pour la location');
+    }
+    if (reservationType === 'LOCATION' && !vehicule.forRent) {
+      return Alert.alert('Erreur', 'Ce véhicule n\'est pas disponible à la location');
+    }
+    if (reservationType === 'ACHAT' && !vehicule.forSale) {
+      return Alert.alert('Erreur', 'Ce véhicule n\'est pas disponible à l\'achat');
+    }
 
     const token = authState.accessToken;
-    if (!token) return Alert.alert('Erreur', 'Veuillez vous connecter pour effectuer une réservation');
+    if (!token) {
+      return Alert.alert(
+        'Connexion requise', 
+        'Vous devez vous connecter pour réserver ce véhicule',
+        [{ text: 'OK', style: 'cancel' }]
+      );
+    }
 
     setIsLoading(true);
+    console.log('🚀 Début de la réservation...');
 
     try {
       const body = {
@@ -473,6 +550,8 @@ function CarDetailScreen() {
         dateFin: reservationType === 'LOCATION' ? endDate?.toISOString() : null,
         type: reservationType,
       };
+
+      console.log('📤 Envoi réservation:', body);
 
       const response = await fetch(`${BASE_URL}/reservations`, {
         method: 'POST',
@@ -484,13 +563,74 @@ function CarDetailScreen() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Erreur lors de la réservation');
+        const errorText = await response.text();
+        console.error('❌ Erreur réponse serveur:', errorText);
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { message: 'Erreur réseau ou serveur' };
+        }
+        throw new Error(errorData.message || `Erreur ${response.status}: ${response.statusText}`);
       }
 
-      Alert.alert('Succès', 'Réservation effectuée avec succès !');
-      setModalVisible(false);
+      const newReservation = await response.json();
+      console.log('✅ Réservation créée:', newReservation);
+
+      // NOTIFICATION LOCALE POUR L'UTILISATEUR
+      try {
+        await showLocalNotification(
+          "🎉 Réservation confirmée !",
+          `Votre ${reservationType.toLowerCase()} de ${vehicule.marqueRef?.name || ''} ${vehicule.model || ''} est confirmée.`,
+          {
+            type: 'RESERVATION_CONFIRMATION',
+            vehicleId: vehicule.id,
+            reservationType: reservationType
+          }
+        );
+        console.log('✅ Notification locale envoyée');
+      } catch (notificationError) {
+        console.warn('⚠️ Notification locale échouée:', notificationError);
+      }
+
+      // NOTIFICATION AU PARKING
+      if (vehicule?.parking?.id) {
+        try {
+          const userInfo = authState.user || { prenom: 'Utilisateur', nom: '', id: 0 };
+          
+          const parkingMessage = `${userInfo.prenom} ${userInfo.nom} a réservé ${vehicule.marqueRef?.name || ''} ${vehicule.model || ''} pour ${reservationType.toLowerCase()}. Prix: ${vehicule.prix ? `${vehicule.prix.toLocaleString()} FCFA` : ''}`;
+
+          console.log(`📤 Envoi notification au parking ${vehicule.parking.id}:`, parkingMessage);
+
+          const notificationSuccess = await createReservationNotification({
+            title: "🚗 NOUVELLE RÉSERVATION !",
+            message: parkingMessage,
+            parkingId: vehicule.parking.id,
+            type: "RESERVATION"
+          });
+
+          if (notificationSuccess) {
+            console.log(`✅ Notification envoyée au parking ${vehicule.parking.id}`);
+          } else {
+            console.warn(`⚠️ Notification échouée pour le parking ${vehicule.parking.id}`);
+          }
+        } catch (notificationError) {
+          console.error("❌ Erreur notification parking:", notificationError);
+        }
+      } else {
+        console.warn("⚠️ Parking ID non disponible");
+      }
+
+      Alert.alert(
+        'Succès 🎉', 
+        `Réservation ${reservationType.toLowerCase()} confirmée !\n\nLe parking a été notifié de votre réservation.`,
+        [{ text: 'OK', onPress: () => {
+          setModalVisible(false);
+        }}]
+      );
+      
     } catch (error: any) {
+      console.error('❌ Erreur réservation:', error);
       Alert.alert('Erreur', error.message || 'Une erreur est survenue lors de la réservation');
     } finally {
       setIsLoading(false);
@@ -606,15 +746,19 @@ function CarDetailScreen() {
           <Text style={styles.priceValue}>
             {vehicule.prix ? `${vehicule.prix.toLocaleString()} FCFA` : 'Prix non disponible'}
           </Text>
-          
+          {vehicule.parking && (
+            <Text style={styles.parkingName}>
+              📍 {vehicule.parking.nom}
+            </Text>
+          )}
           {/* Badges pour vente/location avec fallback */}
           <View style={styles.badgesContainer}>
-            {(vehicule.forSale !== undefined ? vehicule.forSale : true) && (
+            {vehicule.forSale && (
               <View style={[styles.badge, styles.saleBadge]}>
                 <Text style={styles.badgeText}>À vendre</Text>
               </View>
             )}
-            {(vehicule.forRent !== undefined ? vehicule.forRent : true) && (
+            {vehicule.forRent && (
               <View style={[styles.badge, styles.rentBadge]}>
                 <Text style={styles.badgeText}>À louer</Text>
               </View>
@@ -625,7 +769,7 @@ function CarDetailScreen() {
         {/* Bouton réservation - CACHÉ si c'est le parking */}
         {!isParkingView && (
           <TouchableOpacity style={styles.reserveButton} onPress={handleReservePress}>
-            <Text style={styles.reserveButtonText}>Réserver ce véhicule</Text>
+            <Text style={styles.reserveButtonText}>Réserver maintenant</Text>
           </TouchableOpacity>
         )}
 
@@ -744,6 +888,25 @@ function CarDetailScreen() {
             </View>
           </View>
         </View>
+
+        {/* Statistiques */}
+        {vehicule.stats && (
+          <View style={styles.statsCard}>
+            <Text style={styles.sectionTitle}>Statistiques</Text>
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <FontAwesome5 name="eye" size={16} color="#666" />
+                <Text style={styles.statValue}>{vehicule.stats.vues || 0}</Text>
+                <Text style={styles.statLabel}>Vues</Text>
+              </View>
+              <View style={styles.statItem}>
+                <FontAwesome5 name="calendar-check" size={16} color="#666" />
+                <Text style={styles.statValue}>{vehicule.stats.reservations || 0}</Text>
+                <Text style={styles.statLabel}>Réservations</Text>
+              </View>
+            </View>
+          </View>
+        )}
       </ScrollView>
 
       {/* Modale de réservation - CACHÉE si parking */}
@@ -828,12 +991,22 @@ function CarDetailScreen() {
                 </View>
               )}
 
+              <View style={styles.notificationInfo}>
+                <MaterialIcons name="notifications" size={16} color="#FF6F00" />
+                <Text style={styles.notificationInfoText}>
+                  Vous recevrez une confirmation par notification
+                </Text>
+              </View>
+
               <View style={styles.modalActions}>
                 <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
                   <Text style={styles.cancelButtonText}>Annuler</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
-                  style={[styles.confirmButton, isLoading && styles.buttonDisabled]} 
+                  style={[
+                    styles.confirmButton, 
+                    isLoading && styles.confirmButtonDisabled
+                  ]} 
                   onPress={confirmReservation} 
                   disabled={isLoading}
                 >
@@ -841,7 +1014,7 @@ function CarDetailScreen() {
                     <ActivityIndicator size="small" color="#FFF" />
                   ) : (
                     <Text style={styles.confirmButtonText}>
-                      {reservationType === 'ACHAT' ? 'Acheter' : 'Réserver'}
+                      Confirmer {reservationType === 'ACHAT' ? 'l\'achat' : 'la location'}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -948,6 +1121,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FF6F00',
     marginBottom: 12,
+  },
+  parkingName: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
   },
   badgesContainer: {
     flexDirection: 'row',
@@ -1154,6 +1332,37 @@ const styles = StyleSheet.create({
     color: '#333',
     marginLeft: 12,
   },
+  statsCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    margin: 16,
+    marginTop: 0,
+    padding: 20,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+    padding: 10,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 4,
+  },
+  statLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
+  },
   modalOverlay: {
     flex: 1,
     justifyContent: 'center',
@@ -1245,7 +1454,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 24,
+    marginBottom: 16,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -1257,6 +1466,21 @@ const styles = StyleSheet.create({
     color: '#333',
     flex: 1,
     lineHeight: 20,
+  },
+  notificationInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#fff3e0',
+    borderRadius: 8,
+  },
+  notificationInfoText: {
+    fontSize: 14,
+    color: '#FF6F00',
+    marginLeft: 8,
+    fontWeight: '500',
   },
   modalActions: {
     flexDirection: 'row',
@@ -1287,6 +1511,10 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     marginLeft: 12,
+  },
+  confirmButtonDisabled: {
+    backgroundColor: '#FFB74D',
+    opacity: 0.7,
   },
   confirmButtonText: {
     color: '#FFF',
