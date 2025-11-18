@@ -1,4 +1,4 @@
-const BASE_URL = "https://parkapp-pi.vercel.app/"; 
+const BASE_URL = "https://parkapp-pi.vercel.app"; 
 
 interface ApiResponse<T> {
   data?: T;

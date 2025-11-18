@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-const API_BASE_URL = 'http://192.168.137.14:5000/api';
+const API_BASE_URL = 'https://parkapp-pi.vercel.app/api';
 
 // Interface pour les données utilisateur
 export interface User {

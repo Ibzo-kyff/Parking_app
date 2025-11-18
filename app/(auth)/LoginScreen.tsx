@@ -16,6 +16,7 @@ import { router, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import { useAuth } from '../../context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // Ajout pour stockage persistant
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
@@ -73,7 +74,7 @@ const LoginScreen = () => {
 
     setLoading(true);
     try {
-      const { accessToken, role, emailVerified, nom, prenom, id, parkingId } = await login({ email, password });
+      const { accessToken, refreshToken, role, emailVerified, nom, prenom, id, parkingId } = await login({ email, password });
 
       if (!emailVerified) {
         Alert.alert('Vérification requise', 'Veuillez vérifier votre email avant de continuer.');
@@ -81,9 +82,10 @@ const LoginScreen = () => {
         return;
       }
 
-      // Mettre à jour le contexte avec les données de connexion
+      // Mettre à jour le contexte avec les données de connexion, incluant refreshToken
       setAuthState({
         accessToken,
+        refreshToken, // ← AJOUT : Stockez refreshToken dans authState
         role,
         userId: String(id),
         parkingId: parkingId ? String(parkingId) : null,
@@ -91,6 +93,12 @@ const LoginScreen = () => {
         nom,
         prenom,
       });
+
+      // Stockage persistant supplémentaire pour refreshToken (robustesse après restart app)
+      if (refreshToken) {
+        await AsyncStorage.setItem('refreshToken', refreshToken);
+      }
+      console.log('Login successful, refreshToken:', refreshToken);
     } catch (error) {
       const err = error as Error;
       Alert.alert('Erreur', err.message || 'Échec de la connexion');
