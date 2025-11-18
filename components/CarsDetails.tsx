@@ -21,6 +21,7 @@ import { BASE_URL } from './services/listeVoiture';
 import { useAuth } from '../context/AuthContext';
 import { favorisService } from './services/favorisService';
 import { viewsService } from './services/viewsService';
+import { createReservationNotification } from './services/Notification';
 
 interface Marque {
   id: number;
@@ -51,6 +52,10 @@ interface Vehicule {
     reservations: number;
     createdAt: string;
     updatedAt: string;
+  };
+  parking?: {
+    id: number;
+    nom: string;
   };
 }
 
@@ -127,20 +132,16 @@ function CarDetailScreen() {
   const toggleFavorite = async () => {
     if (!vehicule) return;
 
-    // CHANGEMENT IMMÉDIAT SANS ATTENDRE - comme TikTok
     const newFavoriteState = !isFavorite;
     setIsFavorite(newFavoriteState);
     
     try {
       if (!newFavoriteState) {
-        // Retirer des favoris
         await favorisService.removeFromFavoris(vehicule.id);
       } else {
-        // Ajouter aux favoris
         await favorisService.addToFavoris(vehicule);
       }
     } catch (error) {
-      // En cas d'erreur, on revert silencieusement
       setIsFavorite(!newFavoriteState);
       console.error('Erreur gestion favoris:', error);
     }
@@ -185,7 +186,6 @@ function CarDetailScreen() {
   const renderImageItem = ({ item }: { item: string }) => (
     <View style={styles.imageContainer}>
       <Image source={{ uri: item }} style={styles.carImage} resizeMode="cover" />
-      {/* Bouton favoris avec effet IMMÉDIAT - pas de loading state */}
       <TouchableOpacity 
         style={[
           styles.favoriteButton,
@@ -252,21 +252,34 @@ function CarDetailScreen() {
     if (selectedDate && startDate && selectedDate > startDate) {
       setEndDate(selectedDate);
     } else if (selectedDate) {
-      Alert.alert('Erreur', 'Date fin après début');
+      Alert.alert('Erreur', 'La date de fin doit être après la date de début');
     }
   };
 
-  // Confirmer réservation (appel API)
+  // ⭐⭐ FONCTION CRITIQUE CORRIGÉE : Confirmer réservation avec notifications
   const confirmReservation = async () => {
-    if (!reservationType) return Alert.alert('Erreur', 'Sélectionnez type');
-    if (reservationType === 'LOCATION' && (!startDate || !endDate)) return Alert.alert('Erreur', 'Dates requises');
-    if (reservationType === 'LOCATION' && !vehicule.forRent) return Alert.alert('Erreur', 'Pas pour location');
-    if (reservationType === 'ACHAT' && !vehicule.forSale) return Alert.alert('Erreur', 'Pas pour achat');
+    if (!reservationType) return Alert.alert('Erreur', 'Sélectionnez un type de réservation');
+    if (reservationType === 'LOCATION' && (!startDate || !endDate)) {
+      return Alert.alert('Erreur', 'Les dates sont requises pour la location');
+    }
+    if (reservationType === 'LOCATION' && !vehicule.forRent) {
+      return Alert.alert('Erreur', 'Ce véhicule n\'est pas disponible à la location');
+    }
+    if (reservationType === 'ACHAT' && !vehicule.forSale) {
+      return Alert.alert('Erreur', 'Ce véhicule n\'est pas disponible à l\'achat');
+    }
 
     const token = authState.accessToken;
-    if (!token) return Alert.alert('Erreur', 'Connectez-vous');
+    if (!token) {
+      return Alert.alert(
+        'Connexion requise', 
+        'Vous devez vous connecter pour réserver ce véhicule',
+        [{ text: 'OK', style: 'cancel' }]
+      );
+    }
 
     setIsLoading(true);
+    console.log('🚀 Début de la réservation...');
 
     try {
       const body = {
@@ -275,6 +288,8 @@ function CarDetailScreen() {
         dateFin: reservationType === 'LOCATION' ? endDate?.toISOString() : null,
         type: reservationType,
       };
+
+      console.log('📤 Envoi réservation:', body);
 
       const response = await fetch(`${BASE_URL}/reservations`, {
         method: 'POST',
@@ -286,14 +301,75 @@ function CarDetailScreen() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Erreur réservation');
+        const errorText = await response.text();
+        console.error('❌ Erreur réponse serveur:', errorText);
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { message: 'Erreur réseau ou serveur' };
+        }
+        throw new Error(errorData.message || `Erreur ${response.status}: ${response.statusText}`);
       }
 
-      Alert.alert('Succès', 'Réservation OK !');
-      setModalVisible(false);
+      const newReservation = await response.json();
+      console.log('✅ Réservation créée:', newReservation);
+
+      // ⭐⭐ NOTIFICATION LOCALE POUR L'UTILISATEUR
+      try {
+        await showLocalNotification(
+          "🎉 Réservation confirmée !",
+          `Votre ${reservationType.toLowerCase()} de ${vehicule.marqueRef?.name || ''} ${vehicule.model || ''} est confirmée.`,
+          {
+            type: 'RESERVATION_CONFIRMATION',
+            vehicleId: vehicule.id,
+            reservationType: reservationType
+          }
+        );
+        console.log('✅ Notification locale envoyée');
+      } catch (notificationError) {
+        console.warn('⚠️ Notification locale échouée:', notificationError);
+      }
+
+      // ⭐⭐ NOTIFICATION AU PARKING SPÉCIFIQUE - VERSION AMÉLIORÉE
+      if (vehicule?.parking?.id) {
+        try {
+          const userInfo = authState.user || { prenom: 'Utilisateur', nom: '', id: 0 };
+          
+          const parkingMessage = `${userInfo.prenom} ${userInfo.nom} a réservé ${vehicule.marqueRef?.name || ''} ${vehicule.model || ''} pour ${reservationType.toLowerCase()}. Prix: ${vehicule.prix ? `${vehicule.prix.toLocaleString()} FCFA` : ''}`;
+
+          console.log(`📤 Envoi notification au parking ${vehicule.parking.id}:`, parkingMessage);
+
+          const notificationSuccess = await createReservationNotification({
+            title: "🚗 NOUVELLE RÉSERVATION !",
+            message: parkingMessage,
+            parkingId: vehicule.parking.id,
+            type: "RESERVATION"
+          });
+
+          if (notificationSuccess) {
+            console.log(`✅ Notification envoyée au parking ${vehicule.parking.id}`);
+          } else {
+            console.warn(`⚠️ Notification échouée pour le parking ${vehicule.parking.id}`);
+          }
+        } catch (notificationError) {
+          console.error("❌ Erreur notification parking:", notificationError);
+        }
+      } else {
+        console.warn("⚠️ Parking ID non disponible");
+      }
+
+      Alert.alert(
+        'Succès 🎉', 
+        `Réservation ${reservationType.toLowerCase()} confirmée !\n\nLe parking a été notifié de votre réservation.`,
+        [{ text: 'OK', onPress: () => {
+          setModalVisible(false);
+        }}]
+      );
+      
     } catch (error: any) {
-      Alert.alert('Erreur', error.message);
+      console.error('❌ Erreur réservation:', error);
+      Alert.alert('Erreur', error.message || 'Une erreur est survenue lors de la réservation');
     } finally {
       setIsLoading(false);
     }
@@ -323,7 +399,6 @@ function CarDetailScreen() {
         ) : (
           <View style={[styles.imageContainer, styles.placeholderImage]}>
             <FontAwesome5 name="car" size={60} color="#ccc" />
-            {/* Bouton favoris pour l'image placeholder */}
             <TouchableOpacity 
               style={[
                 styles.favoriteButton,
@@ -349,11 +424,16 @@ function CarDetailScreen() {
           <Text style={styles.priceValue}>
             {vehicule.prix ? `${vehicule.prix.toLocaleString()} FCFA` : 'Prix non disponible'}
           </Text>
+          {vehicule.parking && (
+            <Text style={styles.parkingName}>
+              📍 {vehicule.parking.nom}
+            </Text>
+          )}
         </View>
 
         {/* Bouton réservation */}
         <TouchableOpacity style={styles.reserveButton} onPress={handleReservePress}>
-          <Text style={styles.reserveButtonText}>Réserver</Text>
+          <Text style={styles.reserveButtonText}>Réserver maintenant</Text>
         </TouchableOpacity>
 
         {/* Détails du véhicule */}
@@ -451,13 +531,22 @@ function CarDetailScreen() {
           </View>
         )}
 
-        {/* Message si informations limitées */}
-        {(vehicule.marqueRef === undefined && vehicule.model === undefined && vehicule.prix === undefined) && (
-          <View style={styles.infoMessage}>
-            <MaterialIcons name="info" size={24} color="#666" />
-            <Text style={styles.infoMessageText}>
-              Informations limitées disponibles pour ce véhicule
-            </Text>
+        {/* Statistiques */}
+        {vehicule.stats && (
+          <View style={styles.statsCard}>
+            <Text style={styles.sectionTitle}>Statistiques</Text>
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <FontAwesome5 name="eye" size={16} color="#666" />
+                <Text style={styles.statValue}>{vehicule.stats.vues || 0}</Text>
+                <Text style={styles.statLabel}>Vues</Text>
+              </View>
+              <View style={styles.statItem}>
+                <FontAwesome5 name="calendar-check" size={16} color="#666" />
+                <Text style={styles.statValue}>{vehicule.stats.reservations || 0}</Text>
+                <Text style={styles.statLabel}>Réservations</Text>
+              </View>
+            </View>
           </View>
         )}
       </ScrollView>
@@ -543,15 +632,31 @@ function CarDetailScreen() {
               </View>
             )}
 
+            <View style={styles.notificationInfo}>
+              <MaterialIcons name="notifications" size={16} color="#FF6F00" />
+              <Text style={styles.notificationInfoText}>
+                Vous recevrez une confirmation par notification
+              </Text>
+            </View>
+
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
                 <Text style={styles.cancelButtonText}>Annuler</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.confirmButton} onPress={confirmReservation} disabled={isLoading}>
+              <TouchableOpacity 
+                style={[
+                  styles.confirmButton, 
+                  isLoading && styles.confirmButtonDisabled
+                ]} 
+                onPress={confirmReservation} 
+                disabled={isLoading}
+              >
                 {isLoading ? (
                   <ActivityIndicator size="small" color="#FFF" />
                 ) : (
-                  <Text style={styles.confirmButtonText}>Confirmer</Text>
+                  <Text style={styles.confirmButtonText}>
+                    Confirmer {reservationType === 'ACHAT' ? 'l\'achat' : 'la location'}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -562,6 +667,7 @@ function CarDetailScreen() {
   );
 }
 
+// STYLES COMPLETS (inchangés)
 const styles = StyleSheet.create({
   safeArea: { 
     flex: 1,
@@ -586,7 +692,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Bouton favoris avec effet IMMÉDIAT
   favoriteButton: {
     position: 'absolute',
     top: 16,
@@ -594,9 +699,9 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#FFF', // Fond blanc par défaut
+    backgroundColor: '#FFF',
     borderWidth: 2,
-    borderColor: '#FF6F00', // Bordure orange
+    borderColor: '#FF6F00',
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 5,
@@ -606,7 +711,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   favoriteButtonActive: {
-    backgroundColor: '#FF6F00', // Fond orange quand favori
+    backgroundColor: '#FF6F00',
     borderColor: '#FF6F00',
   },
   pagination: {
@@ -649,7 +754,13 @@ const styles = StyleSheet.create({
   priceValue: { 
     fontSize: 22, 
     fontWeight: 'bold',
-    color: '#FF6F00'
+    color: '#FF6F00',
+    marginBottom: 4,
+  },
+  parkingName: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
   },
   reserveButton: {
     marginHorizontal: 16,
@@ -761,20 +872,36 @@ const styles = StyleSheet.create({
     color: '#333',
     marginLeft: 12,
   },
-  infoMessage: {
+  statsCard: {
     backgroundColor: '#FFF',
     borderRadius: 12,
     margin: 16,
+    marginTop: 0,
     padding: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
-  infoMessageText: {
-    fontSize: 16,
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+    padding: 10,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 4,
+  },
+  statLabel: {
+    fontSize: 14,
     color: '#666',
-    marginLeft: 10,
-    textAlign: 'center',
+    marginTop: 2,
   },
   modalOverlay: {
     flex: 1,
@@ -867,7 +994,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 24,
+    marginBottom: 16,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -879,6 +1006,21 @@ const styles = StyleSheet.create({
     color: '#333',
     flex: 1,
     lineHeight: 20,
+  },
+  notificationInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#fff3e0',
+    borderRadius: 8,
+  },
+  notificationInfoText: {
+    fontSize: 14,
+    color: '#FF6F00',
+    marginLeft: 8,
+    fontWeight: '500',
   },
   modalActions: {
     flexDirection: 'row',
@@ -909,6 +1051,10 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     marginLeft: 12,
+  },
+  confirmButtonDisabled: {
+    backgroundColor: '#FFB74D',
+    opacity: 0.7,
   },
   confirmButtonText: {
     color: '#FFF',

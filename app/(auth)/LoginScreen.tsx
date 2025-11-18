@@ -16,6 +16,7 @@ import { router, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import { useAuth } from '../../context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // 🔥 IMPORT AJOUTÉ
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
@@ -81,6 +82,25 @@ const LoginScreen = () => {
         return;
       }
 
+      // 🔥 CORRECTION : STOCKER LE TOKEN DANS AsyncStorage
+      console.log('🔐 Stockage du token dans AsyncStorage...');
+      await AsyncStorage.multiSet([
+        ['userToken', accessToken],
+        ['userId', id.toString()],
+        ['userRole', role],
+        ['userEmail', email],
+      ]);
+
+      // Stocker parkingId si c'est un parking
+      if (parkingId) {
+        await AsyncStorage.setItem('parkingId', parkingId.toString());
+        console.log(`🅿️ Parking ID stocké: ${parkingId}`);
+      }
+
+      // Vérifier que le token est bien stocké
+      const storedToken = await AsyncStorage.getItem('userToken');
+      console.log(`✅ Token stocké: ${storedToken ? storedToken.substring(0, 20) + '...' : 'NON'}`);
+
       // Mettre à jour le contexte avec les données de connexion
       setAuthState({
         accessToken,
@@ -91,8 +111,12 @@ const LoginScreen = () => {
         nom,
         prenom,
       });
+
+      console.log('🎯 Connexion réussie, redirection...');
+      
     } catch (error) {
       const err = error as Error;
+      console.error('❌ Erreur connexion:', err);
       Alert.alert('Erreur', err.message || 'Échec de la connexion');
     } finally {
       setLoading(false);
