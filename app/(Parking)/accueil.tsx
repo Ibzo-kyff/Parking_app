@@ -20,12 +20,13 @@ import { useAuth } from '../../context/AuthContext';
 
 // 🔹 Types
 type Voiture = {
-  createdAt: string | number | Date;
   id: string;
   marque: string;
   model: string;
   photos: string[];
   status: string;
+  prix?: number;
+  createdAt: string | number | Date;
   stats: {
     vues: number;
     reservations: number;
@@ -42,6 +43,16 @@ type Voiture = {
     name: string;
     logoUrl: string;
   };
+  // Ajout des champs pour les détails complets
+  dureeGarantie?: number;
+  mileage?: number;
+  fuelType?: string;
+  carteGrise?: boolean;
+  assurance?: boolean;
+  vignette?: boolean;
+  forRent?: boolean;
+  forSale?: boolean;
+  description?: string;
 };
 
 type ParkingData = {
@@ -156,24 +167,42 @@ const AccueilParking = () => {
   // 🔹 Navigation / actions
   const handleAjouterVoiture = () => router.navigate('/(ParkingDetail)/AjoutParking');
   const handleHistorique = () => router.navigate('/historique');
-  const handleVoirTout = () => router.navigate('/voitures/populaires');
+  const handleVoirTout = () => router.navigate('(ParkingDetail)/voiturePopulaire');
 
   const handleSelectMarque = (marque: string) => {
     router.push(`/voitures/marque/${marque}`);
   };
 
+  // 🔹 NAVIGATION VERS LES DÉTAILS DE LA VOITURE
   const handleSelectVoiture = (voiture: Voiture) => {
-    router.push(`/voitures/details/${voiture.id}`);
+    router.push({
+      pathname: '/(Clients)/CreateListingScreen', // Navigation vers l'écran de détails
+      params: { 
+        vehicule: JSON.stringify(voiture),
+        fromParking: 'true' // Optionnel: pour identifier que ça vient du parking
+      }
+    });
   };
 
   // 🔹 Renders
   const renderVoitureItem = ({ item }: { item: Voiture }) => (
-    <TouchableOpacity style={styles.voitureCard} onPress={() => handleSelectVoiture(item)}>
+    <TouchableOpacity 
+      style={styles.voitureCard} 
+      onPress={() => handleSelectVoiture(item)}
+    >
       <Image
         source={{ uri: item.photos[0] || 'https://via.placeholder.com/100x70' }}
         style={styles.voitureImage}
       />
-      <Text style={styles.voitureText}>{item.marque} {item.model}</Text>
+      <View style={styles.voitureInfo}>
+        <Text style={styles.voitureText}>{item.marque} {item.model}</Text>
+        {item.prix && (
+          <Text style={styles.voiturePrix}>{item.prix.toLocaleString()} FCFA</Text>
+        )}
+        <Text style={styles.voitureStatus}>
+          Statut: {getStatusText(item.status)}
+        </Text>
+      </View>
     </TouchableOpacity>
   );
 
@@ -184,6 +213,38 @@ const AccueilParking = () => {
         style={styles.marqueLogo}
       />
       <Text style={styles.marqueNom}>{item.name}</Text>
+    </TouchableOpacity>
+  );
+
+  // 🔹 Fonction pour formater le texte du statut
+  const getStatusText = (status: string) => {
+    const statusMap: { [key: string]: string } = {
+      'available': 'Disponible',
+      'rented': 'En location',
+      'sold': 'Vendu',
+      'maintenance': 'En maintenance',
+      'unavailable': 'Indisponible'
+    };
+    return statusMap[status] || status;
+  };
+
+  // 🔹 Fonction pour render les slides du Swiper
+  const renderSwiperSlide = (voiture: Voiture) => (
+    <TouchableOpacity 
+      key={voiture.id} 
+      style={styles.recentCard} 
+      onPress={() => handleSelectVoiture(voiture)}
+    >
+      <Image
+        source={{ uri: voiture.photos[0] || 'https://via.placeholder.com/100x150' }}
+        style={styles.recentImage}
+      />
+      <View style={styles.recentOverlay}>
+        <Text style={styles.recentText}>{voiture.marque} {voiture.model}</Text>
+        {voiture.prix && (
+          <Text style={styles.recentPrix}>{voiture.prix.toLocaleString()} FCFA</Text>
+        )}
+      </View>
     </TouchableOpacity>
   );
 
@@ -228,16 +289,13 @@ const AccueilParking = () => {
     .slice(0, 3);
 
   // Extraire les marques distinctes avec leurs logos
-const marques = parkingData.vehicles
-  .map(v => v.marqueRef)
-  .filter((marque): marque is { id: number; name: string; logoUrl: string } => !!marque)
-  .filter((marque, index, self) =>
-    index === self.findIndex(m => m.id === marque.id) // garder seulement la première occurrence
-  )
-  .slice(0, 5);
-    // Log des marques pour débogage
-  console.log('Marques extraites:', marques);
-  console.log('Nombre de marques:', marques.length);
+  const marques = parkingData.vehicles
+    .map(v => v.marqueRef)
+    .filter((marque): marque is { id: number; name: string; logoUrl: string } => !!marque)
+    .filter((marque, index, self) =>
+      index === self.findIndex(m => m.id === marque.id)
+    )
+    .slice(0, 5);
 
   return (
     <View style={styles.mainContainer}>
@@ -248,7 +306,9 @@ const marques = parkingData.vehicles
       <ScrollView 
         style={styles.scrollContainer}
         contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
       >
+        {/* Barre de recherche */}
         <View style={styles.searchBar}>
           <Ionicons name="search" size={24} color="#888" style={{ marginRight: 10 }} />
           <TextInput
@@ -271,28 +331,35 @@ const marques = parkingData.vehicles
             horizontal
             showsHorizontalScrollIndicator={false}
             renderItem={renderMarqueItem}
+            contentContainerStyle={styles.marquesList}
           />
         </View>
 
         {/* Carousel voitures récentes */}
         <View style={styles.recentesSection}>
           <Text style={styles.sectionTitle}>Récemment ajoutées</Text>
-          <View style={{ height: 200 }}>
-            <Swiper autoplay autoplayTimeout={3} showsPagination={true} dotColor="#ccc" activeDotColor="#FD6A00">
-              {voituresRecentes.map((v) => (
-                <TouchableOpacity key={v.id} style={styles.recentCard} onPress={() => handleSelectVoiture(v)}>
-                  <Image
-                    source={{ uri: v.photos[0] || 'https://via.placeholder.com/100x150' }}
-                    style={styles.recentImage}
-                  />
-                  <Text style={styles.recentText}>{v.marque} {v.model}</Text>
-                </TouchableOpacity>
-              ))}
-            </Swiper>
+          <View style={styles.swiperContainer}>
+            {voituresRecentes.length > 0 ? (
+              <Swiper 
+                autoplay 
+                autoplayTimeout={3} 
+                showsPagination={false} 
+                dotColor="#ccc" 
+                activeDotColor="#FD6A00"
+                height={200}
+              >
+                {voituresRecentes.map(renderSwiperSlide)}
+              </Swiper>
+            ) : (
+              <View style={styles.emptyState}>
+                <Ionicons name="car-outline" size={50} color="#ccc" />
+                <Text style={styles.emptyStateText}>Aucune voiture récente</Text>
+              </View>
+            )}
           </View>
         </View>
 
-        {/* Populaires */}
+        {/* Voitures populaires */}
         <View style={styles.populairesSection}>
           <View style={styles.populairesHeader}>
             <Text style={styles.sectionTitle}>Voitures les plus vues</Text>
@@ -300,16 +367,24 @@ const marques = parkingData.vehicles
               <Text style={styles.voirTout}>Voir tout</Text>
             </TouchableOpacity>
           </View>
-          <FlatList
-            data={voituresPopulaires}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            renderItem={renderVoitureItem}
-          />
+          {voituresPopulaires.length > 0 ? (
+            <FlatList
+              data={voituresPopulaires}
+              keyExtractor={(item) => item.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              renderItem={renderVoitureItem}
+              contentContainerStyle={styles.populairesList}
+            />
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons name="eye-outline" size={40} color="#ccc" />
+              <Text style={styles.emptyStateText}>Aucune donnée de vues</Text>
+            </View>
+          )}
         </View>
 
-        {/* Statistiques */}
+        {/* Actions rapides */}
         <View style={styles.statsSection}>
           <TouchableOpacity style={styles.quickLink} onPress={handleAjouterVoiture}>
             <Ionicons name="add-circle" size={24} color="#FD6A00" />
@@ -331,7 +406,7 @@ const marques = parkingData.vehicles
   );
 };
 
-// 🔹 Styles (inchangés)
+// 🔹 Styles améliorés
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
@@ -407,6 +482,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 16, 
     marginBottom: 20 
   },
+  marquesList: {
+    paddingVertical: 5,
+  },
   marqueCard: {
     backgroundColor: '#fff',
     borderRadius: 10,
@@ -435,21 +513,50 @@ const styles = StyleSheet.create({
     marginHorizontal: 16, 
     marginBottom: 20 
   },
+  swiperContainer: {
+    height: 200,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
   recentCard: { 
     flex: 1, 
     justifyContent: 'center', 
-    alignItems: 'center' 
+    alignItems: 'center',
+    position: 'relative',
   },
   recentImage: { 
     width: '100%', 
-    height: 150, 
+    height: '100%', 
     borderRadius: 8 
   },
+  recentOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 10,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+  },
   recentText: { 
-    marginTop: 5, 
-    fontSize: 14, 
-    fontWeight: '600', 
-    color: '#333' 
+    fontSize: 16, 
+    fontWeight: 'bold', 
+    color: '#fff',
+    textAlign: 'center',
+  },
+  recentPrix: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FD6A00',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  recentStatus: {
+    fontSize: 12,
+    color: '#fff',
+    textAlign: 'center',
+    marginTop: 2,
   },
   populairesSection: { 
     marginHorizontal: 16, 
@@ -460,6 +567,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', 
     alignItems: 'center', 
     marginBottom: 10 
+  },
+  populairesList: {
+    paddingVertical: 5,
   },
   sectionTitle: { 
     fontSize: 18, 
@@ -475,26 +585,36 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 10,
     marginRight: 10,
-    width: 140,
-    alignItems: 'center',
-    padding: 10,
+    width: 160,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 2,
+    overflow: 'hidden',
   },
   voitureImage: { 
-    width: 100, 
-    height: 70, 
-    borderRadius: 8, 
-    marginBottom: 8 
+    width: '100%', 
+    height: 100, 
+  },
+  voitureInfo: {
+    padding: 10,
   },
   voitureText: { 
     fontSize: 14, 
-    fontWeight: '600', 
-    color: '#333', 
-    textAlign: 'center' 
+    fontWeight: 'bold', 
+    color: '#333',
+    marginBottom: 4,
+  },
+  voiturePrix: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FD6A00',
+    marginBottom: 4,
+  },
+  voitureStatus: {
+    fontSize: 11,
+    color: '#666',
   },
   quickLink: {
     alignItems: 'center',
@@ -505,6 +625,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#333',
     fontWeight: '500',
+  },
+  emptyState: {
+    height: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    marginVertical: 10,
+  },
+  emptyStateText: {
+    marginTop: 8,
+    color: '#999',
+    fontSize: 14,
   },
 });
 

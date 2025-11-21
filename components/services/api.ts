@@ -1,4 +1,3 @@
-// components/services/api.ts
 import axios, { AxiosError } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -6,29 +5,37 @@ export const API_URL = 'https://parkapp-pi.vercel.app/api/';
 
 const api = axios.create({
   baseURL: API_URL,
-  withCredentials: true, // Essentiel pour envoyer les cookies
+  withCredentials: true, // Pour compatibilité web, mais mobile ignore souvent
 });
 
 let authToken: string | null = null;
 
-// Intercepteur pour gérer les erreurs d'authentification
+// Intercepteur corrigé : Sur 401 pour token expiré
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as typeof error.config & { _retry?: boolean };
     
-    if (error.response?.status === 403 && originalRequest && !originalRequest._retry) {
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) { // ← CHANGEMENT : 401 au lieu de 403
       originalRequest._retry = true;
       
       try {
-        // Tentative de rafraîchissement du token
-        const response = await axios.post(`${API_URL}/auth/refresh`, {}, {
-          withCredentials: true // Important pour envoyer le cookie refreshToken
+        const storedRefreshToken = await AsyncStorage.getItem('refreshToken');
+        if (!storedRefreshToken) {
+          throw new Error('No refreshToken available');
+        }
+
+        const response = await axios.post(`${API_URL}auth/refresh`, { refreshToken: storedRefreshToken }, {
+          withCredentials: true
         });
         
-        const { accessToken } = response.data;
+        const { accessToken, refreshToken: newRefreshToken } = response.data; // ← AJOUT : Extrait newRefreshToken si présent (rotation)
         if (accessToken) {
           await setAuthToken(accessToken);
+          if (newRefreshToken) {
+            await AsyncStorage.setItem('refreshToken', newRefreshToken); // ← AJOUT : Mise à jour refreshToken
+            // Optionnel : Mise à jour authState si needed, mais context gère
+          }
           originalRequest.headers.Authorization = `Bearer ${accessToken}`;
           return api(originalRequest);
         }
@@ -36,7 +43,8 @@ api.interceptors.response.use(
         console.error('Erreur lors du rafraîchissement du token:', refreshError);
         await clearAuthToken();
         await AsyncStorage.removeItem('authState');
-        // Vous pouvez rediriger vers la page de login ici si nécessaire
+        await AsyncStorage.removeItem('refreshToken'); // ← AJOUT : Clear refresh
+        // Rediriger vers login si dans un component, mais ici c'est global
       }
     }
     
@@ -56,8 +64,10 @@ export const clearAuthToken = async (): Promise<void> => {
   await AsyncStorage.removeItem('accessToken');
 };
 
+// Login : Déjà bon, mais ajoute log
 export const login = async (credentials: { email: string; password: string }): Promise<{
   accessToken?: string;
+  refreshToken?: string;
   role?: string;
   emailVerified?: boolean;
   nom?: string;
@@ -68,7 +78,7 @@ export const login = async (credentials: { email: string; password: string }): P
   try {
     const response = await api.post('/auth/login', credentials);
 
-    const { accessToken, refreshToken, role, emailVerified, nom, prenom, id, parkingId } = response.data || {};  // ← AJOUT : Extrayez refreshToken
+    const { accessToken, refreshToken, role, emailVerified, nom, prenom, id, parkingId } = response.data || {};
 
     if (accessToken) await setAuthToken(accessToken);
 
@@ -81,7 +91,7 @@ export const login = async (credentials: { email: string; password: string }): P
 
     const authState = {
       accessToken,
-      refreshToken,  // ← CHANGEMENT : Utilisez le refreshToken extrait au lieu de null
+      refreshToken,
       role,
       userId: id ? String(id) : null,
       parkingId: parkingId ? String(parkingId) : null,
@@ -92,51 +102,33 @@ export const login = async (credentials: { email: string; password: string }): P
     
     await AsyncStorage.setItem('authState', JSON.stringify(authState));
 
-    return { accessToken, role, emailVerified, nom, prenom, id, parkingId };
+    if (refreshToken) {
+      await AsyncStorage.setItem('refreshToken', refreshToken);
+    }
+
+    console.log('Login API: refreshToken stored', refreshToken); // ← AJOUT : Log pour debug
+
+    return { accessToken, refreshToken, role, emailVerified, nom, prenom, id, parkingId };
   } catch (error) {
     const err = error as AxiosError<{ message?: string }>;
     throw new Error(err.response?.data?.message || 'Échec de la connexion');
   }
 };
 
-// Les autres fonctions restent largement inchangées...
-export const register = async (userData: {
-  email: string;
-  password: string;
-  confirmPassword?: string;
-  nom?: string;
-  prenom?: string;
-  phone?: string;
-  address?: string;
-  role?: string;
-}): Promise<{
-  message: string;
-  accessToken?: string;
-  nom?: string;
-  prenom?: string;
-  email?: string;
-  role?: string;
-  emailVerified?: boolean;
-}> => {
+// Supprime ou commente la standalone refreshToken, car interceptor gère
+// Si needed ailleurs, aligne-la :
+export const refreshAccessToken = async (refreshToken: string): Promise<{ accessToken: string; refreshToken?: string }> => {
   try {
-    const response = await api.post('/auth/register', userData);
-    return response.data;
-  } catch (error) {
-    const err = error as AxiosError<{ message?: string }>;
-    throw new Error(err.response?.data?.message || 'Échec de l\'inscription');
-  }
-};
-
-// Cette fonction n'est plus nécessaire car le rafraîchissement se fait automatiquement via l'intercepteur
-export const refreshToken = async (): Promise<string> => {
-  try {
-    const response = await api.post('/auth/refresh', {}, {
+    const response = await axios.post(`${API_URL}auth/refresh`, { refreshToken }, {
       withCredentials: true
     });
-    const { accessToken } = response.data || {};
+    const { accessToken, refreshToken: newRefreshToken } = response.data;
     if (accessToken) {
       await setAuthToken(accessToken);
-      return accessToken;
+      if (newRefreshToken) {
+        await AsyncStorage.setItem('refreshToken', newRefreshToken);
+      }
+      return { accessToken, refreshToken: newRefreshToken };
     }
     throw new Error('No access token received');
   } catch (error) {
@@ -144,6 +136,7 @@ export const refreshToken = async (): Promise<string> => {
   }
 };
 
+// Logout : Bon, ajoute remove refreshToken
 export const logout = async (): Promise<void> => {
   try {
     await api.post('/auth/logout', {}, {
@@ -161,14 +154,14 @@ export const logout = async (): Promise<void> => {
       'role', 
       'emailVerified', 
       'nom', 
-      'prenom',
+      'prenom', 
       'userId',
       'parkingId',
-      'authState'
+      'authState',
+      'refreshToken' // ← AJOUT
     ]);
   }
 };
-
 // Les autres fonctions restent inchangées...
 export const getStoredAccessToken = (): Promise<string | null> => {
   return AsyncStorage.getItem('accessToken');

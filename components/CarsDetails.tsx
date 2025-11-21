@@ -22,6 +22,7 @@ import { BASE_URL } from './services/listeVoiture';
 import { useAuth } from '../context/AuthContext';
 import { favorisService } from './services/favorisService';
 import { viewsService } from './services/viewsService';
+import axios from 'axios';
 import { createReservationNotification } from './services/Notification';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
@@ -72,7 +73,7 @@ function CarDetailScreen() {
   const route = useRoute<any>();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
-  
+
   // États pour la réservation
   const [modalVisible, setModalVisible] = useState(false);
   const [reservationType, setReservationType] = useState<'LOCATION' | 'ACHAT' | null>(null);
@@ -91,19 +92,23 @@ function CarDetailScreen() {
   // États pour le menu de modification/suppression
   const [actionMenuVisible, setActionMenuVisible] = useState(false);
 
-  const { authState } = useAuth();
+  const { authState, user } = useAuth();
 
-  // Vérifier si le véhicule est passé et si c'est une vue parking
-  let vehicule: Vehicule | null = null;
-  
+  // Nouvel état pour les données complètes du véhicule
+  const [vehicule, setVehicule] = useState<Vehicule | null>(null);
+  const [loadingVehicle, setLoadingVehicle] = useState(true);
+
+  // Parsing initial du véhicule passé en params
+  let initialVehicule: Vehicule | null = null;
+
   if (route.params?.vehicule) {
     try {
       if (typeof route.params.vehicule === 'string') {
-        vehicule = JSON.parse(route.params.vehicule);
+        initialVehicule = JSON.parse(route.params.vehicule);
       } else {
-        vehicule = route.params.vehicule;
+        initialVehicule = route.params.vehicule;
       }
-      console.log('🚗 Véhicule reçu:', vehicule);
+      console.log('🚗 Véhicule reçu:', initialVehicule);
     } catch (error) {
       console.error('Erreur parsing véhicule:', error);
     }
@@ -120,6 +125,41 @@ function CarDetailScreen() {
       setIsParkingView(true);
     }
   }, [route.params, authState.role]);
+
+  // Fetch des détails complets du véhicule via API
+  useEffect(() => {
+    const fetchFullVehicle = async () => {
+      if (!initialVehicule?.id) {
+        setVehicule(initialVehicule);
+        setLoadingVehicle(false);
+        return;
+      }
+      setLoadingVehicle(true);
+      try {
+        const headers: any = { 'Content-Type': 'application/json' };
+        if (authState.accessToken) {
+          headers.Authorization = `Bearer ${authState.accessToken}`;
+        }
+        const response = await axios.get(`${BASE_URL}/vehicules/${initialVehicule.id}`, { headers });
+        setVehicule(response.data);
+        console.log(`Nombre de vues pour le véhicule ID ${initialVehicule.id} : ${response.data.stats?.vues || 0}`);
+      } catch (error) {
+        console.error('Erreur lors du fetch des détails véhicule:', error);
+        // Fallback sur les données passées en params si échec
+        setVehicule(initialVehicule);
+      } finally {
+        setLoadingVehicle(false);
+      }
+    };
+    fetchFullVehicle();
+  }, [initialVehicule?.id, authState.accessToken]);
+
+  // AJOUT: Incrémenter les vues au chargement de la page, seulement si pas depuis parking
+  useEffect(() => {
+    if (initialVehicule?.id && route.params?.fromParking !== 'true') {
+      viewsService.incrementViews(initialVehicule.id);
+    }
+  }, [initialVehicule?.id, route.params?.fromParking]);
 
   // Debug des données du véhicule
   useEffect(() => {
@@ -153,6 +193,8 @@ function CarDetailScreen() {
         shouldShowAlert: true,
         shouldPlaySound: false,
         shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
       }),
     });
 
@@ -273,6 +315,20 @@ function CarDetailScreen() {
   };
 
   const photoUrls = getPhotoUrls(vehicule?.photos);
+
+  // Ajout de l'autoplay pour le défilement automatique des images
+  useEffect(() => {
+    if (photoUrls.length > 1 && !loadingVehicle) {
+      const interval = setInterval(() => {
+        const nextIndex = (currentImageIndex + 1) % photoUrls.length;
+        setCurrentImageIndex(nextIndex);
+        if (flatListRef.current) {
+          flatListRef.current.scrollToIndex({ index: nextIndex, animated: true });
+        }
+      }, 3000); // Défile toutes les 3 secondes
+      return () => clearInterval(interval);
+    }
+  }, [currentImageIndex, photoUrls.length, loadingVehicle]);
 
   // FONCTION DE SUPPRESSION CORRIGÉE
   const handleDelete = () => {
@@ -404,7 +460,7 @@ function CarDetailScreen() {
     } as any);
   };
 
-  if (!vehicule) {
+  if (loadingVehicle || !vehicule) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -596,7 +652,7 @@ function CarDetailScreen() {
       // NOTIFICATION AU PARKING
       if (vehicule?.parking?.id) {
         try {
-          const userInfo = authState.user || { prenom: 'Utilisateur', nom: '', id: 0 };
+          const userInfo = user || { prenom: 'Utilisateur', nom: '', id: 0 };
           
           const parkingMessage = `${userInfo.prenom} ${userInfo.nom} a réservé ${vehicule.marqueRef?.name || ''} ${vehicule.model || ''} pour ${reservationType.toLowerCase()}. Prix: ${vehicule.prix ? `${vehicule.prix.toLocaleString()} FCFA` : ''}`;
 
@@ -746,24 +802,7 @@ function CarDetailScreen() {
           <Text style={styles.priceValue}>
             {vehicule.prix ? `${vehicule.prix.toLocaleString()} FCFA` : 'Prix non disponible'}
           </Text>
-          {vehicule.parking && (
-            <Text style={styles.parkingName}>
-              📍 {vehicule.parking.nom}
-            </Text>
-          )}
-          {/* Badges pour vente/location avec fallback */}
-          <View style={styles.badgesContainer}>
-            {vehicule.forSale && (
-              <View style={[styles.badge, styles.saleBadge]}>
-                <Text style={styles.badgeText}>À vendre</Text>
-              </View>
-            )}
-            {vehicule.forRent && (
-              <View style={[styles.badge, styles.rentBadge]}>
-                <Text style={styles.badgeText}>À louer</Text>
-              </View>
-            )}
-          </View>
+          
         </View>
 
         {/* Bouton réservation - CACHÉ si c'est le parking */}
@@ -771,16 +810,6 @@ function CarDetailScreen() {
           <TouchableOpacity style={styles.reserveButton} onPress={handleReservePress}>
             <Text style={styles.reserveButtonText}>Réserver maintenant</Text>
           </TouchableOpacity>
-        )}
-
-        {/* Message spécial pour le parking */}
-        {isParkingView && (
-          <View style={styles.parkingMessage}>
-            <MaterialIcons name="business" size={24} color="#FF6F00" />
-            <Text style={styles.parkingMessageText}>
-              Vue gestion - Votre véhicule
-            </Text>
-          </View>
         )}
 
         {/* Détails du véhicule avec menu d'actions */}

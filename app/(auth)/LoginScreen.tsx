@@ -16,7 +16,7 @@ import { router, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import { useAuth } from '../../context/AuthContext';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // 🔥 IMPORT AJOUTÉ
+import AsyncStorage from '@react-native-async-storage/async-storage'; // Ajout pour stockage persistant
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
@@ -74,7 +74,7 @@ const LoginScreen = () => {
 
     setLoading(true);
     try {
-      const { accessToken, role, emailVerified, nom, prenom, id, parkingId } = await login({ email, password });
+      const { accessToken, refreshToken, role, emailVerified, nom, prenom, id, parkingId } = await login({ email, password });
 
       if (!emailVerified) {
         Alert.alert('Vérification requise', 'Veuillez vérifier votre email avant de continuer.');
@@ -82,28 +82,10 @@ const LoginScreen = () => {
         return;
       }
 
-      // 🔥 CORRECTION : STOCKER LE TOKEN DANS AsyncStorage
-      console.log('🔐 Stockage du token dans AsyncStorage...');
-      await AsyncStorage.multiSet([
-        ['userToken', accessToken],
-        ['userId', id.toString()],
-        ['userRole', role],
-        ['userEmail', email],
-      ]);
-
-      // Stocker parkingId si c'est un parking
-      if (parkingId) {
-        await AsyncStorage.setItem('parkingId', parkingId.toString());
-        console.log(`🅿️ Parking ID stocké: ${parkingId}`);
-      }
-
-      // Vérifier que le token est bien stocké
-      const storedToken = await AsyncStorage.getItem('userToken');
-      console.log(`✅ Token stocké: ${storedToken ? storedToken.substring(0, 20) + '...' : 'NON'}`);
-
-      // Mettre à jour le contexte avec les données de connexion
+      // Mettre à jour le contexte avec les données de connexion, incluant refreshToken
       setAuthState({
         accessToken,
+        refreshToken, // ← AJOUT : Stockez refreshToken dans authState
         role,
         userId: String(id),
         parkingId: parkingId ? String(parkingId) : null,
@@ -112,8 +94,11 @@ const LoginScreen = () => {
         prenom,
       });
 
-      console.log('🎯 Connexion réussie, redirection...');
-      
+      // Stockage persistant supplémentaire pour refreshToken (robustesse après restart app)
+      if (refreshToken) {
+        await AsyncStorage.setItem('refreshToken', refreshToken);
+      }
+      console.log('Login successful, refreshToken:', refreshToken);
     } catch (error) {
       const err = error as Error;
       console.error('❌ Erreur connexion:', err);

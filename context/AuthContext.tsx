@@ -1,12 +1,12 @@
-// context/AuthContext.tsx
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setAuthToken, refreshToken } from '../components/services/api';
-import { authService } from '../components/services/profileApi';
+import { setAuthToken } from '../components/services/api'; // Import setAuthToken
+import axios from 'axios'; // Pour refresh direct
+import { API_URL } from '../components/services/api'; // Import API_URL
 
 interface AuthState {
   accessToken: string | null;
-  refreshToken: string | null;  // ← AJOUT : Stockez le refreshToken
+  refreshToken: string | null;
   role: string | null;
   userId: string | null;
   parkingId: string | null;
@@ -20,8 +20,7 @@ interface AuthContextType {
   setAuthState: (state: Partial<AuthState>) => void;
   clearAuthState: () => void;
   isLoading: boolean;
-  refreshAuth: () => Promise<boolean>; // Ajout de refreshAuth
-  // Fournir un objet `user` dérivé pour compatibilité avec le code existant
+  refreshAuth: () => Promise<boolean>; 
   user: {
     id: number | null;
     nom: string | null;
@@ -52,9 +51,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const loadAuthData = async () => {
     try {
       const storedAuth = await AsyncStorage.getItem('authState');
+      const storedRefreshToken = await AsyncStorage.getItem('refreshToken');
       if (storedAuth) {
         const parsedAuth = JSON.parse(storedAuth);
-        setAuthState(parsedAuth);
+        setAuthState({
+          ...parsedAuth,
+          refreshToken: storedRefreshToken || parsedAuth.refreshToken,
+        });
         if (parsedAuth.accessToken) {
           setAuthToken(parsedAuth.accessToken);
         }
@@ -71,6 +74,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAuthState(newState);
     try {
       await AsyncStorage.setItem('authState', JSON.stringify(newState));
+      if (newState.refreshToken) {
+        await AsyncStorage.setItem('refreshToken', newState.refreshToken);
+      }
     } catch (error) {
       console.error('Erreur lors de la sauvegarde des données d\'authentification:', error);
     }
@@ -89,32 +95,38 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
     try {
       await AsyncStorage.removeItem('authState');
+      await AsyncStorage.removeItem('refreshToken');
     } catch (error) {
       console.error('Erreur lors de la suppression des données d\'authentification:', error);
     }
   };
 
-  // Ajout de la fonction refreshAuth
+  // refreshAuth corrigée : Utilise axios direct, met à jour refreshToken
   const refreshAuth = async (): Promise<boolean> => {
-  if (!authState.refreshToken) {
-    console.error('Pas de refreshToken disponible');
-    return false;
-  }
+    if (!authState.refreshToken) {
+      console.error('Pas de refreshToken disponible');
+      return false;
+    }
 
-  try {
-    const newTokens = await authService.refreshToken(authState.refreshToken);  // ← AJOUT : Passez refreshToken
-    await updateAuthState({
-      accessToken: newTokens.accessToken,
-      refreshToken: newTokens.refreshToken,  // ← AJOUT : Mettez à jour avec le nouveau refreshToken (rotation)
-    });
-    setAuthToken(newTokens.accessToken);
-    return true;
-  } catch (error) {
-    console.error('Erreur lors du rafraîchissement du token:', error);
-    clearAuthState();
-    return false;
-  }
-};
+    try {
+      const response = await axios.post(`${API_URL}auth/refresh`, { refreshToken: authState.refreshToken }, {
+        withCredentials: true
+      });
+      const { accessToken, refreshToken: newRefreshToken } = response.data; // ← AJOUT : Gère rotation
+
+      await updateAuthState({
+        accessToken,
+        refreshToken: newRefreshToken || authState.refreshToken, // Si pas de nouveau, garde ancien
+      });
+      setAuthToken(accessToken);
+      console.log('Refresh réussi, new refreshToken:', newRefreshToken);
+      return true;
+    } catch (error) {
+      console.error('Erreur lors du rafraîchissement du token:', error);
+      await clearAuthState();
+      return false;
+    }
+  };
 
   return (
     <AuthContext.Provider value={{ 
@@ -122,9 +134,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setAuthState: updateAuthState, 
       clearAuthState, 
       isLoading,
-      refreshAuth // Ajout de refreshAuth
-      ,
-      // Dériver un objet user depuis authState pour compatibilité
+      refreshAuth,
       user: authState && authState.userId ? {
         id: authState.userId ? Number(authState.userId) : null,
         nom: authState.nom,
