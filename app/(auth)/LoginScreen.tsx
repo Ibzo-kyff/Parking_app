@@ -101,6 +101,7 @@ const LoginScreen = () => {
       console.log('Login successful, refreshToken:', refreshToken);
     } catch (error) {
       const err = error as Error;
+      console.error('❌ Erreur connexion:', err);
       Alert.alert('Erreur', err.message || 'Échec de la connexion');
     } finally {
       setLoading(false);

@@ -61,4 +61,65 @@ export const apiService = {
       return { error: "Erreur serveur : vérifiez votre backend ou votre connexion" };
     }
   },
+
+  // Modifier un véhicule
+  async updateVehicle(vehicleId: string, formData: FormData, accessToken: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await fetch(`${BASE_URL}/api/vehicules/${vehicleId}`, {
+        method: "PUT",
+        body: formData,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return { error: data.error || "Impossible de modifier le véhicule" };
+      }
+      return { data };
+    } catch (err) {
+      return { error: "Erreur serveur lors de la modification du véhicule" };
+    }
+  },
+
+  // Supprimer un véhicule
+  async deleteVehicle(vehicleId: string, accessToken: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await fetch(`${BASE_URL}/api/vehicules/${vehicleId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        return { error: errorData.error || "Impossible de supprimer le véhicule" };
+      }
+      
+      // Pour les requêtes DELETE, on peut retourner un objet vide si c'est un succès
+      return { data: { success: true, message: "Véhicule supprimé avec succès" } };
+    } catch (err) {
+      return { error: "Erreur serveur lors de la suppression du véhicule" };
+    }
+  },
+
+  // Récupérer un véhicule par son ID
+  async getVehicleById(vehicleId: string, accessToken: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await fetch(`${BASE_URL}/api/vehicules/${vehicleId}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return { error: data.error || "Impossible de récupérer les données du véhicule" };
+      }
+      return { data };
+    } catch (err) {
+      return { error: "Erreur réseau lors de la récupération du véhicule" };
+    }
+  },
 };
