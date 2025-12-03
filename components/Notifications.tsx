@@ -11,11 +11,12 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAuth } from '../context/AuthContext';
 import {
   getNotifications,
   markNotificationAsRead,
   deleteNotification,
+  debugAuth
 } from "../components/services/Notification";
 
 interface Notification {
@@ -31,81 +32,42 @@ interface Notification {
 const Notifications = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [activeTab, setActiveTab] = useState<"all" | "unread">("all");
-  const [selectedNotification, setSelectedNotification] =
-    useState<Notification | null>(null);
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
   const [confirmVisible, setConfirmVisible] = useState(false);
-  const [userId, setUserId] = useState<number | null>(null);
-  const [parkingId, setParkingId] = useState<number | null>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [authChecked, setAuthChecked] = useState(false);
 
-  // 🔁 Récupérer les informations de l'utilisateur connecté
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        console.log("🔄 Chargement des informations utilisateur...");
-        
-        const id = await AsyncStorage.getItem("userId");
-        const parking = await AsyncStorage.getItem("parkingId");
-        const role = await AsyncStorage.getItem("userRole");
-        const token = await AsyncStorage.getItem("userToken");
-        
-        console.log(`👤 Rôle: ${role}, UserId: ${id}, ParkingId: ${parking}, Token: ${token ? "PRÉSENT" : "MANQUANT"}`);
-        
-        if (id) setUserId(Number(id));
-        if (parking) setParkingId(Number(parking));
-        if (role) {
-          setUserRole(role);
-        } else {
-          // 🔍 Déduire le rôle si non trouvé
-          if (parking) {
-            setUserRole('PARKING');
-            console.log("🅿️ Rôle déduit: PARKING (parkingId présent)");
-          } else if (id) {
-            setUserRole('USER');
-            console.log("👤 Rôle déduit: USER (userId présent)");
-          }
-        }
-        
-        setAuthChecked(true);
-        
-      } catch (err) {
-        console.log("❌ Erreur récupération user :", err);
-        setAuthChecked(true);
-      }
-    };
-    loadUser();
-  }, []);
+  const { authState, isLoading: authLoading } = useAuth();
+  
+  const userId = authState.userId ? Number(authState.userId) : null;
+  const parkingId = authState.parkingId ? Number(authState.parkingId) : null;
+  const userRole = authState.role;
+  const token = authState.accessToken;
 
-  // 🔁 Récupérer les notifications en fonction du rôle
   const fetchNotifications = async () => {
     try {
-      // Ne pas récupérer si pas d'authentification
-      if (!authChecked) {
-        console.log("⏳ En attente des informations d'authentification...");
+      await debugAuth();
+      
+      if (authLoading || !token) {
+        console.log("⏳ En attente de l'authentification...");
         return;
       }
 
       setLoading(true);
+      console.log(`📋 Fetch notifications - Rôle: ${userRole}, Token: ${token ? "PRÉSENT" : "MANQUANT"}`);
+      
       let data: any[] = [];
 
-      console.log(`📋 Fetch notifications - Rôle: ${userRole}, UserId: ${userId}, ParkingId: ${parkingId}`);
-      
       if (userRole === 'PARKING' && parkingId) {
-        // Récupérer les notifications du parking
-        console.log(`🅿️ Récupération notifications pour parking: ${parkingId}`);
+        console.log(`🅿️ Récupération pour parking ID: ${parkingId}`);
         data = await getNotifications(undefined, parkingId);
       } else if (userRole === 'USER' && userId) {
-        // Récupérer les notifications de l'utilisateur
-        console.log(`👤 Récupération notifications pour utilisateur: ${userId}`);
+        console.log(`👤 Récupération pour utilisateur ID: ${userId}`);
         data = await getNotifications(userId, undefined);
       } else {
-        console.warn("⚠️ Aucune entité identifiée pour récupérer les notifications");
-        console.log(`Détails - Rôle: ${userRole}, UserId: ${userId}, ParkingId: ${parkingId}`);
+        console.log("⚠️ Rôle non reconnu, tentative sans filtre");
+        data = await getNotifications();
       }
       
-      // S'assurer que data est un tableau
       const notificationsData = Array.isArray(data) ? data : [];
       
       const formatted = notificationsData.map((n: any) => ({
@@ -125,7 +87,7 @@ const Notifications = () => {
       }));
       
       setNotifications(formatted);
-      console.log(`✅ ${formatted.length} notifications chargées pour ${userRole}`);
+      console.log(`✅ ${formatted.length} notifications chargées`);
     } catch (err) {
       console.log("❌ Erreur récupération notifications :", err);
       setNotifications([]);
@@ -134,16 +96,14 @@ const Notifications = () => {
     }
   };
 
-  // 🔄 Récupération auto quand les infos utilisateur changent
   useEffect(() => {
-    if (authChecked) {
+    if (!authLoading && token) {
       fetchNotifications();
-      const interval = setInterval(() => fetchNotifications(), 15000); // 15s
+      const interval = setInterval(() => fetchNotifications(), 30000);
       return () => clearInterval(interval);
     }
-  }, [authChecked, userRole, userId, parkingId]);
+  }, [authLoading, token, userRole, userId, parkingId]);
 
-  // ✅ Marquer notification comme lue
   const handleMarkAsRead = async (notification: Notification) => {
     if (notification.read) return;
     try {
@@ -162,7 +122,6 @@ const Notifications = () => {
     }
   };
 
-  // ✅ Supprimer notification
   const handleDeleteConfirmed = async () => {
     if (!selectedNotification) return;
     try {
@@ -182,13 +141,11 @@ const Notifications = () => {
     }
   };
 
-  // 🔹 Filtrage par onglets
   const filteredNotifications =
     activeTab === "all"
       ? notifications
       : notifications.filter((n) => !n.read);
 
-  // 🔹 Affichage d'un item
   const renderItem = ({ item }: { item: Notification }) => (
     <TouchableOpacity
       style={[styles.card, !item.read && styles.nonLu]}
@@ -210,105 +167,98 @@ const Notifications = () => {
     </TouchableOpacity>
   );
 
-  // 🔄 Rafraîchir manuellement
   const handleRefresh = () => {
+    console.log("🔄 Rafraîchissement manuel des notifications");
     fetchNotifications();
   };
 
-  // Écran de chargement initial
-  if (!authChecked || (loading && notifications.length === 0)) {
+  if (!authState.accessToken) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF6B00" />
-          <Text style={styles.loadingText}>
-            {!authChecked ? "Vérification de l'authentification..." : "Chargement des notifications..."}
+        <View style={styles.notConnectedContainer}>
+          <Text style={styles.notConnectedText}>
+            Veuillez vous connecter pour voir vos notifications
           </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  // Vérifier si l'utilisateur est connecté
-  const isConnected = userId || parkingId;
+  if (authLoading || (loading && notifications.length === 0)) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF6B00" />
+          <Text style={styles.loadingText}>
+            {authLoading ? "Vérification de l'authentification..." : "Chargement des notifications..."}
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={{ flex: 1 }}>
         <View style={{ marginTop: 40, marginBottom: 20 }}>
           <Text style={styles.header}>Notifications</Text>
-          {isConnected && (
-            <Text style={styles.subHeader}>
-              {userRole === 'PARKING' ? `Parking ID: ${parkingId}` : `Utilisateur ID: ${userId}`}
-            </Text>
-          )}
+          <Text style={styles.subHeader}>
+            {userRole === 'PARKING' ? `Parking ID: ${parkingId}` : userRole === 'USER' ? `Utilisateur ID: ${userId}` : ''}
+          </Text>
         </View>
 
-        {!isConnected ? (
-          <View style={styles.notConnectedContainer}>
-            <Text style={styles.notConnectedText}>
-              Veuillez vous connecter pour voir vos notifications
+        <View style={styles.tabs}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "all" && styles.activeTab]}
+            onPress={() => setActiveTab("all")}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "all" && styles.activeTabText,
+              ]}
+            >
+              Toutes
             </Text>
-          </View>
-        ) : (
-          <>
-            {/* Onglets */}
-            <View style={styles.tabs}>
-              <TouchableOpacity
-                style={[styles.tab, activeTab === "all" && styles.activeTab]}
-                onPress={() => setActiveTab("all")}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    activeTab === "all" && styles.activeTabText,
-                  ]}
-                >
-                  Toutes
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.tab, activeTab === "unread" && styles.activeTab]}
-                onPress={() => setActiveTab("unread")}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    activeTab === "unread" && styles.activeTabText,
-                  ]}
-                >
-                  Non lues
-                </Text>
-              </TouchableOpacity>
-            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "unread" && styles.activeTab]}
+            onPress={() => setActiveTab("unread")}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "unread" && styles.activeTabText,
+              ]}
+            >
+              Non lues
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-            {/* Liste notifications */}
-            <FlatList
-              data={filteredNotifications}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={renderItem}
-              contentContainerStyle={{ paddingBottom: 20, paddingTop: 10 }}
-              ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-              refreshing={loading}
-              onRefresh={handleRefresh}
-              ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>
-                    Aucune notification
-                  </Text>
-                  <Text style={styles.emptySubText}>
-                    {userRole === 'PARKING' 
-                      ? "Les nouvelles réservations apparaîtront ici" 
-                      : "Vos notifications apparaîtront ici"}
-                  </Text>
-                </View>
-              }
-            />
-          </>
-        )}
+        <FlatList
+          data={filteredNotifications}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderItem}
+          contentContainerStyle={{ paddingBottom: 20, paddingTop: 10 }}
+          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+          refreshing={loading}
+          onRefresh={handleRefresh}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>
+                Aucune notification
+              </Text>
+              <Text style={styles.emptySubText}>
+                {userRole === 'PARKING' 
+                  ? "Les nouvelles réservations apparaîtront ici" 
+                  : "Vos notifications apparaîtront ici"}
+              </Text>
+            </View>
+          }
+        />
       </View>
 
-      {/* Modal détails */}
       <Modal visible={!!selectedNotification} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
@@ -346,7 +296,6 @@ const Notifications = () => {
         </View>
       </Modal>
 
-      {/* Modal confirmation suppression */}
       <Modal visible={confirmVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
