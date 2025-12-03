@@ -1,31 +1,12 @@
 import axios, { AxiosError } from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
-const API_URL = "https://parkapp-pi.vercel.app/api";
+import { API_URL } from './api';
 
 const api = axios.create({
   baseURL: API_URL,
 });
 
-// 🔐 Récupérer le token depuis AsyncStorage
-const getAuthToken = async (): Promise<string | null> => {
-  try {
-    const token = await AsyncStorage.getItem("userToken");
-    console.log(`🔐 Token récupéré: ${token ? "OUI" : "NON"}`);
-    return token;
-  } catch (error) {
-    console.error("❌ Erreur récupération token :", error);
-    return null;
-  }
-};
-
-// 🔐 Configuration des headers avec token
-const getAuthHeaders = async () => {
-  const token = await getAuthToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
-
-export interface NotificationData {
+interface NotificationData {
   id: number;
   title: string;
   message: string;
@@ -37,7 +18,33 @@ export interface NotificationData {
   parkingId?: number;
 }
 
-// ✅ Récupérer les notifications avec authentification
+const getAuthToken = async (): Promise<string | null> => {
+  try {
+    const authState = await AsyncStorage.getItem("authState");
+    if (authState) {
+      const parsedAuth = JSON.parse(authState);
+      if (parsedAuth.accessToken) {
+        return parsedAuth.accessToken;
+      }
+    }
+    
+    const token = await AsyncStorage.getItem("userToken");
+    console.log(`🔐 Token récupéré: ${token ? "OUI" : "NON"}`);
+    return token;
+  } catch (error) {
+    console.error("❌ Erreur récupération token :", error);
+    return null;
+  }
+};
+
+const getAuthHeaders = async () => {
+  const token = await getAuthToken();
+  return token ? { 
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  } : {};
+};
+
 export const getNotifications = async (
   userId?: number,
   parkingId?: number
@@ -48,7 +55,6 @@ export const getNotifications = async (
     let url = "/notifications";
     const params = new URLSearchParams();
     
-    // Ajouter les paramètres de filtrage
     if (userId) {
       params.append("userId", userId.toString());
     } 
@@ -60,10 +66,10 @@ export const getNotifications = async (
       url += `?${params.toString()}`;
     }
     
-    console.log(`📋 Récupération notifications: ${url}`);
+    console.log(`📋 Fetch notifications URL: ${url}`);
     
     const response = await api.get(url, { headers });
-    console.log("✅ Réponse API notifications:", response.data);
+    console.log(`✅ ${response.data.data?.length || 0} notifications récupérées`);
     
     return response.data.data || response.data || [];
   } catch (error) {
@@ -71,14 +77,17 @@ export const getNotifications = async (
     console.error(
       "❌ Erreur API GET notifications :",
       axiosError.response?.status,
-      axiosError.response?.data
+      axiosError.response?.data || axiosError.message
     );
+    
+    if (axiosError.response?.status === 401) {
+      console.log("🔄 Token expiré ou invalide");
+    }
     
     return [];
   }
 };
 
-// ✅ Créer une notification (route publique)
 export const createNotification = async (notificationData: {
   title: string;
   message: string;
@@ -89,7 +98,15 @@ export const createNotification = async (notificationData: {
   try {
     console.log("📤 Création notification:", notificationData);
     
-    const response = await api.post("/notifications", notificationData);
+    if (!notificationData.userId && !notificationData.parkingId) {
+      console.error("❌ Notification sans destinataire spécifique");
+      return null;
+    }
+    
+    const headers = await getAuthHeaders();
+    const response = await api.post("/notifications", notificationData, { headers });
+    
+    console.log("✅ Notification créée avec succès");
     return response.data.data;
   } catch (error) {
     const axiosError = error as AxiosError;
@@ -101,7 +118,6 @@ export const createNotification = async (notificationData: {
   }
 };
 
-// ✅ Fonction spéciale pour les réservations (ENVOYÉE AU PARKING)
 export const createReservationNotification = async (notificationData: {
   title: string;
   message: string;
@@ -111,6 +127,11 @@ export const createReservationNotification = async (notificationData: {
   try {
     console.log("🚀 Création notification réservation pour parking:", notificationData.parkingId);
 
+    if (!notificationData.parkingId) {
+      console.error("❌ Notification réservation sans parkingId");
+      return false;
+    }
+
     const notification = await createNotification({
       title: notificationData.title,
       message: notificationData.message,
@@ -118,7 +139,7 @@ export const createReservationNotification = async (notificationData: {
       parkingId: notificationData.parkingId
     });
 
-    console.log("✅ Notification réservation créée:", notification);
+    console.log("✅ Notification réservation créée:", !!notification);
     return !!notification;
 
   } catch (error) {
@@ -127,13 +148,35 @@ export const createReservationNotification = async (notificationData: {
   }
 };
 
-// ✅ Marquer une notification comme lue
+export const sendParkingReservationNotification = async (
+  userInfo: any,
+  vehicleInfo: any,
+  parkingId: number,
+  reservationType: 'LOCATION' | 'ACHAT'
+): Promise<boolean> => {
+  try {
+    const message = `${userInfo.prenom} ${userInfo.nom} a réservé ${vehicleInfo.marqueRef?.name || ''} ${vehicleInfo.model || ''} pour ${reservationType.toLowerCase()}. Prix: ${vehicleInfo.prix ? `${vehicleInfo.prix.toLocaleString()} FCFA` : ''}`;
+
+    return await createReservationNotification({
+      title: "🚗 NOUVELLE RÉSERVATION !",
+      message: message,
+      parkingId: parkingId,
+      type: "RESERVATION"
+    });
+  } catch (error) {
+    console.error("❌ Erreur sendParkingReservationNotification:", error);
+    return false;
+  }
+};
+
 export const markNotificationAsRead = async (
   id: number
 ): Promise<NotificationData | null> => {
   try {
     const headers = await getAuthHeaders();
     const response = await api.patch(`/notifications/${id}/read`, {}, { headers });
+    
+    console.log(`✅ Notification ${id} marquée comme lue`);
     return response.data.data;
   } catch (error) {
     const axiosError = error as AxiosError;
@@ -145,13 +188,14 @@ export const markNotificationAsRead = async (
   }
 };
 
-// ✅ Supprimer une notification
 export const deleteNotification = async (
   id: number
 ): Promise<{ success: boolean }> => {
   try {
     const headers = await getAuthHeaders();
     const response = await api.delete(`/notifications/${id}`, { headers });
+    
+    console.log(`✅ Notification ${id} supprimée`);
     return response.data;
   } catch (error) {
     const axiosError = error as AxiosError;
@@ -160,6 +204,51 @@ export const deleteNotification = async (
       axiosError.response ? axiosError.response.data : axiosError.message
     );
     return { success: false };
+  }
+};
+
+export const showLocalNotification = async (
+  title: string,
+  body: string,
+  data: any = {}
+): Promise<void> => {
+  try {
+    const { scheduleNotificationAsync } = await import('expo-notifications');
+    
+    await scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data,
+      },
+      trigger: null,
+    });
+    console.log('📱 Notification locale affichée');
+  } catch (error) {
+    console.warn('⚠️ Erreur notification locale:', error);
+  }
+};
+
+export const debugAuth = async (): Promise<void> => {
+  try {
+    const authState = await AsyncStorage.getItem("authState");
+    const userToken = await AsyncStorage.getItem("userToken");
+    
+    console.log("🔍 DEBUG AUTH:");
+    console.log("authState:", authState);
+    console.log("userToken:", userToken);
+    
+    if (authState) {
+      const parsed = JSON.parse(authState);
+      console.log("Parsed authState:", {
+        accessToken: parsed.accessToken ? "PRÉSENT" : "MANQUANT",
+        role: parsed.role,
+        userId: parsed.userId,
+        parkingId: parsed.parkingId
+      });
+    }
+  } catch (error) {
+    console.error("❌ Debug auth error:", error);
   }
 };
 
