@@ -6,7 +6,7 @@ const api = axios.create({
   baseURL: API_URL,
 });
 
-interface NotificationData {
+export interface NotificationData {
   id: number;
   title: string;
   message: string;
@@ -29,7 +29,6 @@ const getAuthToken = async (): Promise<string | null> => {
     }
     
     const token = await AsyncStorage.getItem("userToken");
-    console.log(`🔐 Token récupéré: ${token ? "OUI" : "NON"}`);
     return token;
   } catch (error) {
     console.error("❌ Erreur récupération token :", error);
@@ -45,6 +44,7 @@ const getAuthHeaders = async () => {
   } : {};
 };
 
+// ✅ Récupérer les notifications avec déduplication des doublons
 export const getNotifications = async (
   userId?: number,
   parkingId?: number
@@ -66,12 +66,22 @@ export const getNotifications = async (
       url += `?${params.toString()}`;
     }
     
-    console.log(`📋 Fetch notifications URL: ${url}`);
-    
     const response = await api.get(url, { headers });
-    console.log(`✅ ${response.data.data?.length || 0} notifications récupérées`);
+    const notifications = response.data.data || response.data || [];
     
-    return response.data.data || response.data || [];
+    // FILTRAGE DES DOUBLONS : Garder seulement les notifications uniques par titre + message
+    const uniqueNotifications = notifications.filter((notification: NotificationData, index: number, self: NotificationData[]) => {
+      // Créer une clé unique basée sur le titre et le message
+      const key = `${notification.title}_${notification.message}`;
+      // Trouver le premier index avec cette clé
+      const firstIndex = self.findIndex(n => `${n.title}_${n.message}` === key);
+      // Garder seulement si c'est la première occurrence
+      return firstIndex === index;
+    });
+    
+    console.log(`✅ ${uniqueNotifications.length} notifications uniques sur ${notifications.length} totales`);
+    
+    return uniqueNotifications;
   } catch (error) {
     const axiosError = error as AxiosError;
     console.error(
@@ -80,95 +90,11 @@ export const getNotifications = async (
       axiosError.response?.data || axiosError.message
     );
     
-    if (axiosError.response?.status === 401) {
-      console.log("🔄 Token expiré ou invalide");
-    }
-    
     return [];
   }
 };
 
-export const createNotification = async (notificationData: {
-  title: string;
-  message: string;
-  type: string;
-  userId?: number;
-  parkingId?: number;
-}): Promise<NotificationData | null> => {
-  try {
-    console.log("📤 Création notification:", notificationData);
-    
-    if (!notificationData.userId && !notificationData.parkingId) {
-      console.error("❌ Notification sans destinataire spécifique");
-      return null;
-    }
-    
-    const headers = await getAuthHeaders();
-    const response = await api.post("/notifications", notificationData, { headers });
-    
-    console.log("✅ Notification créée avec succès");
-    return response.data.data;
-  } catch (error) {
-    const axiosError = error as AxiosError;
-    console.error(
-      "❌ Erreur API POST notification :",
-      axiosError.response ? axiosError.response.data : axiosError.message
-    );
-    return null;
-  }
-};
-
-export const createReservationNotification = async (notificationData: {
-  title: string;
-  message: string;
-  parkingId: number;
-  type?: string;
-}): Promise<boolean> => {
-  try {
-    console.log("🚀 Création notification réservation pour parking:", notificationData.parkingId);
-
-    if (!notificationData.parkingId) {
-      console.error("❌ Notification réservation sans parkingId");
-      return false;
-    }
-
-    const notification = await createNotification({
-      title: notificationData.title,
-      message: notificationData.message,
-      type: notificationData.type || "RESERVATION",
-      parkingId: notificationData.parkingId
-    });
-
-    console.log("✅ Notification réservation créée:", !!notification);
-    return !!notification;
-
-  } catch (error) {
-    console.error("❌ Erreur création notification réservation:", error);
-    return false;
-  }
-};
-
-export const sendParkingReservationNotification = async (
-  userInfo: any,
-  vehicleInfo: any,
-  parkingId: number,
-  reservationType: 'LOCATION' | 'ACHAT'
-): Promise<boolean> => {
-  try {
-    const message = `${userInfo.prenom} ${userInfo.nom} a réservé ${vehicleInfo.marqueRef?.name || ''} ${vehicleInfo.model || ''} pour ${reservationType.toLowerCase()}. Prix: ${vehicleInfo.prix ? `${vehicleInfo.prix.toLocaleString()} FCFA` : ''}`;
-
-    return await createReservationNotification({
-      title: "🚗 NOUVELLE RÉSERVATION !",
-      message: message,
-      parkingId: parkingId,
-      type: "RESERVATION"
-    });
-  } catch (error) {
-    console.error("❌ Erreur sendParkingReservationNotification:", error);
-    return false;
-  }
-};
-
+// ✅ Marquer une notification comme lue
 export const markNotificationAsRead = async (
   id: number
 ): Promise<NotificationData | null> => {
@@ -188,6 +114,7 @@ export const markNotificationAsRead = async (
   }
 };
 
+// ✅ Supprimer une notification
 export const deleteNotification = async (
   id: number
 ): Promise<{ success: boolean }> => {
@@ -207,6 +134,7 @@ export const deleteNotification = async (
   }
 };
 
+// ✅ Fonction pour les notifications locales (Expo Notifications)
 export const showLocalNotification = async (
   title: string,
   body: string,
@@ -226,29 +154,6 @@ export const showLocalNotification = async (
     console.log('📱 Notification locale affichée');
   } catch (error) {
     console.warn('⚠️ Erreur notification locale:', error);
-  }
-};
-
-export const debugAuth = async (): Promise<void> => {
-  try {
-    const authState = await AsyncStorage.getItem("authState");
-    const userToken = await AsyncStorage.getItem("userToken");
-    
-    console.log("🔍 DEBUG AUTH:");
-    console.log("authState:", authState);
-    console.log("userToken:", userToken);
-    
-    if (authState) {
-      const parsed = JSON.parse(authState);
-      console.log("Parsed authState:", {
-        accessToken: parsed.accessToken ? "PRÉSENT" : "MANQUANT",
-        role: parsed.role,
-        userId: parsed.userId,
-        parkingId: parsed.parkingId
-      });
-    }
-  } catch (error) {
-    console.error("❌ Debug auth error:", error);
   }
 };
 

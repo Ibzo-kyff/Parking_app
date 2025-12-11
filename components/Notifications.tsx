@@ -16,7 +16,6 @@ import {
   getNotifications,
   markNotificationAsRead,
   deleteNotification,
-  debugAuth
 } from "../components/services/Notification";
 
 interface Notification {
@@ -45,32 +44,41 @@ const Notifications = () => {
 
   const fetchNotifications = async () => {
     try {
-      await debugAuth();
-      
       if (authLoading || !token) {
         console.log("⏳ En attente de l'authentification...");
         return;
       }
 
       setLoading(true);
-      console.log(`📋 Fetch notifications - Rôle: ${userRole}, Token: ${token ? "PRÉSENT" : "MANQUANT"}`);
+      console.log(`📋 Fetch notifications - Rôle: ${userRole}, UserId: ${userId}, ParkingId: ${parkingId}`);
       
       let data: any[] = [];
 
+      // IMPORTANT: Le rôle CLIENT doit utiliser userId, pas parkingId
       if (userRole === 'PARKING' && parkingId) {
         console.log(`🅿️ Récupération pour parking ID: ${parkingId}`);
         data = await getNotifications(undefined, parkingId);
-      } else if (userRole === 'USER' && userId) {
-        console.log(`👤 Récupération pour utilisateur ID: ${userId}`);
+      } else if ((userRole === 'CLIENT' || userRole === 'USER') && userId) {
+        console.log(`👤 Récupération pour utilisateur (CLIENT) ID: ${userId}`);
         data = await getNotifications(userId, undefined);
       } else {
-        console.log("⚠️ Rôle non reconnu, tentative sans filtre");
-        data = await getNotifications();
+        console.log("⚠️ Rôle non reconnu ou ID manquant:", { userRole, userId, parkingId });
+        setNotifications([]);
+        setLoading(false);
+        return;
       }
       
       const notificationsData = Array.isArray(data) ? data : [];
       
-      const formatted = notificationsData.map((n: any) => ({
+      // Déduplication supplémentaire côté frontend
+      const uniqueNotifications = notificationsData.filter((notification, index, self) => {
+        const key = `${notification.title}_${notification.message}_${notification.type}`;
+        return index === self.findIndex(n => 
+          `${n.title}_${n.message}_${n.type}` === key
+        );
+      });
+      
+      const formatted = uniqueNotifications.map((n: any) => ({
         id: n.id,
         title: n.title || "Sans titre",
         message: n.message || "Aucun message",
@@ -87,7 +95,7 @@ const Notifications = () => {
       }));
       
       setNotifications(formatted);
-      console.log(`✅ ${formatted.length} notifications chargées`);
+      console.log(`✅ ${formatted.length} notifications uniques chargées`);
     } catch (err) {
       console.log("❌ Erreur récupération notifications :", err);
       setNotifications([]);
@@ -172,7 +180,7 @@ const Notifications = () => {
     fetchNotifications();
   };
 
-  if (!authState.accessToken) {
+  if (!token) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.notConnectedContainer}>
@@ -203,7 +211,8 @@ const Notifications = () => {
         <View style={{ marginTop: 40, marginBottom: 20 }}>
           <Text style={styles.header}>Notifications</Text>
           <Text style={styles.subHeader}>
-            {userRole === 'PARKING' ? `Parking ID: ${parkingId}` : userRole === 'USER' ? `Utilisateur ID: ${userId}` : ''}
+            {userRole === 'PARKING' ? `Parking ID: ${parkingId}` : 
+             (userRole === 'CLIENT' || userRole === 'USER') ? `Utilisateur ID: ${userId}` : ''}
           </Text>
         </View>
 

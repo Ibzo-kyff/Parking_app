@@ -23,7 +23,7 @@ import { useAuth } from '../context/AuthContext';
 import { favorisService } from './services/favorisService';
 import { viewsService } from './services/viewsService';
 import axios from 'axios';
-import { createReservationNotification, createNotification, debugAuth } from './services/Notification';
+import { showLocalNotification } from './services/Notification';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 
@@ -74,6 +74,7 @@ function CarDetailScreen() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
+  // États pour la réservation
   const [modalVisible, setModalVisible] = useState(false);
   const [reservationType, setReservationType] = useState<'LOCATION' | 'ACHAT' | null>(null);
   const [startDate, setStartDate] = useState<Date | null>(null);
@@ -82,15 +83,22 @@ function CarDetailScreen() {
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  // États pour le favoris
   const [isFavorite, setIsFavorite] = useState(false);
+
+  // Vérifier si c'est le parking qui consulte
   const [isParkingView, setIsParkingView] = useState(false);
+
+  // États pour le menu de modification/suppression
   const [actionMenuVisible, setActionMenuVisible] = useState(false);
 
   const { authState, user } = useAuth();
 
+  // Nouvel état pour les données complètes du véhicule
   const [vehicule, setVehicule] = useState<Vehicule | null>(null);
   const [loadingVehicle, setLoadingVehicle] = useState(true);
 
+  // Parsing initial du véhicule passé en params
   let initialVehicule: Vehicule | null = null;
 
   if (route.params?.vehicule) {
@@ -106,16 +114,19 @@ function CarDetailScreen() {
     }
   }
 
+  // Vérifier si c'est le parking qui consulte
   useEffect(() => {
     if (route.params?.isParkingView) {
       setIsParkingView(route.params.isParkingView === 'true');
     }
     
+    // Vérifier également par le rôle de l'utilisateur
     if (authState.role === 'PARKING') {
       setIsParkingView(true);
     }
   }, [route.params, authState.role]);
 
+  // Fetch des détails complets du véhicule via API
   useEffect(() => {
     const fetchFullVehicle = async () => {
       if (!initialVehicule?.id) {
@@ -134,6 +145,7 @@ function CarDetailScreen() {
         console.log(`Nombre de vues pour le véhicule ID ${initialVehicule.id} : ${response.data.stats?.vues || 0}`);
       } catch (error) {
         console.error('Erreur lors du fetch des détails véhicule:', error);
+        // Fallback sur les données passées en params si échec
         setVehicule(initialVehicule);
       } finally {
         setLoadingVehicle(false);
@@ -142,12 +154,14 @@ function CarDetailScreen() {
     fetchFullVehicle();
   }, [initialVehicule?.id, authState.accessToken]);
 
+  // AJOUT: Incrémenter les vues au chargement de la page, seulement si pas depuis parking
   useEffect(() => {
     if (initialVehicule?.id && route.params?.fromParking !== 'true') {
       viewsService.incrementViews(initialVehicule.id);
     }
   }, [initialVehicule?.id, route.params?.fromParking]);
 
+  // Setup notifications
   useEffect(() => {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
@@ -188,17 +202,7 @@ function CarDetailScreen() {
     }
   }
 
-  async function showLocalNotification(title: string, body: string, data: any) {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title,
-        body,
-        data,
-      },
-      trigger: null,
-    });
-  }
-
+  // Fonction pour vérifier l'état favoris (seulement si pas parking)
   const checkFavoriteStatus = async () => {
     if (!vehicule?.id || isParkingView) return;
     
@@ -211,10 +215,12 @@ function CarDetailScreen() {
     }
   };
 
+  // Vérifier l'état favoris au chargement initial
   useEffect(() => {
     checkFavoriteStatus();
   }, [vehicule?.id, isParkingView]);
 
+  // Re-vérifier l'état favoris quand l'écran redevient actif
   useFocusEffect(
     React.useCallback(() => {
       if (vehicule?.id && !isParkingView) {
@@ -241,6 +247,7 @@ function CarDetailScreen() {
     }
   };
 
+  // Fonction améliorée pour gérer les photos
   const getPhotoUrls = (photos: string[] | string | undefined): string[] => {
     if (!photos) return [];
     
@@ -273,6 +280,7 @@ function CarDetailScreen() {
 
   const photoUrls = getPhotoUrls(vehicule?.photos);
 
+  // Ajout de l'autoplay pour le défilement automatique des images
   useEffect(() => {
     if (photoUrls.length > 1 && !loadingVehicle) {
       const interval = setInterval(() => {
@@ -281,11 +289,12 @@ function CarDetailScreen() {
         if (flatListRef.current) {
           flatListRef.current.scrollToIndex({ index: nextIndex, animated: true });
         }
-      }, 3000);
+      }, 3000); // Défile toutes les 3 secondes
       return () => clearInterval(interval);
     }
   }, [currentImageIndex, photoUrls.length, loadingVehicle]);
 
+  // RENDER FUNCTIONS :
   const renderImageItem = ({ item }: { item: string }) => (
     <View style={styles.imageContainer}>
       <Image 
@@ -294,6 +303,7 @@ function CarDetailScreen() {
         resizeMode="cover"
         onError={(error) => console.log('Erreur chargement image:', error.nativeEvent.error)}
       />
+      {/* Bouton favoris - CACHÉ si c'est le parking */}
       {!isParkingView && (
         <TouchableOpacity 
           style={[
@@ -400,11 +410,13 @@ function CarDetailScreen() {
     );
   };
 
+  // Ouvrir modale (seulement si pas parking)
   const handleReservePress = () => {
     if (isParkingView) return;
     setModalVisible(true);
   };
 
+  // Sélection type
   const selectType = (type: 'LOCATION' | 'ACHAT') => {
     setReservationType(type);
     if (type === 'ACHAT') {
@@ -419,6 +431,7 @@ function CarDetailScreen() {
     }
   };
 
+  // Changement dates
   const onStartDateChange = (event: any, selectedDate?: Date) => {
     setShowStartPicker(Platform.OS === 'ios');
     if (selectedDate) {
@@ -440,6 +453,7 @@ function CarDetailScreen() {
     }
   };
 
+  // FONCTION DE SUPPRESSION
   const handleDelete = () => {
     setActionMenuVisible(false);
     if (!vehicule) return;
@@ -493,6 +507,7 @@ function CarDetailScreen() {
             {
               text: 'OK',
               onPress: () => {
+                // Retour à l'écran précédent après suppression
                 if (router.canGoBack()) {
                   router.back();
                 } else {
@@ -511,6 +526,7 @@ function CarDetailScreen() {
           const errorData = JSON.parse(errorText);
           errorMessage = errorData.message || errorMessage;
         } catch (e) {
+          // Si ce n'est pas du JSON, utiliser le texte brut
           errorMessage = errorText || errorMessage;
         }
         
@@ -524,12 +540,14 @@ function CarDetailScreen() {
     }
   };
 
+  // FONCTION DE MODIFICATION
   const handleModify = () => {
     setActionMenuVisible(false);
     if (!vehicule) return;
     
     console.log('✏️ Navigation vers modification:', vehicule);
     
+    // Préparer les données pour l'écran de modification
     const vehicleDataForEdit = {
       id: vehicule.id,
       marque: vehicule.marqueRef ? {
@@ -555,6 +573,7 @@ function CarDetailScreen() {
       dureeAssurance: vehicule.dureeAssurance
     };
 
+    // Navigation vers l'écran de modification
     router.push({
       pathname: "/AjoutParking",
       params: { 
@@ -564,6 +583,7 @@ function CarDetailScreen() {
     } as any);
   };
 
+  // FONCTION DE RÉSERVATION SANS NOTIFICATIONS BACKEND (pour éviter les doublons)
   const confirmReservation = async () => {
     if (!reservationType) return Alert.alert('Erreur', 'Sélectionnez un type de réservation');
     if (reservationType === 'LOCATION' && (!startDate || !endDate)) {
@@ -622,6 +642,8 @@ function CarDetailScreen() {
       const newReservation = await response.json();
       console.log('✅ Réservation créée:', newReservation);
 
+      // NOTIFICATION LOCALE POUR L'UTILISATEUR SEULEMENT
+      // NE PAS CRÉER DE NOTIFICATION BACKEND POUR ÉVITER LES DOUBLONS
       try {
         await showLocalNotification(
           "🎉 Réservation confirmée !",
@@ -637,46 +659,8 @@ function CarDetailScreen() {
         console.warn('⚠️ Notification locale échouée:', notificationError);
       }
 
-      if (vehicule?.parking?.id) {
-        try {
-          const userInfo = user || { prenom: 'Utilisateur', nom: '', id: 0 };
-          
-          const parkingMessage = `${userInfo.prenom} ${userInfo.nom} a réservé ${vehicule?.marqueRef?.name || ''} ${vehicule?.model || ''} pour ${reservationType.toLowerCase()}. Prix: ${vehicule?.prix ? `${vehicule.prix.toLocaleString()} FCFA` : ''}`;
-
-          console.log(`📤 Envoi notification au parking ${vehicule.parking.id}:`, parkingMessage);
-
-          const notificationSuccess = await createReservationNotification({
-            title: "🚗 NOUVELLE RÉSERVATION !",
-            message: parkingMessage,
-            parkingId: vehicule.parking.id,
-            type: "RESERVATION"
-          });
-
-          if (notificationSuccess) {
-            console.log(`✅ Notification envoyée au parking ${vehicule.parking.id}`);
-          } else {
-            console.warn(`⚠️ Notification échouée pour le parking ${vehicule.parking.id}`);
-          }
-        } catch (notificationError) {
-          console.error("❌ Erreur notification parking:", notificationError);
-        }
-      } else {
-        console.warn("⚠️ Parking ID non disponible");
-      }
-
-      if (user?.id) {
-        try {
-          await createNotification({
-            title: "Réservation confirmée 🎉",
-            message: `Votre ${reservationType.toLowerCase()} du véhicule ${vehicule?.marqueRef?.name || ''} ${vehicule?.model || ''} a été confirmée. Vous serez notifié des prochaines étapes.`,
-            type: "RESERVATION_CONFIRMATION",
-            userId: user.id
-          });
-          console.log('✅ Notification de confirmation envoyée à l\'utilisateur');
-        } catch (error) {
-          console.error('❌ Erreur envoi notification utilisateur:', error);
-        }
-      }
+      // LE BACKEND CRÉERA AUTOMATIQUEMENT LES NOTIFICATIONS POUR LE PARKING ET L'UTILISATEUR
+      // NE PAS CRÉER DE NOTIFICATIONS BACKEND MANUELLEMENT POUR ÉVITER LES DOUBLONS
 
       Alert.alert(
         'Succès 🎉', 
@@ -708,6 +692,7 @@ function CarDetailScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        {/* Carrousel avec bouton favoris intégré - CACHÉ si parking */}
         {photoUrls.length > 0 ? (
           <View>
             <FlatList
@@ -729,6 +714,7 @@ function CarDetailScreen() {
           <View style={[styles.imageContainer, styles.placeholderImage]}>
             <FontAwesome5 name="car" size={60} color="#ccc" />
             <Text style={styles.noImageText}>Aucune photo disponible</Text>
+            {/* Bouton favoris pour l'image placeholder - CACHÉ si parking */}
             {!isParkingView && (
               <TouchableOpacity 
                 style={[
@@ -748,6 +734,7 @@ function CarDetailScreen() {
           </View>
         )}
 
+        {/* En-tête */}
         <View style={styles.headerCard}>
           <Text style={styles.carName}>
             {vehicule.marqueRef?.name || vehicule.marque || 'Marque inconnue'} {vehicule.model || 'Modèle inconnu'}
@@ -762,12 +749,14 @@ function CarDetailScreen() {
           )}
         </View>
 
+        {/* Bouton réservation - CACHÉ si c'est le parking */}
         {!isParkingView && (
           <TouchableOpacity style={styles.reserveButton} onPress={handleReservePress}>
             <Text style={styles.reserveButtonText}>Réserver maintenant</Text>
           </TouchableOpacity>
         )}
 
+        {/* Détails du véhicule avec menu d'actions */}
         <View style={styles.detailsCard}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Détails du véhicule</Text>
@@ -824,6 +813,7 @@ function CarDetailScreen() {
             </View>
           </View>
 
+          {/* Section description */}
           {vehicule.description && (
             <View style={styles.descriptionSection}>
               <Text style={styles.descriptionTitle}>Description</Text>
@@ -832,6 +822,7 @@ function CarDetailScreen() {
           )}
         </View>
 
+        {/* Options supplémentaires */}
         <View style={styles.optionsCard}>
           <Text style={styles.sectionTitle}>Options incluses</Text>
           
@@ -871,6 +862,7 @@ function CarDetailScreen() {
           </View>
         </View>
 
+        {/* Statistiques */}
         {vehicule.stats && (
           <View style={styles.statsCard}>
             <Text style={styles.sectionTitle}>Statistiques</Text>
@@ -890,6 +882,7 @@ function CarDetailScreen() {
         )}
       </ScrollView>
 
+      {/* Modale de réservation - CACHÉE si parking */}
       {!isParkingView && (
         <Modal
           animationType="slide"
@@ -1106,6 +1099,46 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginTop: 4,
+  },
+  badgesContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  badge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginHorizontal: 4,
+  },
+  saleBadge: {
+    backgroundColor: '#28a745',
+  },
+  rentBadge: {
+    backgroundColor: '#17a2b8',
+  },
+  badgeText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  parkingMessage: {
+    backgroundColor: '#FFF3E0',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginVertical: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FF6F00',
+  },
+  parkingMessageText: {
+    fontSize: 16,
+    color: '#FF6F00',
+    fontWeight: 'bold',
+    marginLeft: 10,
   },
   reserveButton: {
     marginHorizontal: 16,
@@ -1460,6 +1493,10 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  buttonDisabled: {
+    backgroundColor: '#ccc',
+    opacity: 0.6,
   },
 });
 
