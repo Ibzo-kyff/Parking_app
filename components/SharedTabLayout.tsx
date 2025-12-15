@@ -147,9 +147,11 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
 const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: '#fff',
+    borderRadius: 25,
+    height: 60, 
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
-    height: 80,
+ 
     shadowColor: '#000',
     shadowOpacity: 0.2,
     shadowOffset: { width: 0, height: -8 },

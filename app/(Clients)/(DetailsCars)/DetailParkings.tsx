@@ -1,4 +1,5 @@
-import * as React from "react";
+
+import React, { useEffect, useState } from "react";
 import { useLocalSearchParams, router } from "expo-router";
 import {
   View,
@@ -10,12 +11,21 @@ import {
   TouchableOpacity,
   Linking,
   Alert,
-  Platform // Ajout de Platform
+  Platform,
+  Share,
+  RefreshControl,
 } from "react-native";
-import { FontAwesome, MaterialIcons, Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { 
+  FontAwesome, 
+  MaterialIcons, 
+  Ionicons, 
+  Feather, 
+  MaterialCommunityIcons,
+  FontAwesome5 
+} from "@expo/vector-icons";
 import { getParkingById, Parking } from "../../../components/services/parkingApi";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Interface étendue pour inclure les propriétés manquantes
 interface ExtendedParking extends Parking {
   latitude?: number;
   longitude?: number;
@@ -27,83 +37,169 @@ interface ExtendedUser {
   prenom: string;
   email: string;
   phone: string;
-  image?: string; // Propriété optionnelle
+  image?: string;
 }
 
 export default function ParkingDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [parking, setParking] = React.useState<ExtendedParking | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState("");
-  const [imageError, setImageError] = React.useState(false);
+  const [parking, setParking] = useState<ExtendedParking | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [imageError, setImageError] = useState(false);
+  const [userToken, setUserToken] = useState<string | null>(null);
 
-  // Debug: Afficher l'ID reçu
-  console.log("ID reçu:", id);
-
-  React.useEffect(() => {
-    const fetchParkingDetails = async () => {
-      if (!id || isNaN(Number(id))) {
-        setError("ID de parking invalide");
-        setLoading(false);
-        return;
-      }
-
+  // Charger le token utilisateur
+  useEffect(() => {
+    const loadToken = async () => {
       try {
-        setLoading(true);
-        const data = await getParkingById(id);
-        console.log("Données reçues:", data);
-        setParking(data as ExtendedParking);
-      } catch (err: any) {
-        console.error("Erreur détail parking:", err);
-        setError(err.message || "Impossible de charger ce parking");
-        Alert.alert("Erreur", err.message || "Impossible de charger ce parking");
-      } finally {
-        setLoading(false);
+        const token = await AsyncStorage.getItem('accessToken');
+        setUserToken(token);
+      } catch (error) {
+        console.error('Error loading token:', error);
       }
     };
+    loadToken();
+  }, []);
 
-    fetchParkingDetails();
-  }, [id]);
-
-  const handleCall = () => {
-    if (parking?.phone) {
-      Linking.openURL(`tel:${parking.phone}`);
-    } else {
-      Alert.alert("Information", "Aucun numéro de téléphone disponible");
+  const fetchParkingDetails = async () => {
+    console.log("Fetching parking details for ID:", id);
+    
+    if (!id || isNaN(Number(id))) {
+      setError("ID de parking invalide");
+      setLoading(false);
+      return;
     }
+
+    try {
+      setError("");
+      setImageError(false);
+      
+      console.log("Calling API with token:", userToken ? "Yes" : "No");
+      const data = await getParkingById(id);
+      
+      console.log("Parking data received:", {
+        id: data.id,
+        name: data.name,
+        logo: data.logo,
+        status: data.status
+      });
+      
+      setParking(data as ExtendedParking);
+    } catch (err: any) {
+      console.error("Error loading parking:", {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
+      
+      let errorMessage = err.message || "Impossible de charger ce parking";
+      
+      // Messages d'erreur spécifiques
+      if (err.response?.status === 404) {
+        errorMessage = "Parking introuvable";
+      } else if (err.response?.status === 401) {
+        errorMessage = "Session expirée. Veuillez vous reconnecter.";
+      } else if (err.message.includes("Network")) {
+        errorMessage = "Erreur de connexion. Vérifiez votre internet.";
+      }
+      
+      setError(errorMessage);
+      
+      Alert.alert(
+        "Erreur",
+        errorMessage,
+        [
+          { text: "OK", style: "cancel" },
+          { 
+            text: "Réessayer", 
+            onPress: () => fetchParkingDetails(),
+            style: "default" 
+          }
+        ]
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (id) {
+      fetchParkingDetails();
+    }
+  }, [id, userToken]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchParkingDetails();
   };
 
   const handleEmail = () => {
     if (parking?.email) {
-      Linking.openURL(`mailto:${parking.email}`);
+      Linking.openURL(`mailto:${parking.email}`).catch(() => {
+        Alert.alert("Erreur", "Impossible d'ouvrir l'application email");
+      });
     }
   };
 
   const handleNavigate = () => {
     if (parking?.latitude && parking?.longitude) {
-      const url = Platform.OS === 'ios' 
-        ? `maps://app?daddr=${parking.latitude},${parking.longitude}`
-        : `google.navigation:q=${parking.latitude},${parking.longitude}`;
+      const url = Platform.select({
+        ios: `maps://app?daddr=${parking.latitude},${parking.longitude}`,
+        android: `geo:0,0?q=${parking.latitude},${parking.longitude}`,
+        default: `https://www.google.com/maps/dir/?api=1&destination=${parking.latitude},${parking.longitude}`
+      });
       
-      Linking.openURL(url).catch(() => {
-        // Fallback pour les appareils sans Google Maps
-        const fallbackUrl = `https://www.google.com/maps/dir/?api=1&destination=${parking.latitude},${parking.longitude}`;
-        Linking.openURL(fallbackUrl);
+      Linking.openURL(url!).catch(() => {
+        // Fallback pour web
+        const address = encodeURIComponent(`${parking.address}, ${parking.city}`);
+        Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${address}`);
       });
     } else {
-      Alert.alert("Information", "Coordonnées GPS non disponibles");
+      // Utiliser l'adresse comme fallback
+      const address = encodeURIComponent(`${parking?.address}, ${parking?.city}`);
+      const url = Platform.select({
+        ios: `maps://app?daddr=${address}`,
+        android: `geo:0,0?q=${address}`,
+        default: `https://www.google.com/maps/search/?api=1&query=${address}`
+      });
+      
+      Linking.openURL(url!).catch(() => {
+        Alert.alert("Erreur", "Impossible d'ouvrir l'application de navigation");
+      });
     }
   };
 
-  const handleMessage = () => {
-    if (parking?.user) {
-      const user = parking.user as ExtendedUser;
-      router.navigate({
-        pathname: "../components/chat/ChatWindow",
+  const handleShare = async () => {
+    if (!parking) return;
+    
+    try {
+      const message = `Parking ${parking.name}\n📍 ${parking.address}, ${parking.city}\n📧 ${parking.email}\n\nTrouvé sur ParkApp`;
+      
+      const result = await Share.share({
+        message,
+        title: `Parking ${parking.name}`,
+        url: parking.logo || undefined,
+      });
+      
+      if (result.action === Share.sharedAction) {
+        console.log('Shared successfully');
+      }
+    } catch (error: any) {
+      Alert.alert("Erreur", "Impossible de partager les informations");
+    }
+  };
+
+  const handleContactManager = () => {
+    const user = parking?.user as ExtendedUser;
+    if (user) {
+      router.push({
+        pathname: "/chat",
         params: {
-          userId: user.id.toString(),
-          userName: `${user.nom} ${user.prenom}`,
-          userAvatar: user.image || "https://randomuser.me/api/portraits/men/1.jpg"
+          receiverId: user.id.toString(),
+          receiverName: `${user.nom} ${user.prenom}`,
+          receiverAvatar: user.image || "https://via.placeholder.com/150"
         }
       });
     } else {
@@ -117,10 +213,27 @@ export default function ParkingDetails() {
       year: "numeric",
       month: "long",
       day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
     });
   };
 
-  if (loading) {
+  const getStatusInfo = (status: string) => {
+    switch (status) {
+      case 'ACTIVE':
+        return { text: 'Ouvert', color: '#4CAF50', icon: 'checkmark-circle' };
+      case 'INACTIVE':
+        return { text: 'Fermé', color: '#F44336', icon: 'close-circle' };
+      case 'MAINTENANCE':
+        return { text: 'En maintenance', color: '#FF9800', icon: 'construct' };
+      case 'FULL':
+        return { text: 'Complet', color: '#9C27B0', icon: 'alert-circle' };
+      default:
+        return { text: status, color: '#757575', icon: 'help-circle' };
+    }
+  };
+
+  if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#ff7d00" />
@@ -129,14 +242,31 @@ export default function ParkingDetails() {
     );
   }
 
-  if (error) {
+  if (error && !parking) {
     return (
       <View style={styles.errorContainer}>
-        <Ionicons name="alert-circle" size={50} color="#ff3b30" />
+        <Ionicons name="alert-circle-outline" size={64} color="#ff3b30" />
+        <Text style={styles.errorTitle}>Oups !</Text>
         <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => router.back()}>
-          <Text style={styles.retryButtonText}>Retour</Text>
-        </TouchableOpacity>
+        <Text style={styles.errorSubText}>ID: {id}</Text>
+        
+        <View style={styles.errorButtons}>
+          <TouchableOpacity 
+            style={[styles.button, styles.primaryButton]} 
+            onPress={fetchParkingDetails}
+          >
+            <Ionicons name="refresh" size={20} color="#fff" />
+            <Text style={styles.buttonText}>Réessayer</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.button, styles.secondaryButton]} 
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={20} color="#ff7d00" />
+            <Text style={[styles.buttonText, { color: '#ff7d00' }]}>Retour</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -144,173 +274,243 @@ export default function ParkingDetails() {
   if (!parking) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Parking introuvable</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => router.back()}>
-          <Text style={styles.retryButtonText}>Retour</Text>
+        <MaterialCommunityIcons name="parking" size={64} color="#666" />
+        <Text style={styles.errorTitle}>Parking introuvable</Text>
+        <Text style={styles.errorText}>Le parking demandé n'existe pas ou a été supprimé.</Text>
+        
+        <TouchableOpacity 
+          style={[styles.button, styles.primaryButton]} 
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={20} color="#fff" />
+          <Text style={styles.buttonText}>Retour à la liste</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
+  const statusInfo = getStatusInfo(parking.status);
   const user = parking.user as ExtendedUser;
+  const isUpdated = parking.updatedAt !== parking.createdAt;
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-
-        <View style={styles.imageContainer}>
-          {parking.logo && !imageError ? (
-            <Image
-              source={{
-                uri: `https://parkapp-pi.vercel.app${parking.logo}`,
-              }}
-              style={styles.image}
-              resizeMode="cover"
-              onError={() => setImageError(true)}
-            />
-          ) : (
-            <View style={styles.placeholderContainer}>
-              <MaterialCommunityIcons name="parking" size={60} color="#ff7d00" />
-              <Text style={styles.placeholderText}>{parking.name}</Text>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#ff7d00']}
+            tintColor="#ff7d00"
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header avec image */}
+        <View style={styles.headerContainer}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.shareButton}
+            onPress={handleShare}
+          >
+            <Ionicons name="share-outline" size={22} color="#fff" />
+          </TouchableOpacity>
+          
+          <View style={styles.imageContainer}>
+            {parking.logo && !imageError ? (
+              <Image
+                source={{ uri: parking.logo }}
+                style={styles.image}
+                resizeMode="cover"
+                onError={() => {
+                  console.log('Image load error:', parking.logo);
+                  setImageError(true);
+                }}
+                onLoad={() => console.log('Image loaded successfully')}
+              />
+            ) : (
+              <View style={styles.placeholderContainer}>
+                <MaterialCommunityIcons name="parking" size={70} color="#fff" />
+                <Text style={styles.placeholderText}>{parking.name}</Text>
+              </View>
+            )}
+            
+            <View style={styles.imageOverlay} />
+            
+            <View style={styles.titleOverlay}>
+              <Text style={styles.parkingName}>{parking.name}</Text>
+              <View style={[styles.statusBadge, { backgroundColor: statusInfo.color }]}>
+                <Ionicons name={statusInfo.icon as any} size={14} color="#fff" />
+                <Text style={styles.statusText}>{statusInfo.text}</Text>
+              </View>
             </View>
-          )}
+          </View>
         </View>
 
+        {/* Contenu principal */}
         <View style={styles.content}>
-          <View style={styles.header}>
-            <Text style={styles.name}>{parking.name}</Text>
-            <View
-              style={[
-                styles.statusBadge,
-                parking.status === "ACTIVE"
-                  ? styles.statusActive
-                  : parking.status === "INACTIVE"
-                  ? styles.statusInactive
-                  : styles.statusMaintenance,
-              ]}
+          {/* Actions rapides */}
+          <View style={styles.quickActions}>
+            <TouchableOpacity 
+              style={styles.quickAction}
+              onPress={handleEmail}
             >
-              <Text style={styles.statusText}>
-                {parking.status === "ACTIVE"
-                  ? "Actif"
-                  : parking.status === "INACTIVE"
-                  ? "Inactif"
-                  : "Maintenance"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.infoCard}>
-            <View style={styles.infoItem}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="location" size={20} color="#ff7d00" />
-              </View>
-              <View style={styles.infoTextContainer}>
-                <Text style={styles.infoLabel}>Adresse</Text>
-                <Text style={styles.infoValue}>{parking.address}</Text>
-                <Text style={styles.infoSubValue}>{parking.city}</Text>
-              </View>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.infoItem}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="time" size={20} color="#ff7d00" />
-              </View>
-              <View style={styles.infoTextContainer}>
-                <Text style={styles.infoLabel}>Horaires d'ouverture</Text>
-                <Text style={styles.infoValue}>
-                  {parking.hoursOfOperation || "Non spécifié"}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.infoItem}>
-              <View style={styles.iconContainer}>
-                <MaterialIcons name="email" size={20} color="#ff7d00" />
-              </View>
-              <View style={styles.infoTextContainer}>
-                <Text style={styles.infoLabel}>Email</Text>
-                <Text style={styles.infoValue}>{parking.email}</Text>
-              </View>
-            </View>
-
-            {parking.description && (
-              <>
-                <View style={styles.divider} />
-                <View style={styles.infoItem}>
-                  <View style={styles.iconContainer}>
-                    <Ionicons name="information-circle" size={20} color="#ff7d00" />
-                  </View>
-                  <View style={styles.infoTextContainer}>
-                    <Text style={styles.infoLabel}>Description</Text>
-                    <Text style={styles.infoValue}>{parking.description}</Text>
-                  </View>
-                </View>
-              </>
-            )}
-
-            <View style={styles.divider} />
-
-            <View style={styles.statsContainer}>
-              <View style={styles.statItem}>
-                <View style={styles.statIconContainer}>
-                  <Feather name="book" size={24} color="#fff" />
-                </View>
-                <Text style={styles.statValue}>{parking.capacity}</Text>
-                <Text style={styles.statLabel}>Places totales</Text>
-              </View>
-
-              {user && (
-                <View style={styles.statItem}>
-                  <View style={styles.statIconContainer}>
-                    <Ionicons name="person" size={24} color="#fff" />
-                  </View>
-                  <Text style={styles.statValue}>
-                    {user.nom} {user.prenom}
-                  </Text>
-                  <Text style={styles.statLabel}>Gestionnaire</Text>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.metaInfo}>
-              <View style={styles.metaItem}>
-                <Ionicons name="calendar-outline" size={14} color="#888" />
-                <Text style={styles.metaText}>
-                  Membre le: {formatDate(parking.createdAt)}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.actionButtons}>
-
-            <TouchableOpacity
-              style={[styles.actionButton, styles.messageButton]}
-              onPress={handleMessage}
-            >
-              <FontAwesome name="envelope" size={20} color="#fff" />
-              <Text style={styles.actionButtonText}>Message</Text>
+              <MaterialIcons name="email" size={20} color="#fff" />
+              <Text style={styles.quickActionText}>Email</Text>
             </TouchableOpacity>
-          </View>
 
-          {/* Bouton de navigation optionnel */}
-          {(parking.latitude && parking.longitude) && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.navigateButton]}
+            <TouchableOpacity 
+              style={styles.quickAction}
               onPress={handleNavigate}
             >
-              <Ionicons name="navigate" size={20} color="#fff" />
-              <Text style={styles.actionButtonText}>Y aller</Text>
+              <FontAwesome name="map-marker" size={20} color="#fff" />
+              <Text style={styles.quickActionText}>Y aller</Text>
             </TouchableOpacity>
+            
+            {user && (
+              <TouchableOpacity 
+                style={styles.quickAction}
+                onPress={handleContactManager}
+              >
+                <FontAwesome5 name="user" size={18} color="#fff" />
+                <Text style={styles.quickActionText}>Contacter</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Informations principales dans une seule carte */}
+          <View style={styles.infoSection}>
+            <Text style={styles.sectionTitle}>📋 Informations du parking</Text>
+            
+            <View style={styles.infoCard}>
+              {/* Adresse */}
+              <View style={styles.infoRow}>
+                <View style={styles.infoIcon}>
+                  <Ionicons name="location-outline" size={22} color="#ff7d00" />
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Adresse</Text>
+                  <Text style={styles.infoValue}>{parking.address}</Text>
+                  <Text style={styles.infoSubValue}>{parking.city}</Text>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+
+              {/* Capacité */}
+              <View style={styles.infoRow}>
+                <View style={styles.infoIcon}>
+                  <FontAwesome5 name="car" size={20} color="#ff7d00" />
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Capacité</Text>
+                  <View style={styles.capacityContainer}>
+                    <Text style={styles.capacityValue}>{parking.capacity}</Text>
+                    <Text style={styles.capacityLabel}>places disponibles</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+
+              {/* Horaires */}
+              {parking.hoursOfOperation && (
+                <>
+                  <View style={styles.infoRow}>
+                    <View style={styles.infoIcon}>
+                      <Ionicons name="time-outline" size={22} color="#ff7d00" />
+                    </View>
+                    <View style={styles.infoContent}>
+                      <Text style={styles.infoLabel}>Horaires d'ouverture</Text>
+                      <Text style={styles.infoValue}>{parking.hoursOfOperation}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.divider} />
+                </>
+              )}
+
+              {/* Email */}
+              <View style={styles.infoRow}>
+                <View style={styles.infoIcon}>
+                  <MaterialIcons name="email" size={22} color="#ff7d00" />
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Email de contact</Text>
+                  <Text style={styles.infoValue}>{parking.email}</Text>
+                </View>
+              </View>
+
+              {/* Description */}
+              {parking.description && (
+                <>
+                  <View style={styles.divider} />
+                  <View style={styles.infoRow}>
+                    <View style={styles.infoIcon}>
+                      <Ionicons name="information-circle-outline" size={24} color="#ff7d00" />
+                    </View>
+                    <View style={styles.infoContent}>
+                      <Text style={styles.infoLabel}>Description</Text>
+                      <Text style={styles.infoDescription}>{parking.description}</Text>
+                    </View>
+                  </View>
+                </>
+              )}
+
+              {/* Gestionnaire */}
+              {user && (
+                <>
+                  <View style={styles.divider} />
+                  <View style={styles.infoRow}>
+                    <View style={styles.infoIcon}>
+                      <Ionicons name="person-outline" size={22} color="#ff7d00" />
+                    </View>
+                    <View style={styles.infoContent}>
+                      <Text style={styles.infoLabel}>Gestionnaire</Text>
+                      <Text style={styles.infoValue}>{user.prenom} {user.nom}</Text>
+                      <Text style={styles.infoSubValue}>{user.email}</Text>
+                    </View>
+                  </View>
+                </>
+              )}
+
+              {/* Dates de création et mise à jour */}
+              <View style={styles.divider} />
+              <View style={styles.dateContainer}>
+                <View style={styles.dateItem}>
+                  <Ionicons name="calendar-outline" size={16} color="#666" />
+                  <Text style={styles.dateText}>
+                    Créé le {formatDate(parking.createdAt)}
+                  </Text>
+                </View>
+                
+                {isUpdated && (
+                  <View style={styles.dateItem}>
+                    <Ionicons name="refresh-outline" size={16} color="#666" />
+                    <Text style={styles.dateText}>
+                      Mis à jour le {formatDate(parking.updatedAt)}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </View>
+
+          {/* Note pour les parkings fermés */}
+          {parking.status !== 'ACTIVE' && (
+            <View style={styles.warningCard}>
+              <Ionicons name="warning-outline" size={20} color="#FF9800" />
+              <Text style={styles.warningText}>
+                Ce parking est actuellement {statusInfo.text.toLowerCase()}
+              </Text>
+            </View>
           )}
         </View>
       </ScrollView>
@@ -321,66 +521,116 @@ export default function ParkingDetails() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: "#f5f5f5",
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: 30,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f8f9fa",
+    backgroundColor: "#f5f5f5",
+    padding: 20,
   },
   loadingText: {
-    marginTop: 12,
+    marginTop: 16,
     color: "#666",
     fontSize: 16,
+    fontWeight: "500",
   },
   errorContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f8f9fa",
-    padding: 20,
+    backgroundColor: "#f5f5f5",
+    padding: 30,
+  },
+  errorTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#333",
+    marginTop: 20,
+    marginBottom: 8,
   },
   errorText: {
-    color: "#ff3b30",
     fontSize: 16,
+    color: "#666",
     textAlign: "center",
-    marginVertical: 20,
+    lineHeight: 22,
+    marginBottom: 8,
   },
-  retryButton: {
-    backgroundColor: "#ff7d00",
+  errorSubText: {
+    fontSize: 14,
+    color: "#999",
+    marginBottom: 25,
+  },
+  errorButtons: {
+    flexDirection: "row",
+    marginTop: 20,
+    gap: 12,
+  },
+  button: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 25,
-    elevation: 2,
+    gap: 8,
+    minWidth: 120,
   },
-  retryButtonText: {
-    color: '#fff',
+  primaryButton: {
+    backgroundColor: "#ff7d00",
+  },
+  secondaryButton: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ff7d00",
+  },
+  buttonText: {
+    color: "#fff",
     fontWeight: "600",
     fontSize: 14,
+  },
+  // Header
+  headerContainer: {
+    position: "relative",
   },
   backButton: {
     position: "absolute",
     top: 50,
-    left: 20,
-    zIndex: 15,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 20,
-    padding: 8,
-    elevation: 3,
+    left: 16,
+    zIndex: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  shareButton: {
+    position: "absolute",
+    top: 50,
+    right: 16,
+    zIndex: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   imageContainer: {
-    width: "100%",
-    height: 250,
+    height: 280,
     backgroundColor: "#e0e0e0",
     justifyContent: "center",
     alignItems: "center",
+    position: "relative",
   },
   image: {
     width: "100%",
@@ -389,88 +639,131 @@ const styles = StyleSheet.create({
   placeholderContainer: {
     alignItems: "center",
     justifyContent: "center",
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#ff7d00",
   },
   placeholderText: {
     marginTop: 10,
-    fontSize: 16,
-    color: "#ff7d00",
+    fontSize: 18,
+    color: "#fff",
     fontWeight: "600",
   },
-  content: {
-    padding: 20,
-    marginTop: -20,
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    backgroundColor: "#fff",
-    minHeight: 400,
+  imageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 20,
+  titleOverlay: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    right: 20,
+    zIndex: 10,
   },
-  name: {
-    fontSize: 24,
+  parkingName: {
+    color: "#fff",
+    fontSize: 28,
     fontWeight: "800",
-    color: "#1a1a1a",
-    flex: 1,
-    marginRight: 10,
+    marginBottom: 8,
+    textShadowColor: "rgba(0, 0, 0, 0.75)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
-    alignSelf: 'flex-start',
-  },
-  statusActive: {
-    backgroundColor: "#4CAF50",
-  },
-  statusInactive: {
-    backgroundColor: "#F44336",
-  },
-  statusMaintenance: {
-    backgroundColor: "#FF9800",
+    gap: 6,
   },
   statusText: {
     color: "#fff",
     fontWeight: "700",
     fontSize: 12,
   },
-  infoCard: {
-    backgroundColor: "#f8f9fa",
-    borderRadius: 20,
+  // Content
+  content: {
     padding: 20,
+    paddingTop: 0,
+  },
+  quickActions: {
+    flexDirection: "row",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    marginTop: -30,
     marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    gap: 8,
+  },
+  quickAction: {
+    flex: 1,
+    backgroundColor: "#ff7d00",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  quickActionText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  infoSection: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1a1a1a",
+    marginBottom: 12,
+  },
+  infoCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
     elevation: 2,
   },
-  infoItem: {
+  infoRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginVertical: 10,
+    marginVertical: 8,
   },
-  iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#FF9800",
+  infoIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 125, 0, 0.1)",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
+    marginTop: 2,
   },
-  infoTextContainer: {
+  infoContent: {
     flex: 1,
   },
   infoLabel: {
     fontSize: 12,
     color: "#666",
-    marginBottom: 4,
     fontWeight: "600",
+    marginBottom: 4,
     textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   infoValue: {
     fontSize: 16,
-    fontWeight: "500",
+    fontWeight: "600",
     color: "#1a1a1a",
     lineHeight: 22,
   },
@@ -479,90 +772,58 @@ const styles = StyleSheet.create({
     color: "#666",
     marginTop: 2,
   },
+  infoDescription: {
+    fontSize: 14,
+    color: "#444",
+    lineHeight: 20,
+    marginTop: 4,
+  },
   divider: {
     height: 1,
-    backgroundColor: "#e0e0e0",
+    backgroundColor: "#f0f0f0",
     marginVertical: 12,
   },
-  statsContainer: {
+  capacityContainer: {
     flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: 8,
+    alignItems: "baseline",
   },
-  statItem: {
-    alignItems: "center",
-    flex: 1,
-  },
-  statIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#ff7d00',
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: "700",
+  capacityValue: {
+    fontSize: 24,
+    fontWeight: "800",
     color: "#ff7d00",
-    marginTop: 4,
-    textAlign: "center",
   },
-  statLabel: {
-    fontSize: 12,
+  capacityLabel: {
+    fontSize: 14,
     color: "#666",
-    marginTop: 4,
-    textAlign: "center",
+    marginLeft: 6,
   },
-  metaInfo: {
+  dateContainer: {
+    marginTop: 4,
+    gap: 8,
+  },
+  dateItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  dateText: {
+    fontSize: 13,
+    color: "#666",
+  },
+  // Warning
+  warningCard: {
+    backgroundColor: "#FFF3E0",
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
     marginTop: 8,
   },
-  metaItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  metaText: {
-    fontSize: 12,
-    color: "#888",
-    marginLeft: 6,
-  },
-  actionButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 15,
-    gap: 10,
-  },
-  actionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 12,
+  warningText: {
     flex: 1,
-    elevation: 2,
-    minHeight: 50,
-  },
-  callButton: {
-    backgroundColor: "#4CAF50",
-  },
-  emailButton: {
-    backgroundColor: "#2196F3",
-  },
-  messageButton: {
-    backgroundColor: "#FF9800",
-  },
-  navigateButton: {
-    backgroundColor: "#9C27B0",
-    marginBottom: 30,
-  },
-  actionButtonText: {
-    color: "#fff",
-    fontWeight: "600",
-    marginLeft: 6,
-    fontSize: 12,
-    textAlign: 'center',
+    fontSize: 14,
+    color: "#E65100",
+    lineHeight: 20,
   },
 });

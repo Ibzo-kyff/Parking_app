@@ -72,19 +72,20 @@ export const MessageBubble: React.FC<Props> = ({ message, isOwn }) => {
       ]}
       accessibilityLabel={`Message de ${isOwn ? 'vous' : 'l\'interlocuteur'}: ${message.content}`}
     >
-      <View style={styles.contentContainer}>
+      <View style={[
+        styles.bubble,
+        isOwn ? styles.ownBubble : styles.otherBubble
+      ]}>
         <Text style={[styles.content, isOwn ? styles.ownContent : styles.otherContent]}>
           {message.content}
-          {!isOwn && !message.read && (
-            <Text style={styles.unread} accessibilityLabel="Non lu"> •</Text>
-          )}
         </Text>
-        <View style={styles.meta}>
-          <Text style={styles.time}>
+
+        <View style={styles.metaContainer}>
+          <Text style={[styles.time, isOwn ? styles.ownTime : styles.otherTime]}>
             {formatRelativeTime(new Date(message.createdAt))}
           </Text>
           {isOwn && (
-            <Text style={styles.readStatus} accessibilityLabel={message.read ? 'Lu' : 'Envoyé'}>
+            <Text style={styles.readStatus}>
               {message.read ? '✓✓' : '✓'}
             </Text>
           )}
@@ -93,52 +94,44 @@ export const MessageBubble: React.FC<Props> = ({ message, isOwn }) => {
     </Animated.View>
   );
 };
+
 const styles = StyleSheet.create({
   message: {
-    marginVertical: 8,
+    marginVertical: 4,
     paddingHorizontal: 10,
+    maxWidth: '85%',
   },
-
   own: {
     alignSelf: 'flex-end',
   },
-
   other: {
     alignSelf: 'flex-start',
   },
+  bubble: {
+    borderRadius: 18,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    minWidth: 80,
+    // Shadow for depth
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+
+  ownBubble: {
+    backgroundColor: '#007AFF', // iOS Blue
+    borderBottomRightRadius: 4, // Tail effect
+  },
+  otherBubble: {
+    backgroundColor: '#F0F0F0', // Light Gray
+    borderBottomLeftRadius: 4, // Tail effect
+  },
 
   contentContainer: {
-    maxWidth: '78%',
-    borderRadius: 22,
-    overflow: 'hidden', // Pour garder la forme arrondie
-    backgroundColor: 'transparent',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 5,
+    // Legacy support kept safe or removed if unused. Refactored above to use 'bubble'.
   },
-
-  content: {
-    fontSize: 16,
-    lineHeight: 22,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 22,
-  },
-
-  ownContent: {
-    backgroundColor: '#0065FF',
-    color: '#FFFFFF',
-  },
-
-  otherContent: {
-    backgroundColor: '#FFFFFF',
-    color: '#1B1B1E',
-    borderWidth: 1,
-    borderColor: '#E2E2E7',
-  },
-
   deletedContainer: {
     alignSelf: 'center',
     marginTop: 6,
@@ -146,37 +139,46 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 18,
-    borderWidth: 0.5,
-    borderColor: '#D3D3D8',
   },
-
   deletedText: {
     fontSize: 13,
     color: '#7A7A7F',
     fontStyle: 'italic',
-    textAlign: 'center',
   },
 
-  meta: {
+  content: {
+    fontSize: 16,
+    lineHeight: 22,
+    marginBottom: 4, // Space for metadata
+  },
+  ownContent: {
+    color: '#FFFFFF',
+  },
+  otherContent: {
+    color: '#000000',
+  },
+
+  metaContainer: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
-    marginTop: 6,
-    marginRight: 4,
+    marginTop: 2,
   },
-
   time: {
     fontSize: 11,
-    color: '#A1A1AB',
   },
-
+  ownTime: {
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  otherTime: {
+    color: 'rgba(0, 0, 0, 0.45)',
+  },
   readStatus: {
     fontSize: 12,
-    marginLeft: 6,
-    color: '#0065FF',
-    fontWeight: '500',
+    marginLeft: 4,
+    color: '#FFFFFF', // White checks on blue bg
+    fontWeight: 'bold',
   },
-
   unread: {
     fontSize: 14,
     marginLeft: 6,
