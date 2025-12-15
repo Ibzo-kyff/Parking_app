@@ -1,10 +1,9 @@
 import axios from "axios";
-
-const API_URL = "https://parkapp-pi.vercel.app/api";
+import { BASE_URL } from "../../config/env";
 
 // Crée une instance axios
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: BASE_URL,
 });
 
 // Middleware pour ajouter automatiquement le token

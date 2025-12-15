@@ -1,4 +1,4 @@
-import { BASE_URL } from './listeVoiture';
+import { BASE_URL } from '../../config/env';
 
 export const viewsService = {
   // Fonction pour incrémenter les vues via votre endpoint existant

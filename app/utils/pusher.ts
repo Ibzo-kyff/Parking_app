@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL, getStoredAccessToken } from '../../components/services/api';
-
+import {getStoredAccessToken } from '../../components/services/api';
+import { BASE_URL } from "../../config/env";
 let pusherInstance: any = null;
 
 const loadPusher = () => {
@@ -37,7 +37,7 @@ export const initializePusher = async (userId: number) => {
 
   pusherInstance = new Pusher('mt1', {
     cluster: 'mt1',
-  authEndpoint: `${API_URL}auth/pusher`,
+  authEndpoint: `${BASE_URL}auth/pusher`,
     auth: {
       headers: { Authorization: `Bearer ${token}` },
     },

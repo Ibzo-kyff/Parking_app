@@ -1,6 +1,5 @@
 import { Platform } from 'react-native';
-
-const API_BASE_URL = 'https://parkapp-pi.vercel.app/api';
+import { BASE_URL } from "../../config/env";
 
 // Interface pour les données utilisateur
 export interface User {
@@ -43,7 +42,7 @@ export const apiService = {
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const url = `${BASE_URL}${endpoint}`;
   
   let headers: HeadersInit = { ...options.headers }; // Commence sans default
 

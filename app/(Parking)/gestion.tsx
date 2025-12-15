@@ -337,12 +337,19 @@ const MonParkingScreen: React.FC = () => {
     const monthlyData = parkingData?.charts?.monthlyData;
     if (!monthlyData) return null;
 
-    const maxValue = Math.max(...monthlyData.sales, ...monthlyData.rentals, 1);
+    // Afficher seulement les 4 derniers mois
+    const numMonths = 4;
+    const displayedLabels = monthlyData.labels.slice(-numMonths);
+    const displayedSales = monthlyData.sales.slice(-numMonths);
+    const displayedRentals = monthlyData.rentals.slice(-numMonths);
+
+    const maxValue = Math.max(...displayedSales, ...displayedRentals, 1);
     const chartHeight = 150;
     const barWidth = 25;
     const spacing = 15;
-    const totalWidth = monthlyData.labels.length * (barWidth * 2 + spacing);
+    const totalWidth = displayedLabels.length * (barWidth * 2 + spacing);
     const chartPadding = 20;
+    const yLabelWidth = 5; // Espace supplémentaire pour les labels Y
 
     return (
       <View style={styles.barChartContainer}>
@@ -351,79 +358,96 @@ const MonParkingScreen: React.FC = () => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: chartPadding }}
         >
-          <Svg width={totalWidth + chartPadding * 2} height={chartHeight + 60}>
-            {[0, 25, 50, 75, 100].map((percent, index) => {
-              const y = chartHeight - (percent / 100) * chartHeight;
-              return (
-                <Rect
-                  key={index}
-                  x={0}
-                  y={y}
-                  width={totalWidth}
-                  height={1}
-                  fill="#e0e0e0"
-                />
-              );
-            })}
+          <Svg width={totalWidth + chartPadding * 2 + yLabelWidth} height={chartHeight + 60}>
+            {/* Lignes horizontales et labels Y */}
+            <G x={yLabelWidth}>
+              {[0, 25, 50, 75, 100].map((percent, index) => {
+                const y = chartHeight - (percent / 100) * chartHeight;
+                const labelValue = Math.round((percent / 100) * maxValue);
+                return (
+                  <G key={index}>
+                    <Rect
+                      x={chartPadding}
+                      y={y}
+                      width={totalWidth}
+                      height={1}
+                      fill="#e0e0e0"
+                    />
+                    <SvgText
+                      x={chartPadding - 5}
+                      y={y + 3}
+                      textAnchor="end"
+                      fontSize="10"
+                      fill="#666"
+                    >
+                      {labelValue}
+                    </SvgText>
+                  </G>
+                );
+              })}
+            </G>
 
-            {monthlyData.labels.map((label, index) => {
-              const x = index * (barWidth * 2 + spacing) + chartPadding;
-              const salesHeight = (monthlyData.sales[index] / maxValue) * chartHeight;
-              const rentalsHeight = (monthlyData.rentals[index] / maxValue) * chartHeight;
+            {/* Barres et labels */}
+            <G x={yLabelWidth}>
+              {displayedLabels.map((label, index) => {
+                const x = index * (barWidth * 2 + spacing) + chartPadding;
+                const salesHeight = (displayedSales[index] / maxValue) * chartHeight;
+                const rentalsHeight = (displayedRentals[index] / maxValue) * chartHeight;
 
-              return (
-                <View key={index}>
-                  <Rect
-                    x={x}
-                    y={chartHeight - salesHeight}
-                    width={barWidth}
-                    height={salesHeight}
-                    fill="#FD6A00"
-                    rx={4}
-                  />
-                  <Rect
-                    x={x + barWidth + 2}
-                    y={chartHeight - rentalsHeight}
-                    width={barWidth}
-                    height={rentalsHeight}
-                    fill="#FFD1A3"
-                    rx={4}
-                  />
-                  
-                  <SvgText
-                    x={x + barWidth / 2}
-                    y={chartHeight - salesHeight - 5}
-                    textAnchor="middle"
-                    fontSize="10"
-                    fontWeight="bold"
-                    fill={monthlyData.sales[index] === 0 ? "#999" : "#333"}
-                  >
-                    {monthlyData.sales[index]}
-                  </SvgText>
-                  
-                  <SvgText
-                    x={x + barWidth * 1.5 + 2}
-                    y={chartHeight - rentalsHeight - 5}
-                    textAnchor="middle"
-                    fontSize="10"
-                    fontWeight="bold"
-                    fill={monthlyData.rentals[index] === 0 ? "#999" : "#333"}
-                  >
-                    {monthlyData.rentals[index]}
-                  </SvgText>
-                  
-                  <SvgText
-                    x={x + barWidth}
-                    y={chartHeight + 20}
-                    textAnchor="middle"
-                    fontSize="10"
-                    fill="#666"
-                  >
-                    {label}
-                  </SvgText>
-                </View>
-              );
-            })}
+                return (
+                  <G key={index}>
+                    <Rect
+                      x={x}
+                      y={chartHeight - salesHeight}
+                      width={barWidth}
+                      height={salesHeight}
+                      fill="#FD6A00"
+                      rx={4}
+                    />
+                    <Rect
+                      x={x + barWidth + 2}
+                      y={chartHeight - rentalsHeight}
+                      width={barWidth}
+                      height={rentalsHeight}
+                      fill="#FFD1A3"
+                      rx={4}
+                    />
+                    
+                    <SvgText
+                      x={x + barWidth / 2}
+                      y={chartHeight - salesHeight - 5}
+                      textAnchor="middle"
+                      fontSize="10"
+                      fontWeight="bold"
+                      fill={displayedSales[index] === 0 ? "#999" : "#333"}
+                    >
+                      {displayedSales[index]}
+                    </SvgText>
+                    
+                    <SvgText
+                      x={x + barWidth * 1.5 + 2}
+                      y={chartHeight - rentalsHeight - 5}
+                      textAnchor="middle"
+                      fontSize="10"
+                      fontWeight="bold"
+                      fill={displayedRentals[index] === 0 ? "#999" : "#333"}
+                    >
+                      {displayedRentals[index]}
+                    </SvgText>
+                    
+                    <SvgText
+                      x={x + barWidth}
+                      y={chartHeight + 20}
+                      textAnchor="middle"
+                      fontSize="10"
+                      fill="#666"
+                    >
+                      {label}
+                    </SvgText>
+                  </G>
+                );
+              })}
+            </G>
           </Svg>
         </ScrollView>
         
@@ -827,13 +851,13 @@ const styles = StyleSheet.create({
     color: '#FD6A00' 
   },
   barChartContainer: {
-    height: 210,
+    height: 220,
   },
   chartLegend: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginTop: 15,
-    paddingHorizontal: 20,
+    paddingHorizontal: 15,
   },
   legendColor: {
     width: 12,
