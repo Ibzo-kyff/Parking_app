@@ -3,8 +3,7 @@ import {
   View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, 
   KeyboardAvoidingView, Platform, Alert, Animated, ActivityIndicator
 } from 'react-native';
-import { Feather, MaterialIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { router, useNavigation } from 'expo-router';
 import { useAuth } from '../../../context/AuthContext';
 import { userService } from '../../../components/services/profileApi';
@@ -29,7 +28,6 @@ const Infopersonnel = () => {
 
   const { authState, clearAuthState } = useAuth();
 
-  // 🔹 Déconnexion et redirection vers la page de connexion
   const handleLogout = async () => {
     try {
       clearAuthState();
@@ -39,14 +37,10 @@ const Infopersonnel = () => {
     }
   };
 
-  // 🔹 Charger les infos utilisateur depuis backend
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        console.log("Tentative de récupération des données utilisateur...");
-        
         const token = authState.accessToken;
-        console.log("Token récupéré:", token ? "Présent" : "Absent");
         
         if (!token) {
           Alert.alert(
@@ -57,47 +51,42 @@ const Infopersonnel = () => {
           setLoading(false);
           setTokenError(true);
           return;
-        }        
-        // Utilisation du service API
+        }
+        
         const data = await userService.getUserDetails(token);
            
-        // Structure correcte des données (suppression des doublons)
         const userInfo = {
           nom: data.nom || '',
           prenom: data.prenom || '',
           address: data.address || '',
           phone: data.phone || '',
           email: data.email || '',
-          motdepasse: "********" // Mot de passe masqué par défaut
+          motdepasse: "********"
         };
         
         setUserData(userInfo);
         setOriginalData(userInfo);
         
-        // Animation de fondu
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 500,
+          duration: 300,
           useNativeDriver: true,
         }).start();
+        
       } catch (err: any) {
-        console.error("Erreur complète:", err);
+        console.error("Erreur:", err);
         
         if (err.status === 401 || err.status === 403) {
-          // Token invalide ou expiré
-          console.error("Erreur API (401/403): Token invalide");
-          
           Alert.alert(
             "Session expirée", 
             "Votre session a expiré. Veuillez vous reconnecter.",
             [{ text: "OK", onPress: () => handleLogout() }]
           );
-          
           setTokenError(true);
         } else {
           Alert.alert(
             "Erreur", 
-            err.message || "Impossible de récupérer vos informations. Vérifiez votre connexion internet."
+            err.message || "Impossible de récupérer vos informations."
           );
         }
       } finally {
@@ -112,32 +101,28 @@ const Infopersonnel = () => {
     setUserData(prev => ({ ...prev, [name]: value }));
   };
 
-  // 🔹 Sauvegarder vers backend avec méthode PUT
   const handleSave = async () => {
     setSaving(true);
     try {
       const token = authState.accessToken;
       if (!token) {
-        Alert.alert("Erreur", "Token d'authentification manquant");
+        Alert.alert("Erreur", "Session expirée");
         setSaving(false);
         return;
       }
 
-      // Préparer les données à envoyer avec la méthode PUT
       const updatedData: any = {
         nom: userData.nom,
         prenom: userData.prenom,
         address: userData.address,
         phone: userData.phone,
-        email: userData.email // L'email est généralement non modifiable
+        email: userData.email
       };
       
-      // Ne mettre à jour le mot de passe que s'il a été modifié (et n'est pas vide)
       if (userData.motdepasse && userData.motdepasse !== "********" && userData.motdepasse !== originalData.motdepasse) {
         updatedData.motdepasse = userData.motdepasse;
       }
 
-      // Vérifier si des modifications ont été apportées
       const hasChanges = 
         userData.nom !== originalData.nom ||
         userData.prenom !== originalData.prenom ||
@@ -152,21 +137,15 @@ const Infopersonnel = () => {
         return;
       }
 
-      console.log("Envoi des données mises à jour:", updatedData);
-
-      // Utilisation du service API pour la mise à jour
       const updated = await userService.updateUserDetails(token, updatedData);
       
-      console.log("Réponse de mise à jour:", updated);
-      
-      // Mettre à jour les données affichées (suppression des doublons)
       const updatedUserInfo = {
         nom: updated.nom || userData.nom,
         prenom: updated.prenom || userData.prenom,
         address: updated.address || userData.address,
         phone: updated.phone || userData.phone,
         email: updated.email || userData.email,
-        motdepasse: "********" // Réinitialiser l'affichage du mot de passe
+        motdepasse: "********"
       };
       
       setUserData(updatedUserInfo);
@@ -174,21 +153,20 @@ const Infopersonnel = () => {
       setIsEditing(false);
       setShowPassword(false);
       
-      Alert.alert("Succès", "Vos informations ont été mises à jour.");
+      Alert.alert("Succès", "Informations mises à jour");
     } catch (err: any) {
       console.error("Erreur lors de la sauvegarde:", err);
       
       if (err.status === 401 || err.status === 403) {
-        // Token invalide ou expiré
         Alert.alert(
           "Session expirée", 
-          "Votre session a expiré. Veuillez vous reconnecter.",
+          "Votre session a expiré.",
           [{ text: "OK", onPress: () => handleLogout() }]
         );
       } else {
         Alert.alert(
           "Erreur", 
-          err.message || "Impossible de sauvegarder vos informations. Veuillez réessayer."
+          err.message || "Impossible de sauvegarder."
         );
       }
     } finally {
@@ -196,31 +174,25 @@ const Infopersonnel = () => {
     }
   };
 
-  // Afficher un message si le token est invalide
   if (tokenError) {
     return (
-      <LinearGradient 
-        colors={['#FDB913', '#ffffff']} 
-        style={styles.container}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 0.3 }}
-      >
+      <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity 
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Feather name="arrow-left" size={24} color="#fff" />
+            <Feather name="arrow-left" size={22} color="#333" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Informations Personnelles</Text>
+          <Text style={styles.headerTitle}>Profil</Text>
         </View>
         
         <View style={styles.card}>
           <View style={styles.errorContainer}>
-            <Feather name="alert-circle" size={50} color="#F44336" />
+            <Feather name="alert-circle" size={50} color="#FF6B6B" />
             <Text style={styles.errorTitle}>Session expirée</Text>
             <Text style={styles.errorMessage}>
-              Votre session a expiré. Veuillez vous reconnecter pour accéder à vos informations.
+              Veuillez vous reconnecter
             </Text>
             <TouchableOpacity 
               style={styles.loginButton}
@@ -230,33 +202,26 @@ const Infopersonnel = () => {
             </TouchableOpacity>
           </View>
         </View>
-      </LinearGradient>
+      </View>
     );
   }
 
-  // Afficher le skeleton pendant le chargement
   if (loading) {
     return (
-      <LinearGradient 
-        colors={['#FDB913', '#ffffff']} 
-        style={styles.container}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 0.3 }}
-      >
+      <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity 
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Feather name="arrow-left" size={24} color="#fff" />
+            <Feather name="arrow-left" size={22} color="#333" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Informations Personnelles</Text>
+          <Text style={styles.headerTitle}>Profil</Text>
         </View>
         
         <View style={styles.card}>
           {[...Array(6)].map((_, index) => (
             <View key={index} style={styles.skeletonContainer}>
-              <View style={styles.skeletonLabel} />
               <View style={styles.skeletonInput} />
             </View>
           ))}
@@ -265,100 +230,135 @@ const Infopersonnel = () => {
         <View style={styles.footer}>
           <View style={[styles.actionButton, styles.skeletonButton]} />
         </View>
-      </LinearGradient>
+      </View>
     );
   }
 
   return (
-    <LinearGradient 
-      colors={['#FDB913', '#ffffff']} 
-      style={styles.container}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 0.3 }}
-    >
+    <View style={styles.container}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+        >
           <Animated.View style={{ opacity: fadeAnim }}>
             <View style={styles.header}>
               <TouchableOpacity 
                 style={styles.backButton}
                 onPress={() => navigation.goBack()}
               >
-                <Feather name="arrow-left" size={24} color="#fff" />
+                <Feather name="arrow-left" size={22} color="#ff7d00" />
               </TouchableOpacity>
-              <Text style={styles.headerTitle}>Informations Personnelles</Text>
+              <Text style={styles.headerTitle}>Mon Profil</Text>
+              <TouchableOpacity style={styles.profileIcon}>
+                <Ionicons name="person" size={20} color="#ff7d00" />
+              </TouchableOpacity>
             </View>
 
             <View style={styles.card}>
-              {/* Nom */}
-              <InputField
-                label="Nom"
-                value={userData.nom || ''}
-                editable={isEditing}
-                icon={<MaterialIcons name="person-outline" size={20} color="#777" />}
-                onChangeText={(text: string) => handleChange('nom', text)}
-              />
-
-              {/* Prénom */}
-              <InputField
-                label="Prénom"
-                value={userData.prenom || ''}
-                editable={isEditing}
-                icon={<MaterialIcons name="person-outline" size={20} color="#777" />}
-                onChangeText={(text: string) => handleChange('prenom', text)}
-              />
-
-              {/* Adresse */}
-              <InputField
-                label="Adresse"
-                value={userData.address || ''}
-                editable={isEditing}
-                icon={<MaterialIcons name="location-on" size={20} color="#777" />}
-                onChangeText={(text: string) => handleChange('address', text)}
-              />
-
-              {/* Téléphone */}
-              <InputField
-                label="Téléphone"
-                value={userData.phone || ''}
-                editable={isEditing}
-                icon={<Feather name="phone" size={20} color="#777" />}
-                onChangeText={(text: string) => handleChange('phone', text)}
-                keyboardType="phone-pad"
-              />
-
-              {/* Email (toujours affiché, jamais éditable) */}
-              <InputField
-                label="Email"
-                value={userData.email || ''}
-                editable={false}
-                icon={<MaterialIcons name="email" size={20} color="#777" />}
-              />
-
-              {/* Mot de passe avec œil pour afficher/masquer */}
-              <View style={styles.inputContainer}>
-                <Text style={styles.label}>Mot de passe</Text>
-                <View style={styles.inputWrapper}>
-                  <Feather name="lock" size={20} color="#777" />
-                  <TextInput
-                    style={[styles.input, !isEditing && styles.disabledInput]}
-                    value={isEditing ? (userData.motdepasse || '') : "********"}
-                    editable={isEditing}
-                    secureTextEntry={!showPassword && isEditing}
-                    onChangeText={(text: string) => handleChange('motdepasse', text)}
-                    placeholder={isEditing ? "Nouveau mot de passe" : ""}
-                  />
-                  {isEditing && (
-                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                      <Feather 
-                        name={showPassword ? 'eye-off' : 'eye'} 
-                        size={20} 
-                        color="#777" 
+              <View style={styles.inputGroup}>
+                <View style={styles.inputRow}>
+                  <View style={styles.inputContainerHalf}>
+                    <Text style={styles.label}>Nom</Text>
+                    <View style={styles.inputWrapper}>
+                      <Feather name="user" size={18} color="#888" style={styles.inputIcon} />
+                      <TextInput
+                        style={[styles.input, !isEditing && styles.disabledInput]}
+                        value={userData.nom}
+                        editable={isEditing}
+                        onChangeText={(text) => handleChange('nom', text)}
+                        placeholder="Votre nom"
                       />
-                    </TouchableOpacity>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.inputContainerHalf}>
+                    <Text style={styles.label}>Prénom</Text>
+                    <View style={styles.inputWrapper}>
+                      <Feather name="user" size={18} color="#888" style={styles.inputIcon} />
+                      <TextInput
+                        style={[styles.input, !isEditing && styles.disabledInput]}
+                        value={userData.prenom}
+                        editable={isEditing}
+                        onChangeText={(text) => handleChange('prenom', text)}
+                        placeholder="Votre prénom"
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>Email</Text>
+                  <View style={styles.inputWrapper}>
+                    <Feather name="mail" size={18} color="#888" style={styles.inputIcon} />
+                    <TextInput
+                      style={[styles.input, styles.disabledInput]}
+                      value={userData.email}
+                      editable={false}
+                      placeholder="votre@email.com"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>Téléphone</Text>
+                  <View style={styles.inputWrapper}>
+                    <Feather name="phone" size={18} color="#888" style={styles.inputIcon} />
+                    <TextInput
+                      style={[styles.input, !isEditing && styles.disabledInput]}
+                      value={userData.phone}
+                      editable={isEditing}
+                      onChangeText={(text) => handleChange('phone', text)}
+                      placeholder="Votre numéro"
+                      keyboardType="phone-pad"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>Adresse</Text>
+                  <View style={styles.inputWrapper}>
+                    <Feather name="map-pin" size={18} color="#888" style={styles.inputIcon} />
+                    <TextInput
+                      style={[styles.input, !isEditing && styles.disabledInput]}
+                      value={userData.address}
+                      editable={isEditing}
+                      onChangeText={(text) => handleChange('address', text)}
+                      placeholder="Votre adresse"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>Mot de passe</Text>
+                  <View style={styles.inputWrapper}>
+                    <Feather name="lock" size={18} color="#888" style={styles.inputIcon} />
+                    <TextInput
+                      style={[styles.input, !isEditing && styles.disabledInput]}
+                      value={isEditing ? userData.motdepasse : "••••••••"}
+                      editable={isEditing}
+                      secureTextEntry={!showPassword && isEditing}
+                      onChangeText={(text) => handleChange('motdepasse', text)}
+                      placeholder={isEditing ? "Nouveau mot de passe" : ""}
+                    />
+                    {isEditing && (
+                      <TouchableOpacity 
+                        onPress={() => setShowPassword(!showPassword)}
+                        style={styles.eyeButton}
+                      >
+                        <Feather 
+                          name={showPassword ? 'eye-off' : 'eye'} 
+                          size={18} 
+                          color="#888" 
+                        />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {isEditing && (
+                    <Text style={styles.hintText}>Laissez vide pour ne pas changer</Text>
                   )}
                 </View>
               </View>
@@ -366,7 +366,6 @@ const Infopersonnel = () => {
           </Animated.View>
         </ScrollView>
 
-        {/* Bouton unique en bas (Modifier/Enregistrer) */}
         <View style={styles.footer}>
           <TouchableOpacity 
             onPress={() => {
@@ -380,162 +379,235 @@ const Infopersonnel = () => {
             disabled={saving}
           >
             {saving ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color="white" size="small" />
             ) : (
               <>
                 <Feather 
                   name={isEditing ? 'check' : 'edit-2'} 
-                  size={20} 
+                  size={18} 
                   color="white" 
                 />
                 <Text style={styles.actionButtonText}>
-                  {isEditing ? 'Enregistrer' : 'Modifier mes informations'}
+                  {isEditing ? 'Sauvegarder' : 'Modifier'}
                 </Text>
               </>
             )}
           </TouchableOpacity>
+          
+          {isEditing && (
+            <TouchableOpacity 
+              onPress={() => {
+                setIsEditing(false);
+                setUserData(originalData);
+                setShowPassword(false);
+              }}
+              style={styles.cancelButton}
+            >
+              <Text style={styles.cancelButtonText}>Annuler</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </KeyboardAvoidingView>
-    </LinearGradient>
+    </View>
   );
 };
 
-// 🔹 Composant champ réutilisable
-const InputField = ({ label, value, editable, icon, ...props }: any) => (
-  <View style={styles.inputContainer}>
-    <Text style={styles.label}>{label}</Text>
-    <View style={styles.inputWrapper}>
-      {icon}
-      <TextInput
-        style={[styles.input, !editable && styles.disabledInput]}
-        value={value}
-        editable={editable}
-        {...props}
-      />
-    </View>
-  </View>
-);
-
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  keyboardView: { flex: 1 },
-  scrollContainer: { paddingBottom: 100 },
-  header: { 
-    padding: 20, 
-    paddingTop: 50, 
-    alignItems: 'center',
+  container: { 
+    flex: 1,
+    backgroundColor: '#f8f9fa'
+  },
+  keyboardView: { 
+    flex: 1 
+  },
+  scrollContainer: { 
+    paddingBottom: 100 
+  },
+  header: {
     flexDirection: 'row',
-    justifyContent: 'center'
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 50 : 40,
+    paddingBottom: 15,
+    backgroundColor: 'white',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
   },
   backButton: {
-    position: 'absolute',
-    left: 20,
-    top: 50,
-    zIndex: 1
+    padding: 8,
   },
-  headerTitle: { 
-    fontSize: 20, 
-    fontWeight: 'bold', 
-    color: '#fff',
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center'
   },
-  card: { 
-    backgroundColor: 'white', 
-    borderRadius: 20, 
-    margin: 20, 
-    padding: 20, 
-    elevation: 5 
-  },
-  inputContainer: { marginBottom: 20 },
-  label: { fontSize: 14, color: '#777', marginBottom: 5, fontWeight: '500' },
-  inputWrapper: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#eee', 
-    paddingBottom: 8 
-  },
-  input: { 
-    flex: 1, 
-    fontSize: 16, 
-    color: '#333', 
-    marginLeft: 10,
-    padding: 0
-  },
-  disabledInput: { color: '#999' },
-  footer: { 
-    position: 'absolute', 
-    bottom: 20, 
-    left: 0, 
-    right: 0, 
-    paddingHorizontal: 20 
-  },
-  actionButton: { 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    paddingVertical: 15, 
-    borderRadius: 12,
-  },
-  editButton: { backgroundColor: '#FDB913' },
-  saveButton: { backgroundColor: '#4CAF50' },
-  actionButtonText: { 
-    color: 'white', 
-    fontSize: 16, 
-    fontWeight: '600', 
-    marginLeft: 10 
-  },
-  
-  // Styles pour le skeleton loader
-  skeletonContainer: {
-    marginBottom: 20
-  },
-  skeletonLabel: {
-    height: 14,
-    width: '30%',
-    backgroundColor: '#e1e1e1',
-    borderRadius: 4,
-    marginBottom: 5
-  },
-  skeletonInput: {
-    height: 20,
+  profileIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#f0f0f0',
-    borderRadius: 4
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  skeletonButton: {
-    backgroundColor: '#e1e1e1',
-    height: 50
+  card: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    margin: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  
-  // Styles pour l'erreur de token
+  inputGroup: {
+    gap: 16,
+  },
+  inputRow: {
+    flexDirection: 'column',
+    gap: 12,
+  },
+  inputContainerHalf: {
+    flex: 1,
+  },
+  inputContainer: {
+    // marginBottom: 12,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#666',
+    marginBottom: 6,
+    marginLeft: 2,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    paddingHorizontal: 14,
+    height: 48,
+  },
+  inputIcon: {
+    marginRight: 10,
+  },
+  input: {
+    flex: 1,
+    fontSize: 15,
+    color: '#333',
+    padding: 0,
+  },
+  disabledInput: {
+    color: '#888',
+  },
+  eyeButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  hintText: {
+    fontSize: 11,
+    color: '#999',
+    marginTop: 6,
+    marginLeft: 4,
+    fontStyle: 'italic',
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+    backgroundColor: 'white',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  editButton: {
+    backgroundColor: '#ff7d00',
+  },
+  saveButton: {
+    backgroundColor: '#ff7d00',
+  },
+  actionButtonText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  cancelButton: {
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  cancelButtonText: {
+    color: '#666',
+    fontSize: 14,
+    fontWeight: '500',
+  },
   errorContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20
+    padding: 30,
   },
   errorTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#F44336',
-    marginTop: 10,
-    marginBottom: 10
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 16,
+    marginBottom: 8,
   },
   errorMessage: {
-    fontSize: 16,
-    color: '#777',
+    fontSize: 14,
+    color: '#666',
     textAlign: 'center',
-    marginBottom: 20
+    marginBottom: 20,
   },
   loginButton: {
-    backgroundColor: '#FDB913',
+    backgroundColor: '#4a6fa5',
     paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 8
+    paddingHorizontal: 32,
+    borderRadius: 10,
   },
   loginButtonText: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold'
-  }
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  skeletonContainer: {
+    marginBottom: 16,
+  },
+  skeletonInput: {
+    height: 48,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 12,
+  },
+  skeletonButton: {
+    backgroundColor: '#f0f0f0',
+    height: 48,
+  },
 });
 
 export default Infopersonnel;
