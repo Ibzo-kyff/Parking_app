@@ -1,10 +1,9 @@
 import axios, { AxiosError } from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
-const API_URL = "https://parkapp-pi.vercel.app/api";
+import { BASE_URL } from "../../config/env";
 
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: BASE_URL,
 });
 
 // 🔐 Récupérer le token depuis AsyncStorage

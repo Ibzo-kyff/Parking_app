@@ -1,5 +1,4 @@
-const BASE_URL = "https://parkapp-pi.vercel.app"; 
-
+import { BASE_URL } from "../../config/env";
 interface ApiResponse<T> {
   data?: T;
   error?: string;
@@ -9,7 +8,7 @@ export const apiService = {
   // Récupérer les informations de l'utilisateur
   async getUserInfo(accessToken: string): Promise<ApiResponse<any>> {
     try {
-      const response = await fetch(`${BASE_URL}/api/auth/users/me`, {
+      const response = await fetch(`${BASE_URL}/auth/users/me`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -28,7 +27,7 @@ export const apiService = {
   // Rafraîchir le token
   async refreshToken(): Promise<ApiResponse<string>> {
     try {
-      const response = await fetch(`${BASE_URL}/api/auth/refresh`, {
+      const response = await fetch(`${BASE_URL}/auth/refresh`, {
         method: "POST",
         credentials: "include",
       });
@@ -45,7 +44,7 @@ export const apiService = {
   // Créer un véhicule
   async createVehicle(formData: FormData, accessToken: string): Promise<ApiResponse<any>> {
     try {
-      const response = await fetch(`${BASE_URL}/api/vehicules`, {
+      const response = await fetch(`${BASE_URL}/vehicules`, {
         method: "POST",
         body: formData,
         headers: {
@@ -65,7 +64,7 @@ export const apiService = {
   // Modifier un véhicule
   async updateVehicle(vehicleId: string, formData: FormData, accessToken: string): Promise<ApiResponse<any>> {
     try {
-      const response = await fetch(`${BASE_URL}/api/vehicules/${vehicleId}`, {
+      const response = await fetch(`${BASE_URL}/vehicules/${vehicleId}`, {
         method: "PUT",
         body: formData,
         headers: {
@@ -85,7 +84,7 @@ export const apiService = {
   // Supprimer un véhicule
   async deleteVehicle(vehicleId: string, accessToken: string): Promise<ApiResponse<any>> {
     try {
-      const response = await fetch(`${BASE_URL}/api/vehicules/${vehicleId}`, {
+      const response = await fetch(`${BASE_URL}/vehicules/${vehicleId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -107,7 +106,7 @@ export const apiService = {
   // Récupérer un véhicule par son ID
   async getVehicleById(vehicleId: string, accessToken: string): Promise<ApiResponse<any>> {
     try {
-      const response = await fetch(`${BASE_URL}/api/vehicules/${vehicleId}`, {
+      const response = await fetch(`${BASE_URL}/vehicules/${vehicleId}`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${accessToken}`,

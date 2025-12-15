@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, ReactNode, useEffect } from
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAuthToken } from '../components/services/api'; // Import setAuthToken
 import axios from 'axios'; // Pour refresh direct
-import { API_URL } from '../components/services/api'; // Import API_URL
+import { BASE_URL } from "../config/env";
 
 interface AuthState {
   accessToken: string | null;
@@ -109,7 +109,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     try {
-      const response = await axios.post(`${API_URL}auth/refresh`, { refreshToken: authState.refreshToken }, {
+      const response = await axios.post(`${BASE_URL}auth/refresh`, { refreshToken: authState.refreshToken }, {
         withCredentials: true
       });
       const { accessToken, refreshToken: newRefreshToken } = response.data; // ← AJOUT : Gère rotation

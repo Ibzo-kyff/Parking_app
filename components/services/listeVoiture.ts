@@ -1,6 +1,6 @@
 import axios, { AxiosError } from 'axios';
+import { BASE_URL } from "../../config/env";
 
-export const BASE_URL = 'https://parkapp-pi.vercel.app/api';
 
 const api = axios.create({
   baseURL: BASE_URL,

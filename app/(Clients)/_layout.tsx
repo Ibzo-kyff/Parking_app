@@ -9,6 +9,7 @@ export default function AuthLayout() {
     >
       <Stack.Screen name="listVoiture" />
       <Stack.Screen name="CreateListingScreen" />
+      <Stack.Screen name="Parking" />
     </Stack>
   );
 }

@@ -130,7 +130,7 @@ const handleRegister = async () => {
               <Ionicons name="call-outline" size={20} color="#777" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Phone Number"
+                placeholder="Téléphone"
                 value={formData.phone}
                 onChangeText={(text) => handleChange('phone', text)}
                 keyboardType="phone-pad"
@@ -142,7 +142,7 @@ const handleRegister = async () => {
               <Ionicons name="lock-closed-outline" size={20} color="#777" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Password"
+                placeholder="Mot de passe"
                 value={formData.password}
                 onChangeText={(text) => handleChange('password', text)}
                 secureTextEntry={!showPassword}
@@ -164,7 +164,7 @@ const handleRegister = async () => {
               <Ionicons name="lock-closed-outline" size={20} color="#777" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Confirm Password"
+                placeholder="Confirmez votre mot de passe"
                 value={formData.confirmPassword}
                 onChangeText={(text) => handleChange('confirmPassword', text)}
                 secureTextEntry={!showPassword}
