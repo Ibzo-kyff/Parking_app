@@ -19,7 +19,7 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
     tabBarLabelStyle: {
       fontSize: 10,
       marginBottom: 5,
-      fontWeight: '500' as const, 
+      fontWeight: '500' as const,
     },
   };
 
@@ -29,10 +29,10 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
     focused: boolean
   ) => (
     <View style={[styles.iconContainer, focused && styles.activeIcon]}>
-      <Ionicons 
-        name={name} 
-        size={24} 
-        color={focused ? '#fff' : color} 
+      <Ionicons
+        name={name}
+        size={24}
+        color={focused ? '#fff' : color}
       />
     </View>
   );
@@ -41,6 +41,7 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
     case 'CLIENT':
       return (
         <Tabs screenOptions={commonOptions}>
+          {/* Accueil */}
           <Tabs.Screen
             name="accueil"
             options={{
@@ -49,6 +50,7 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
                 getIcon('home', color, focused),
             }}
           />
+          {/* Réservations */}
           <Tabs.Screen
             name="reservation"
             options={{
@@ -57,6 +59,7 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
                 getIcon('calendar', color, focused),
             }}
           />
+          {/* Parkings */}
           <Tabs.Screen
             name="parking"
             options={{
@@ -65,6 +68,7 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
                 getIcon('car', color, focused),
             }}
           />
+          {/* Messages */}
           <Tabs.Screen
             name="messages"
             options={{
@@ -73,6 +77,7 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
                 getIcon('chatbubbles', color, focused),
             }}
           />
+          {/* Profil */}
           <Tabs.Screen
             name="profile"
             options={{
@@ -83,10 +88,10 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
           />
         </Tabs>
       );
-
     case 'PARKING':
       return (
         <Tabs screenOptions={commonOptions}>
+          {/* Accueil */}
           <Tabs.Screen
             name="accueil"
             options={{
@@ -95,6 +100,7 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
                 getIcon('home', color, focused),
             }}
           />
+          {/* Réservations */}
           <Tabs.Screen
             name="Reservation"
             options={{
@@ -103,6 +109,7 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
                 getIcon('clipboard', color, focused),
             }}
           />
+          {/* Gestion */}
           <Tabs.Screen
             name="gestion"
             options={{
@@ -111,6 +118,7 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
                 getIcon('settings', color, focused),
             }}
           />
+          {/* Messages */}
           <Tabs.Screen
             name="messages"
             options={{
@@ -119,6 +127,7 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
                 getIcon('chatbubbles', color, focused),
             }}
           />
+          {/* Profil */}
           <Tabs.Screen
             name="profile"
             options={{
@@ -129,7 +138,6 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
           />
         </Tabs>
       );
-
     default:
       console.warn('Rôle non reconnu :', role);
       return null;
@@ -138,18 +146,15 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
 
 const styles = StyleSheet.create({
   tabBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 20,
-    right: 20,
     backgroundColor: '#fff',
-    borderRadius: 25,
-    height: 80, 
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    height: 80,
     shadowColor: '#000',
-    shadowOpacity: 0.2, 
-    shadowOffset: { width: 0, height: 8 }, 
-    shadowRadius: 15, 
-    elevation: 15, 
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: -8 },
+    shadowRadius: 15,
+    elevation: 15,
     borderTopWidth: 0,
     borderWidth: 1,
     borderColor: '#e0e0e0',
@@ -163,7 +168,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: 39,
     height: 39,
-    marginTop: 1, 
+    marginTop: 1,
   },
   activeIcon: {
     backgroundColor: '#FD6A00',
@@ -172,6 +177,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 6,
     elevation: 6,
-    transform: [{ translateY: -2 }], 
+    transform: [{ translateY: -2 }],
   },
 });

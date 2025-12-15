@@ -1,5 +1,5 @@
 import api from "./api";
-
+import { BASE_URL } from "../../config/env";
 export type Reservation = {
   id: number;
   user: {
@@ -16,7 +16,7 @@ export type Reservation = {
   dateFin: string;
 };
 
-const BASE_URL = "https://parkapp-pi.vercel.app/api";
+
 
 // 🔹 Récupérer les réservations de l'utilisateur connecté
 export const getUserReservations = async (): Promise<Reservation[]> => {

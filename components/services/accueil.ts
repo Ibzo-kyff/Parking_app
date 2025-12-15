@@ -1,13 +1,13 @@
 // Services/accueil.ts
 import axios from "axios";
 import { Marque } from "../../app/(Clients)/tousLesMarques";
+import { BASE_URL } from "../../config/env";
 
-export const API_URL = "https://parkapp-pi.vercel.app";
 
 // Récupérer les véhicules
 export const getVehicules = async () => {
   try {
-    const response = await axios.get(`${API_URL}/api/vehicules`);
+    const response = await axios.get(`${BASE_URL}/vehicules`);
     return response.data;
   } catch (error) {
     console.error("Erreur véhicules :", error);
@@ -18,7 +18,7 @@ export const getVehicules = async () => {
 // Récupérer les parkings
 export const getParkings = async () => {
   try {
-    const response = await axios.get(`${API_URL}/api/parkings`);
+    const response = await axios.get(`${BASE_URL}/parkings`);
     return response.data;
   } catch (error) {
     console.error("Erreur parkings :", error);
@@ -29,7 +29,7 @@ export const getParkings = async () => {
 // Récupérer les Marques
 export const getMarques = async (): Promise<Marque[]> => {
   try {
-    const response = await fetch(`${API_URL}/api/marques`);
+    const response = await fetch(`${BASE_URL}/marques`);
     if (!response.ok) {
       throw new Error('Erreur réseau');
     }

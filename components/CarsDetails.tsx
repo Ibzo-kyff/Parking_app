@@ -13,12 +13,13 @@ import {
   Modal,
   Platform,
   Alert,
+  Animated,
 } from 'react-native';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { FontAwesome5, MaterialIcons } from '@expo/vector-icons';
+import { FontAwesome5, MaterialIcons, Ionicons, Feather, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { BASE_URL } from './services/listeVoiture';
+import { BASE_URL } from '../config/env';
 import { useAuth } from '../context/AuthContext';
 import { favorisService } from './services/favorisService';
 import { viewsService } from './services/viewsService';
@@ -61,18 +62,26 @@ interface Vehicule {
   parking?: {
     id: number;
     nom: string;
+    logo?: string;
   };
   garantie?: boolean;
   chauffeur?: boolean;
   dureeAssurance?: number;
+  year?: number;
 }
 
 const { width } = Dimensions.get('window');
+
+const PRIMARY_COLOR = '#ff7d00';
+const SECONDARY_COLOR = '#2c3e50';
+const BACKGROUND_COLOR = '#f8f9fa';
+const CARD_BACKGROUND = '#ffffff';
 
 function CarDetailScreen() {
   const route = useRoute<any>();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   // États pour la réservation
   const [modalVisible, setModalVisible] = useState(false);
@@ -108,7 +117,6 @@ function CarDetailScreen() {
       } else {
         initialVehicule = route.params.vehicule;
       }
-      console.log('🚗 Véhicule reçu:', initialVehicule);
     } catch (error) {
       console.error('Erreur parsing véhicule:', error);
     }
@@ -120,7 +128,6 @@ function CarDetailScreen() {
       setIsParkingView(route.params.isParkingView === 'true');
     }
     
-    // Vérifier également par le rôle de l'utilisateur
     if (authState.role === 'PARKING') {
       setIsParkingView(true);
     }
@@ -142,10 +149,8 @@ function CarDetailScreen() {
         }
         const response = await axios.get(`${BASE_URL}/vehicules/${initialVehicule.id}`, { headers });
         setVehicule(response.data);
-        console.log(`Nombre de vues pour le véhicule ID ${initialVehicule.id} : ${response.data.stats?.vues || 0}`);
       } catch (error) {
         console.error('Erreur lors du fetch des détails véhicule:', error);
-        // Fallback sur les données passées en params si échec
         setVehicule(initialVehicule);
       } finally {
         setLoadingVehicle(false);
@@ -154,37 +159,12 @@ function CarDetailScreen() {
     fetchFullVehicle();
   }, [initialVehicule?.id, authState.accessToken]);
 
-  // AJOUT: Incrémenter les vues au chargement de la page, seulement si pas depuis parking
+  // Incrémenter les vues au chargement de la page
   useEffect(() => {
     if (initialVehicule?.id && route.params?.fromParking !== 'true') {
       viewsService.incrementViews(initialVehicule.id);
     }
   }, [initialVehicule?.id, route.params?.fromParking]);
-
-  // Debug des données du véhicule
-  useEffect(() => {
-    console.log('🔍 DONNÉES VÉHICULE COMPLÈTES:', {
-      id: vehicule?.id,
-      marque: vehicule?.marque,
-      marqueRef: vehicule?.marqueRef,
-      model: vehicule?.model,
-      prix: vehicule?.prix,
-      photos: vehicule?.photos,
-      photosUrls: getPhotoUrls(vehicule?.photos),
-      forSale: vehicule?.forSale,
-      forRent: vehicule?.forRent,
-      mileage: vehicule?.mileage,
-      fuelType: vehicule?.fuelType,
-      dureeGarantie: vehicule?.dureeGarantie,
-      description: vehicule?.description,
-      carteGrise: vehicule?.carteGrise,
-      assurance: vehicule?.assurance,
-      vignette: vehicule?.vignette,
-      garantie: vehicule?.garantie,
-      chauffeur: vehicule?.chauffeur,
-      dureeAssurance: vehicule?.dureeAssurance
-    });
-  }, [vehicule]);
 
   // Setup notifications
   useEffect(() => {
@@ -238,7 +218,7 @@ function CarDetailScreen() {
     });
   }
 
-  // Fonction pour vérifier l'état favoris (seulement si pas parking)
+  // Fonction pour vérifier l'état favoris
   const checkFavoriteStatus = async () => {
     if (!vehicule?.id || isParkingView) return;
     
@@ -251,12 +231,10 @@ function CarDetailScreen() {
     }
   };
 
-  // Vérifier l'état favoris au chargement initial
   useEffect(() => {
     checkFavoriteStatus();
   }, [vehicule?.id, isParkingView]);
 
-  // Re-vérifier l'état favoris quand l'écran redevient actif
   useFocusEffect(
     React.useCallback(() => {
       if (vehicule?.id && !isParkingView) {
@@ -316,7 +294,19 @@ function CarDetailScreen() {
 
   const photoUrls = getPhotoUrls(vehicule?.photos);
 
-  // Ajout de l'autoplay pour le défilement automatique des images
+  // Animation de l'image header
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
+  const headerTranslateY = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [0, -50],
+    extrapolate: 'clamp',
+  });
+
   useEffect(() => {
     if (photoUrls.length > 1 && !loadingVehicle) {
       const interval = setInterval(() => {
@@ -325,12 +315,44 @@ function CarDetailScreen() {
         if (flatListRef.current) {
           flatListRef.current.scrollToIndex({ index: nextIndex, animated: true });
         }
-      }, 3000); // Défile toutes les 3 secondes
+      }, 4000);
       return () => clearInterval(interval);
     }
   }, [currentImageIndex, photoUrls.length, loadingVehicle]);
 
-  // FONCTION DE SUPPRESSION CORRIGÉE
+  const formatPrice = (price: number) => {
+    if (price >= 1000000) {
+      return `${(price / 1000000).toFixed(1)} M FCFA`;
+    } else if (price >= 1000) {
+      return `${Math.round(price / 1000)} K FCFA`;
+    }
+    return `${price.toLocaleString()} FCFA`;
+  };
+
+  const formatMileage = (mileage: number) => {
+    if (mileage >= 1000) {
+      return `${(mileage / 1000).toFixed(1)}K km`;
+    }
+    return `${mileage} km`;
+  };
+
+  const getFuelIcon = (fuelType: string | undefined) => {
+    switch(fuelType) {
+      case 'Essence':
+        return <Ionicons name="flame" size={20} color={PRIMARY_COLOR} />;
+      case 'Diesel':
+        return <FontAwesome5 name="oil-can" size={20} color={PRIMARY_COLOR} />;
+      case 'Électrique':
+        return <MaterialCommunityIcons name="lightning-bolt" size={20} color={PRIMARY_COLOR} />;
+      case 'Hybride':
+        return <MaterialCommunityIcons name="leaf" size={20} color={PRIMARY_COLOR} />;
+      case 'GPL':
+        return <FontAwesome5 name="gas-pump" size={20} color={PRIMARY_COLOR} />;
+      default:
+        return <FontAwesome5 name="car" size={20} color={PRIMARY_COLOR} />;
+    }
+  };
+
   const handleDelete = () => {
     setActionMenuVisible(false);
     if (!vehicule) return;
@@ -364,8 +386,6 @@ function CarDetailScreen() {
 
       setIsLoading(true);
       
-      console.log('🗑️ Tentative de suppression du véhicule:', vehicule.id);
-      
       const response = await fetch(`${BASE_URL}/vehicules/${vehicule.id}`, {
         method: 'DELETE',
         headers: {
@@ -373,8 +393,6 @@ function CarDetailScreen() {
           'Content-Type': 'application/json',
         },
       });
-
-      console.log('📡 Réponse suppression:', response.status);
 
       if (response.ok) {
         Alert.alert(
@@ -384,7 +402,6 @@ function CarDetailScreen() {
             {
               text: 'OK',
               onPress: () => {
-                // Retour à l'écran précédent après suppression
                 if (router.canGoBack()) {
                   router.back();
                 } else {
@@ -396,14 +413,12 @@ function CarDetailScreen() {
         );
       } else {
         const errorText = await response.text();
-        console.error('❌ Erreur suppression:', errorText);
         let errorMessage = 'Erreur lors de la suppression';
         
         try {
           const errorData = JSON.parse(errorText);
           errorMessage = errorData.message || errorMessage;
         } catch (e) {
-          // Si ce n'est pas du JSON, utiliser le texte brut
           errorMessage = errorText || errorMessage;
         }
         
@@ -417,14 +432,10 @@ function CarDetailScreen() {
     }
   };
 
-  // FONCTION DE MODIFICATION
   const handleModify = () => {
     setActionMenuVisible(false);
     if (!vehicule) return;
     
-    console.log('✏️ Navigation vers modification:', vehicule);
-    
-    // Préparer les données pour l'écran de modification
     const vehicleDataForEdit = {
       id: vehicule.id,
       marque: vehicule.marqueRef ? {
@@ -447,10 +458,10 @@ function CarDetailScreen() {
       description: vehicule.description,
       garantie: vehicule.garantie,
       chauffeur: vehicule.chauffeur,
-      dureeAssurance: vehicule.dureeAssurance
+      dureeAssurance: vehicule.dureeAssurance,
+      year: vehicule.year
     };
 
-    // Navigation vers l'écran de modification
     router.push({
       pathname: "/AjoutParking",
       params: { 
@@ -463,15 +474,14 @@ function CarDetailScreen() {
   if (loadingVehicle || !vehicule) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color="#FF6F00" />
-          <Text style={{ marginTop: 10 }}>Chargement des détails du véhicule...</Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={PRIMARY_COLOR} />
+          <Text style={styles.loadingText}>Chargement des détails du véhicule...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  // Render functions avec gestion des données manquantes
   const renderFeatureItem = (icon: React.ReactNode, label: string, value: any, condition: boolean = true) => {
     if (!condition) return null;
     
@@ -481,14 +491,18 @@ function CarDetailScreen() {
     
     return (
       <View style={styles.featureItem}>
-        {icon}
-        <Text style={styles.featureLabel}>{label}</Text>
-        <Text style={[
-          styles.featureValue,
-          (value === undefined || value === null || value === '') && styles.unknownValue
-        ]}>
-          {displayValue}
-        </Text>
+        <View style={styles.featureIconContainer}>
+          {icon}
+        </View>
+        <View style={styles.featureTextContainer}>
+          <Text style={styles.featureLabel}>{label}</Text>
+          <Text style={[
+            styles.featureValue,
+            (value === undefined || value === null || value === '') && styles.unknownValue
+          ]}>
+            {displayValue}
+          </Text>
+        </View>
       </View>
     );
   };
@@ -501,23 +515,6 @@ function CarDetailScreen() {
         resizeMode="cover"
         onError={(error) => console.log('Erreur chargement image:', error.nativeEvent.error)}
       />
-      {/* Bouton favoris - CACHÉ si c'est le parking */}
-      {!isParkingView && (
-        <TouchableOpacity 
-          style={[
-            styles.favoriteButton,
-            isFavorite && styles.favoriteButtonActive,
-          ]} 
-          onPress={toggleFavorite}
-        >
-          <FontAwesome5 
-            name="heart" 
-            size={24} 
-            color={isFavorite ? "#FFF" : "#FF6F00"} 
-            solid={isFavorite}
-          />
-        </TouchableOpacity>
-      )}
     </View>
   );
 
@@ -526,19 +523,23 @@ function CarDetailScreen() {
     return (
       <View style={styles.pagination}>
         {photoUrls.map((_, index) => (
-          <View key={index} style={[styles.paginationDot, index === currentImageIndex && styles.paginationDotActive]} />
+          <View 
+            key={index} 
+            style={[
+              styles.paginationDot, 
+              index === currentImageIndex && styles.paginationDotActive
+            ]} 
+          />
         ))}
       </View>
     );
   };
 
-  // Ouvrir modale (seulement si pas parking)
   const handleReservePress = () => {
     if (isParkingView) return;
     setModalVisible(true);
   };
 
-  // Sélection type
   const selectType = (type: 'LOCATION' | 'ACHAT') => {
     setReservationType(type);
     if (type === 'ACHAT') {
@@ -553,7 +554,6 @@ function CarDetailScreen() {
     }
   };
 
-  // Changement dates
   const onStartDateChange = (event: any, selectedDate?: Date) => {
     setShowStartPicker(Platform.OS === 'ios');
     if (selectedDate) {
@@ -597,7 +597,6 @@ function CarDetailScreen() {
     }
 
     setIsLoading(true);
-    console.log('🚀 Début de la réservation...');
 
     try {
       const body = {
@@ -606,8 +605,6 @@ function CarDetailScreen() {
         dateFin: reservationType === 'LOCATION' ? endDate?.toISOString() : null,
         type: reservationType,
       };
-
-      console.log('📤 Envoi réservation:', body);
 
       const response = await fetch(`${BASE_URL}/reservations`, {
         method: 'POST',
@@ -620,7 +617,6 @@ function CarDetailScreen() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ Erreur réponse serveur:', errorText);
         let errorData;
         try {
           errorData = JSON.parse(errorText);
@@ -631,9 +627,8 @@ function CarDetailScreen() {
       }
 
       const newReservation = await response.json();
-      console.log('✅ Réservation créée:', newReservation);
 
-      // NOTIFICATION LOCALE POUR L'UTILISATEUR
+      // Notification locale
       try {
         await showLocalNotification(
           "🎉 Réservation confirmée !",
@@ -644,37 +639,26 @@ function CarDetailScreen() {
             reservationType: reservationType
           }
         );
-        console.log('✅ Notification locale envoyée');
       } catch (notificationError) {
         console.warn('⚠️ Notification locale échouée:', notificationError);
       }
 
-      // NOTIFICATION AU PARKING
+      // Notification au parking
       if (vehicule?.parking?.id) {
         try {
           const userInfo = user || { prenom: 'Utilisateur', nom: '', id: 0 };
           
           const parkingMessage = `${userInfo.prenom} ${userInfo.nom} a réservé ${vehicule.marqueRef?.name || ''} ${vehicule.model || ''} pour ${reservationType.toLowerCase()}. Prix: ${vehicule.prix ? `${vehicule.prix.toLocaleString()} FCFA` : ''}`;
 
-          console.log(`📤 Envoi notification au parking ${vehicule.parking.id}:`, parkingMessage);
-
-          const notificationSuccess = await createReservationNotification({
+          await createReservationNotification({
             title: "🚗 NOUVELLE RÉSERVATION !",
             message: parkingMessage,
             parkingId: vehicule.parking.id,
             type: "RESERVATION"
           });
-
-          if (notificationSuccess) {
-            console.log(`✅ Notification envoyée au parking ${vehicule.parking.id}`);
-          } else {
-            console.warn(`⚠️ Notification échouée pour le parking ${vehicule.parking.id}`);
-          }
         } catch (notificationError) {
           console.error("❌ Erreur notification parking:", notificationError);
         }
-      } else {
-        console.warn("⚠️ Parking ID non disponible");
       }
 
       Alert.alert(
@@ -693,7 +677,6 @@ function CarDetailScreen() {
     }
   };
 
-  // Rendu du menu d'actions pour le parking
   const renderActionMenu = () => {
     if (!isParkingView) return null;
 
@@ -703,7 +686,7 @@ function CarDetailScreen() {
           style={styles.actionMenuButton}
           onPress={() => setActionMenuVisible(true)}
         >
-          <MaterialIcons name="more-vert" size={24} color="#666" />
+          <Feather name="more-vertical" size={24} color={SECONDARY_COLOR} />
         </TouchableOpacity>
 
         <Modal
@@ -722,7 +705,7 @@ function CarDetailScreen() {
                 style={styles.menuItem}
                 onPress={handleModify}
               >
-                <MaterialIcons name="edit" size={20} color="#FF6F00" />
+                <Feather name="edit-2" size={20} color={PRIMARY_COLOR} />
                 <Text style={styles.menuItemText}>Modifier</Text>
               </TouchableOpacity>
 
@@ -737,7 +720,7 @@ function CarDetailScreen() {
                   <ActivityIndicator size="small" color="#FF4444" />
                 ) : (
                   <>
-                    <MaterialIcons name="delete" size={20} color="#FF4444" />
+                    <Feather name="trash-2" size={20} color="#FF4444" />
                     <Text style={[styles.menuItemText, styles.deleteText]}>Supprimer</Text>
                   </>
                 )}
@@ -751,194 +734,294 @@ function CarDetailScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {/* Carrousel avec bouton favoris intégré - CACHÉ si parking */}
-        {photoUrls.length > 0 ? (
-          <View>
-            <FlatList
-              ref={flatListRef}
-              data={photoUrls}
-              renderItem={renderImageItem}
-              keyExtractor={(item, index) => index.toString()}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={(event) => {
-                const newIndex = Math.floor(event.nativeEvent.contentOffset.x / width);
-                setCurrentImageIndex(newIndex);
-              }}
+      <Animated.View style={[
+        styles.headerOverlay,
+        {
+          opacity: headerOpacity,
+          transform: [{ translateY: headerTranslateY }]
+        }
+      ]}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="chevron-back" size={28} color="#fff" />
+        </TouchableOpacity>
+        {/* {!isParkingView && (
+          <TouchableOpacity 
+            style={styles.headerFavoriteButton}
+            onPress={toggleFavorite}
+          >
+            <FontAwesome 
+              name="heart" 
+              size={20} 
+              color={isFavorite ? "#FF3B30" : "#fff"} 
+              solid={isFavorite}
             />
-            {renderPagination()}
-          </View>
-        ) : (
-          <View style={[styles.imageContainer, styles.placeholderImage]}>
-            <FontAwesome5 name="car" size={60} color="#ccc" />
-            <Text style={styles.noImageText}>Aucune photo disponible</Text>
-            {/* Bouton favoris pour l'image placeholder - CACHÉ si parking */}
-            {!isParkingView && (
-              <TouchableOpacity 
-                style={[
-                  styles.favoriteButton,
-                  isFavorite && styles.favoriteButtonActive,
-                ]} 
-                onPress={toggleFavorite}
-              >
-                <FontAwesome5 
-                  name="heart" 
-                  size={24} 
-                  color={isFavorite ? "#FFF" : "#FF6F00"} 
-                  solid={isFavorite}
-                />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
-        {/* En-tête */}
-        <View style={styles.headerCard}>
-          <Text style={styles.carName}>
-            {vehicule.marqueRef?.name || vehicule.marque || 'Marque inconnue'} {vehicule.model || 'Modèle inconnu'}
-          </Text>
-          <Text style={styles.priceValue}>
-            {vehicule.prix ? `${vehicule.prix.toLocaleString()} FCFA` : 'Prix non disponible'}
-          </Text>
-          
-        </View>
-
-        {/* Bouton réservation - CACHÉ si c'est le parking */}
-        {!isParkingView && (
-          <TouchableOpacity style={styles.reserveButton} onPress={handleReservePress}>
-            <Text style={styles.reserveButtonText}>Réserver maintenant</Text>
           </TouchableOpacity>
+        )} */}
+      </Animated.View>
+
+      <Animated.ScrollView 
+        style={styles.scrollView}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
         )}
-
-        {/* Détails du véhicule avec menu d'actions */}
-        <View style={styles.detailsCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Détails du véhicule</Text>
-            {renderActionMenu()}
-          </View>
-          
-          <View style={styles.featuresGrid}>
-            <View style={styles.featureRow}>
-              {renderFeatureItem(
-                <MaterialIcons name="branding-watermark" size={22} color="#FF6F00" />,
-                'Marque',
-                vehicule.marqueRef?.name || vehicule.marque,
-                !!(vehicule.marqueRef?.name || vehicule.marque)
-              )}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Image Gallery */}
+        <View style={styles.imageGalleryContainer}>
+          {photoUrls.length > 0 ? (
+            <>
+              <FlatList
+                ref={flatListRef}
+                data={photoUrls}
+                renderItem={renderImageItem}
+                keyExtractor={(item, index) => index.toString()}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={(event) => {
+                  const newIndex = Math.floor(event.nativeEvent.contentOffset.x / width);
+                  setCurrentImageIndex(newIndex);
+                }}
+              />
+              {renderPagination()}
               
-              {renderFeatureItem(
-                <FontAwesome5 name="tachometer-alt" size={20} color="#FF6F00" />,
-                'Kilométrage',
-                vehicule.mileage ? `${vehicule.mileage.toLocaleString()} km` : null,
-                vehicule.mileage !== undefined && vehicule.mileage !== null
-              )}
-            </View>
-
-            <View style={styles.featureRow}>
-              {renderFeatureItem(
-                <FontAwesome5 name="gas-pump" size={20} color="#FF6F00" />,
-                'Carburant',
-                vehicule.fuelType,
-                !!vehicule.fuelType
-              )}
-              
-              {renderFeatureItem(
-                <FontAwesome5 name="shield-alt" size={20} color="#FF6F00" />,
-                'Garantie',
-                vehicule.dureeGarantie ? `${vehicule.dureeGarantie} mois` : (vehicule.garantie ? 'Incluse' : 'Non incluse'),
-                vehicule.dureeGarantie !== undefined || vehicule.garantie !== undefined
-              )}
-            </View>
-
-            <View style={styles.featureRow}>
-              {renderFeatureItem(
-                <FontAwesome5 name="user-tie" size={20} color="#FF6F00" />,
-                'Chauffeur',
-                vehicule.chauffeur,
-                vehicule.chauffeur !== undefined
-              )}
-              
-              {renderFeatureItem(
-                <FontAwesome5 name="file-contract" size={20} color="#FF6F00" />,
-                'Assurance',
-                vehicule.dureeAssurance ? `${vehicule.dureeAssurance} mois` : (vehicule.assurance ? 'Incluse' : 'Non incluse'),
-                vehicule.dureeAssurance !== undefined || vehicule.assurance !== undefined
-              )}
-            </View>
-          </View>
-
-          {/* Section description */}
-          {vehicule.description && (
-            <View style={styles.descriptionSection}>
-              <Text style={styles.descriptionTitle}>Description</Text>
-              <Text style={styles.descriptionText}>{vehicule.description}</Text>
+              {/* Image counter */}
+              <View style={styles.imageCounter}>
+                <Text style={styles.imageCounterText}>
+                  {currentImageIndex + 1} / {photoUrls.length}
+                </Text>
+              </View>
+            </>
+          ) : (
+            <View style={[styles.imageContainer, styles.placeholderImage]}>
+              <FontAwesome5 name="car" size={60} color="#ddd" />
+              <Text style={styles.noImageText}>Aucune photo disponible</Text>
             </View>
           )}
         </View>
 
-        {/* Options supplémentaires */}
-        <View style={styles.optionsCard}>
-          <Text style={styles.sectionTitle}>Options incluses</Text>
-          
-          <View style={styles.optionsList}>
-            <View style={styles.optionItem}>
-              <MaterialIcons 
-                name={vehicule.carteGrise ? "check-circle" : "cancel"} 
-                size={20} 
-                color={vehicule.carteGrise ? "#28a745" : "#dc3545"} 
-              />
-              <Text style={styles.optionText}>
-                Carte Grise: {vehicule.carteGrise ? 'Disponible' : 'Non disponible'}
+        {/* Header Card with Floating Design */}
+        <View style={styles.headerCard}>
+          <View style={styles.headerCardContent}>
+            <View style={styles.titleRow}>
+              <Text style={styles.carName}>
+                {vehicule.marqueRef?.name || vehicule.marque || 'Marque'} {vehicule.model || 'Modèle'}
               </Text>
+              {!isParkingView && (
+                <TouchableOpacity 
+                  style={styles.floatingFavoriteButton}
+                  onPress={toggleFavorite}
+                >
+                  <FontAwesome 
+                    name="heart" 
+                    size={20} 
+                    color={isFavorite ? "#FF3B30" : "#ccc"} 
+                    solid={isFavorite}
+                  />
+                </TouchableOpacity>
+              )}
             </View>
             
-            <View style={styles.optionItem}>
-              <MaterialIcons 
-                name={vehicule.assurance ? "check-circle" : "cancel"} 
-                size={20} 
-                color={vehicule.assurance ? "#28a745" : "#dc3545"} 
-              />
-              <Text style={styles.optionText}>
-                Assurance: {vehicule.assurance ? 'Incluse' : 'Non incluse'}
+            <Text style={styles.priceValue}>{formatPrice(vehicule.prix)}</Text>
+            
+            {/* Badges */}
+            <View style={styles.badgesContainer}>
+              {vehicule.year && (
+                <View style={styles.badge}>
+                  <Ionicons name="calendar" size={12} color="#fff" />
+                  <Text style={styles.badgeText}>{vehicule.year}</Text>
+                </View>
+              )}
+              {vehicule.mileage && (
+                <View style={styles.badge}>
+                  <Feather name="activity" size={12} color="#fff" />
+                  <Text style={styles.badgeText}>{formatMileage(vehicule.mileage)}</Text>
+                </View>
+              )}
+              {vehicule.fuelType && (
+                <View style={styles.badge}>
+                  {getFuelIcon(vehicule.fuelType)}
+                  <Text style={styles.badgeText}>{vehicule.fuelType}</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Transaction Type Badges */}
+            <View style={styles.transactionContainer}>
+              {vehicule.forSale && (
+                <View style={[styles.transactionBadge, styles.saleBadge]}>
+                  <FontAwesome5 name="tag" size={12} color="#fff" />
+                  <Text style={styles.transactionBadgeText}>À vendre</Text>
+                </View>
+              )}
+              {vehicule.forRent && (
+                <View style={[styles.transactionBadge, styles.rentBadge]}>
+                  <FontAwesome5 name="clock" size={12} color="#fff" />
+                  <Text style={styles.transactionBadgeText}>En location</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </View>
+
+        {/* Quick Info Cards */}
+        <View style={styles.quickInfoContainer}>
+          <View style={styles.quickInfoRow}>
+            <View style={styles.quickInfoCard}>
+              <Ionicons name="shield-checkmark" size={24} color="#28a745" />
+              <Text style={styles.quickInfoLabel}>Garantie</Text>
+              <Text style={styles.quickInfoValue}>
+                {vehicule.dureeGarantie ? `${vehicule.dureeGarantie} mois` : 'Non incluse'}
               </Text>
             </View>
-            
-            <View style={styles.optionItem}>
-              <MaterialIcons 
-                name={vehicule.vignette ? "check-circle" : "cancel"} 
-                size={20} 
-                color={vehicule.vignette ? "#28a745" : "#dc3545"} 
-              />
-              <Text style={styles.optionText}>
-                Vignette: {vehicule.vignette ? 'Valide' : 'Non valide'}
+            <View style={styles.quickInfoCard}>
+              <Feather name="file-text" size={24} color={PRIMARY_COLOR} />
+              <Text style={styles.quickInfoLabel}>Assurance</Text>
+              <Text style={styles.quickInfoValue}>
+                {vehicule.assurance ? 'Incluse' : 'Non incluse'}
               </Text>
             </View>
           </View>
         </View>
 
-        {/* Statistiques */}
+        {/* Features Grid */}
+        <View style={styles.featuresCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Caractéristiques</Text>
+            {renderActionMenu()}
+          </View>
+          
+          <View style={styles.featuresGrid}>
+            {renderFeatureItem(
+              <Ionicons name="calendar" size={24} color={PRIMARY_COLOR} />,
+              'Année',
+              vehicule.year,
+              !!vehicule.year
+            )}
+            
+            {renderFeatureItem(
+              <Feather name="activity" size={24} color={PRIMARY_COLOR} />,
+              'Kilométrage',
+              vehicule.mileage ? formatMileage(vehicule.mileage) : null,
+              vehicule.mileage !== undefined
+            )}
+            
+            {renderFeatureItem(
+              getFuelIcon(vehicule.fuelType),
+              'Carburant',
+              vehicule.fuelType,
+              !!vehicule.fuelType
+            )}
+            
+            {renderFeatureItem(
+              <FontAwesome5 name="user-tie" size={22} color={PRIMARY_COLOR} />,
+              'Chauffeur',
+              vehicule.chauffeur,
+              vehicule.chauffeur !== undefined
+            )}
+            
+            {renderFeatureItem(
+              <MaterialCommunityIcons name="license" size={24} color={PRIMARY_COLOR} />,
+              'Carte Grise',
+              vehicule.carteGrise,
+              vehicule.carteGrise !== undefined
+            )}
+            
+            {renderFeatureItem(
+              <Ionicons name="document-text" size={24} color={PRIMARY_COLOR} />,
+              'Vignette',
+              vehicule.vignette,
+              vehicule.vignette !== undefined
+            )}
+          </View>
+        </View>
+
+        {/* Description */}
+        {vehicule.description && (
+          <View style={styles.descriptionCard}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="document-text" size={20} color={SECONDARY_COLOR} />
+              <Text style={styles.sectionTitle}>Description</Text>
+            </View>
+            <Text style={styles.descriptionText}>{vehicule.description}</Text>
+          </View>
+        )}
+
+        {/* Stats */}
         {vehicule.stats && (
           <View style={styles.statsCard}>
-            <Text style={styles.sectionTitle}>Statistiques</Text>
-            <View style={styles.statsRow}>
+            <View style={styles.sectionHeader}>
+              <Feather name="bar-chart-2" size={20} color={SECONDARY_COLOR} />
+              <Text style={styles.sectionTitle}>Statistiques</Text>
+            </View>
+            <View style={styles.statsContainer}>
               <View style={styles.statItem}>
-                <FontAwesome5 name="eye" size={16} color="#666" />
+                <View style={[styles.statIconContainer, { backgroundColor: 'rgba(255, 125, 0, 0.1)' }]}>
+                  <Feather name="eye" size={20} color={PRIMARY_COLOR} />
+                </View>
                 <Text style={styles.statValue}>{vehicule.stats.vues || 0}</Text>
                 <Text style={styles.statLabel}>Vues</Text>
               </View>
+              <View style={styles.statDivider} />
               <View style={styles.statItem}>
-                <FontAwesome5 name="calendar-check" size={16} color="#666" />
+                <View style={[styles.statIconContainer, { backgroundColor: 'rgba(52, 199, 89, 0.1)' }]}>
+                  <Feather name="calendar" size={20} color="#34C759" />
+                </View>
                 <Text style={styles.statValue}>{vehicule.stats.reservations || 0}</Text>
                 <Text style={styles.statLabel}>Réservations</Text>
               </View>
             </View>
           </View>
         )}
-      </ScrollView>
 
-      {/* Modale de réservation - CACHÉE si parking */}
+        {/* Parking Info */}
+        {/* {vehicule.parking && (
+          <View style={styles.parkingCard}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="business" size={20} color={SECONDARY_COLOR} />
+              <Text style={styles.sectionTitle}>Parking</Text>
+            </View>
+            <View style={styles.parkingInfo}>
+              <View style={styles.parkingLogoContainer}>
+                {vehicule.parking.logo ? (
+                  <Image 
+                    source={{ uri: vehicule.parking.logo.startsWith('http') ? vehicule.parking.logo : `${BASE_URL}${vehicule.parking.logo}` }}
+                    style={styles.parkingLogo}
+                  />
+                ) : (
+                  <View style={styles.parkingLogoPlaceholder}>
+                    <Ionicons name="business" size={24} color={PRIMARY_COLOR} />
+                  </View>
+                )}
+              </View>
+              <Text style={styles.parkingName}>{vehicule.parking.nom}</Text>
+            </View>
+          </View>
+        )} */}
+
+        {/* Spacer for FAB */}
+        <View style={{ height: 100 }} />
+      </Animated.ScrollView>
+
+      {/* Floating Action Button */}
+      {!isParkingView && (
+        <View style={styles.fabContainer}>
+          <TouchableOpacity 
+            style={styles.fabButton}
+            onPress={handleReservePress}
+          >
+            <FontAwesome5 name="calendar-check" size={20} color="#fff" />
+            <Text style={styles.fabText}>Réserver</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Reservation Modal */}
       {!isParkingView && (
         <Modal
           animationType="slide"
@@ -948,103 +1031,147 @@ function CarDetailScreen() {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <TouchableOpacity style={styles.closeButton} onPress={() => setModalVisible(false)}>
-                <MaterialIcons name="close" size={24} color="#666" />
-              </TouchableOpacity>
-
-              <Text style={styles.modalTitle}>
-                Réserver {vehicule.marqueRef?.name || vehicule.marque || 'Marque'} {vehicule.model || 'Modèle'}
-              </Text>
-
-              <View style={styles.typeButtons}>
-                <TouchableOpacity
-                  style={[styles.typeButton, reservationType === 'ACHAT' && styles.typeButtonSelected]}
-                  onPress={() => selectType('ACHAT')}
-                >
-                  <FontAwesome5 name="shopping-cart" size={20} color={reservationType === 'ACHAT' ? '#FFF' : '#FF6F00'} style={styles.typeIcon} />
-                  <Text style={[styles.typeButtonText, reservationType === 'ACHAT' && styles.typeButtonTextSelected]}>Achat</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.typeButton, reservationType === 'LOCATION' && styles.typeButtonSelected]}
-                  onPress={() => selectType('LOCATION')}
-                >
-                  <FontAwesome5 name="calendar-alt" size={20} color={reservationType === 'LOCATION' ? '#FFF' : '#FF6F00'} style={styles.typeIcon} />
-                  <Text style={[styles.typeButtonText, reservationType === 'LOCATION' && styles.typeButtonTextSelected]}>Location</Text>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Réserver ce véhicule</Text>
+                <TouchableOpacity onPress={() => setModalVisible(false)}>
+                  <Ionicons name="close" size={24} color={SECONDARY_COLOR} />
                 </TouchableOpacity>
               </View>
 
-              {reservationType === 'LOCATION' && (
-                <View style={styles.datePickers}>
-                  <Text style={styles.dateLabel}>Date de début</Text>
-                  <TouchableOpacity style={styles.dateButton} onPress={() => setShowStartPicker(true)}>
-                    <FontAwesome5 name="calendar" size={16} color="#666" style={styles.dateIcon} />
-                    <Text style={styles.dateButtonText}>
-                      {startDate ? startDate.toLocaleDateString('fr-FR') : 'Sélectionner une date'}
+              <View style={styles.modalBody}>
+                <Text style={styles.modalSubtitle}>Type de réservation</Text>
+                <View style={styles.typeButtons}>
+                  <TouchableOpacity
+                    style={[styles.typeButton, reservationType === 'ACHAT' && styles.typeButtonSelected]}
+                    onPress={() => selectType('ACHAT')}
+                  >
+                    <FontAwesome5 
+                      name="shopping-cart" 
+                      size={20} 
+                      color={reservationType === 'ACHAT' ? '#fff' : PRIMARY_COLOR} 
+                    />
+                    <Text style={[styles.typeButtonText, reservationType === 'ACHAT' && styles.typeButtonTextSelected]}>
+                      Achat
                     </Text>
                   </TouchableOpacity>
-                  {showStartPicker && (
-                    <DateTimePicker
-                      value={startDate || new Date()}
-                      mode="date"
-                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                      onChange={onStartDateChange}
-                      minimumDate={new Date()}
+                  <TouchableOpacity
+                    style={[styles.typeButton, reservationType === 'LOCATION' && styles.typeButtonSelected]}
+                    onPress={() => selectType('LOCATION')}
+                  >
+                    <FontAwesome5 
+                      name="calendar-alt" 
+                      size={20} 
+                      color={reservationType === 'LOCATION' ? '#fff' : PRIMARY_COLOR} 
                     />
-                  )}
-
-                  <Text style={styles.dateLabel}>Date de fin</Text>
-                  <TouchableOpacity style={styles.dateButton} onPress={() => setShowEndPicker(true)}>
-                    <FontAwesome5 name="calendar" size={16} color="#666" style={styles.dateIcon} />
-                    <Text style={styles.dateButtonText}>
-                      {endDate ? endDate.toLocaleDateString('fr-FR') : 'Sélectionner une date'}
+                    <Text style={[styles.typeButtonText, reservationType === 'LOCATION' && styles.typeButtonTextSelected]}>
+                      Location
                     </Text>
                   </TouchableOpacity>
-                  {showEndPicker && (
-                    <DateTimePicker
-                      value={endDate || new Date()}
-                      mode="date"
-                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                      onChange={onEndDateChange}
-                      minimumDate={startDate ? new Date(startDate.getTime() + 86400000) : new Date()}
-                    />
-                  )}
                 </View>
-              )}
 
-              {reservationType === 'ACHAT' && (
-                <View style={styles.confirmMessage}>
-                  <FontAwesome5 name="info-circle" size={20} color="#FF6F00" style={styles.confirmIcon} />
-                  <Text style={styles.confirmText}>
-                    Vous êtes sur le point d'acheter ce véhicule pour {vehicule.prix ? `${vehicule.prix.toLocaleString()} FCFA` : 'le prix indiqué'}. Confirmez pour procéder.
+                {reservationType === 'LOCATION' && (
+                  <View style={styles.dateSection}>
+                    <View style={styles.dateRow}>
+                      <View style={styles.dateInput}>
+                        <Text style={styles.dateLabel}>Date de début</Text>
+                        <TouchableOpacity 
+                          style={styles.dateButton}
+                          onPress={() => setShowStartPicker(true)}
+                        >
+                          <Feather name="calendar" size={18} color="#666" />
+                          <Text style={styles.dateButtonText}>
+                            {startDate ? startDate.toLocaleDateString('fr-FR') : 'Sélectionner'}
+                          </Text>
+                        </TouchableOpacity>
+                        {showStartPicker && (
+                          <DateTimePicker
+                            value={startDate || new Date()}
+                            mode="date"
+                            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                            onChange={onStartDateChange}
+                            minimumDate={new Date()}
+                          />
+                        )}
+                      </View>
+                      <View style={styles.dateInput}>
+                        <Text style={styles.dateLabel}>Date de fin</Text>
+                        <TouchableOpacity 
+                          style={styles.dateButton}
+                          onPress={() => setShowEndPicker(true)}
+                        >
+                          <Feather name="calendar" size={18} color="#666" />
+                          <Text style={styles.dateButtonText}>
+                            {endDate ? endDate.toLocaleDateString('fr-FR') : 'Sélectionner'}
+                          </Text>
+                        </TouchableOpacity>
+                        {showEndPicker && (
+                          <DateTimePicker
+                            value={endDate || new Date()}
+                            mode="date"
+                            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                            onChange={onEndDateChange}
+                            minimumDate={startDate ? new Date(startDate.getTime() + 86400000) : new Date()}
+                          />
+                        )}
+                      </View>
+                    </View>
+                    <View style={styles.chauffeurMessageCard}>
+                      <FontAwesome5 name="user-tie" size={20} color={PRIMARY_COLOR} />
+                      <Text style={styles.chauffeurMessageText}>
+                        Note : La location inclut un chauffeur fourni par le parking.
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {reservationType && (
+                  <View style={styles.summaryCard}>
+                    <View style={styles.summaryHeader}>
+                      <Ionicons name="information-circle" size={20} color={PRIMARY_COLOR} />
+                      <Text style={styles.summaryTitle}>Récapitulatif</Text>
+                    </View>
+                    <Text style={styles.summaryText}>
+                      {reservationType === 'ACHAT' 
+                        ? `Achat de ${vehicule.marqueRef?.name || ''} ${vehicule.model || ''} pour ${formatPrice(vehicule.prix)}`
+                        : `Location de ${vehicule.marqueRef?.name || ''} ${vehicule.model || ''}`
+                      }
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.notificationCard}>
+                  <Ionicons name="notifications" size={20} color={PRIMARY_COLOR} />
+                  <Text style={styles.notificationText}>
+                    Une confirmation de réservation vous sera envoyée
                   </Text>
                 </View>
-              )}
-
-              <View style={styles.notificationInfo}>
-                <MaterialIcons name="notifications" size={16} color="#FF6F00" />
-                <Text style={styles.notificationInfoText}>
-                  Vous recevrez une confirmation par notification
-                </Text>
               </View>
 
-              <View style={styles.modalActions}>
-                <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
+              <View style={styles.modalFooter}>
+                <TouchableOpacity 
+                  style={styles.cancelButton}
+                  onPress={() => setModalVisible(false)}
+                >
                   <Text style={styles.cancelButtonText}>Annuler</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
                   style={[
                     styles.confirmButton, 
-                    isLoading && styles.confirmButtonDisabled
+                    (!reservationType || (reservationType === 'LOCATION' && (!startDate || !endDate))) && styles.confirmButtonDisabled
                   ]} 
-                  onPress={confirmReservation} 
-                  disabled={isLoading}
+                  onPress={confirmReservation}
+                  disabled={!reservationType || (reservationType === 'LOCATION' && (!startDate || !endDate)) || isLoading}
                 >
                   {isLoading ? (
                     <ActivityIndicator size="small" color="#FFF" />
                   ) : (
-                    <Text style={styles.confirmButtonText}>
-                      Confirmer {reservationType === 'ACHAT' ? 'l\'achat' : 'la location'}
-                    </Text>
+                    <>
+                      <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                      <Text style={styles.confirmButtonText}>
+                        Confirmer 
+                        {/* {reservationType === 'ACHAT' ? 'l\'achat' : 'la location'} */}
+                      </Text>
+                    </>
                   )}
                 </TouchableOpacity>
               </View>
@@ -1059,19 +1186,57 @@ function CarDetailScreen() {
 const styles = StyleSheet.create({
   safeArea: { 
     flex: 1,
-    backgroundColor: '#f8f9fa'
+    backgroundColor: BACKGROUND_COLOR
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: SECONDARY_COLOR,
+  },
+  headerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 100,
+    paddingTop: 10,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerFavoriteButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollView: {
     flex: 1,
   },
-  scrollContent: {
-    paddingBottom: 20,
+  imageGalleryContainer: {
+    height: 300,
+    backgroundColor: '#000',
   },
   imageContainer: {
     width: width,
-    height: 250,
-    backgroundColor: '#f0f0f0',
-    position: 'relative',
+    height: 300,
   },
   carImage: {
     width: '100%',
@@ -1080,171 +1245,190 @@ const styles = StyleSheet.create({
   placeholderImage: {
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#f0f0f0',
   },
   noImageText: {
     marginTop: 10,
-    color: '#666',
+    color: '#999',
     fontSize: 16,
   },
-  favoriteButton: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#FFF',
-    borderWidth: 2,
-    borderColor: '#FF6F00',
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  favoriteButtonActive: {
-    backgroundColor: '#FF6F00',
-    borderColor: '#FF6F00',
-  },
   pagination: {
-    flexDirection: 'row',
     position: 'absolute',
-    bottom: 10,
+    bottom: 20,
     alignSelf: 'center',
+    flexDirection: 'row',
   },
   paginationDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    margin: 5,
-  },
-  paginationDotActive: {
-    backgroundColor: '#FFF',
-    width: 12,
-  },
-  headerCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginTop: 16,
-    padding: 20,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    alignItems: 'center',
-  },
-  carName: { 
-    fontSize: 24,
-    fontWeight: 'bold', 
-    color: '#333',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  priceValue: { 
-    fontSize: 22, 
-    fontWeight: 'bold',
-    color: '#FF6F00',
-    marginBottom: 12,
-  },
-  parkingName: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  badgesContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-  },
-  badge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
     marginHorizontal: 4,
   },
-  saleBadge: {
-    backgroundColor: '#28a745',
+  paginationDotActive: {
+    backgroundColor: PRIMARY_COLOR,
+    width: 20,
   },
-  rentBadge: {
-    backgroundColor: '#17a2b8',
+  imageCounter: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
-  badgeText: {
-    color: '#FFF',
+  imageCounterText: {
+    color: '#fff',
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
-  parkingMessage: {
-    backgroundColor: '#FFF3E0',
-    borderRadius: 12,
+  headerCard: {
+    backgroundColor: CARD_BACKGROUND,
+    borderRadius: 24,
+    marginTop: -20,
     marginHorizontal: 16,
-    marginVertical: 16,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#FF6F00',
-  },
-  parkingMessageText: {
-    fontSize: 16,
-    color: '#FF6F00',
-    fontWeight: 'bold',
-    marginLeft: 10,
-  },
-  reserveButton: {
-    marginHorizontal: 16,
-    marginVertical: 16,
-    backgroundColor: '#FF6F00',
-    paddingVertical: 16,
-    borderRadius: 10,
-    alignItems: 'center',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-  },
-  reserveButtonText: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  detailsCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    margin: 16,
     padding: 20,
-    elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 20,
+    elevation: 10,
   },
-  sectionHeader: {
+  headerCardContent: {
+    marginBottom: 8,
+  },
+  titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 8,
+  },
+  carName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: SECONDARY_COLOR,
+    flex: 1,
+  },
+  floatingFavoriteButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f8f9fa',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  priceValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: PRIMARY_COLOR,
     marginBottom: 16,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+  },
+  badgesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 12,
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(44, 62, 80, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: SECONDARY_COLOR,
+    marginLeft: 4,
+  },
+  transactionContainer: {
+    flexDirection: 'row',
+  },
+  transactionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  saleBadge: {
+    backgroundColor: '#34C759',
+  },
+  rentBadge: {
+    backgroundColor: '#007AFF',
+  },
+  transactionBadgeText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  quickInfoContainer: {
+    paddingHorizontal: 16,
+    marginTop: 16,
+  },
+  quickInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  quickInfoCard: {
+    flex: 1,
+    backgroundColor: CARD_BACKGROUND,
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 4,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  quickInfoLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 8,
+  },
+  quickInfoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: SECONDARY_COLOR,
+    marginTop: 4,
+  },
+  featuresCard: {
+    backgroundColor: CARD_BACKGROUND,
+    borderRadius: 24,
+    margin: 16,
+    marginTop: 24,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    flex: 1,
+    fontWeight: '700',
+    color: SECONDARY_COLOR,
+    marginLeft: 8,
   },
   actionMenuContainer: {
-    position: 'relative',
+    marginLeft: 'auto',
   },
   actionMenuButton: {
-    padding: 4,
+    padding: 8,
     borderRadius: 20,
   },
   actionMenuOverlay: {
@@ -1254,15 +1438,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionMenuContent: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
+    backgroundColor: CARD_BACKGROUND,
+    borderRadius: 16,
     padding: 8,
-    width: 180,
-    elevation: 5,
+    width: 200,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 5,
   },
   menuItem: {
     flexDirection: 'row',
@@ -1273,7 +1457,7 @@ const styles = StyleSheet.create({
   },
   menuItemText: {
     fontSize: 16,
-    color: '#333',
+    color: SECONDARY_COLOR,
     marginLeft: 12,
     fontWeight: '500',
   },
@@ -1286,273 +1470,350 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   featuresGrid: {
-    marginBottom: 16,
-  },
-  featureRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: 16,
-    minHeight: 80,
   },
   featureItem: {
-    flex: 1,
+    width: '48%',
+    flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
-    minWidth: 150,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+  },
+  featureIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 125, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  featureTextContainer: {
+    flex: 1,
   },
   featureLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666',
-    marginTop: 6,
-    marginBottom: 4,
-    textAlign: 'center',
+    marginBottom: 2,
   },
   featureValue: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#333',
-    textAlign: 'center',
+    color: SECONDARY_COLOR,
   },
   unknownValue: {
     fontStyle: 'italic',
     color: '#999',
   },
-  descriptionSection: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-  },
-  descriptionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
+  descriptionCard: {
+    backgroundColor: CARD_BACKGROUND,
+    borderRadius: 24,
+    margin: 16,
+    marginTop: 0,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
   },
   descriptionText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#666',
-    lineHeight: 20,
-  },
-  optionsCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    margin: 16,
-    marginTop: 0,
-    padding: 20,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  optionsList: {
-    marginTop: 8,
-  },
-  optionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  optionText: {
-    fontSize: 16,
-    color: '#333',
-    marginLeft: 12,
+    lineHeight: 22,
   },
   statsCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
+    backgroundColor: CARD_BACKGROUND,
+    borderRadius: 24,
     margin: 16,
     marginTop: 0,
     padding: 20,
-    elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
   },
-  statsRow: {
+  statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    alignItems: 'center',
   },
   statItem: {
     alignItems: 'center',
-    padding: 10,
+    flex: 1,
+  },
+  statIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   statValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginTop: 4,
+    fontSize: 24,
+    fontWeight: '800',
+    color: SECONDARY_COLOR,
   },
   statLabel: {
     fontSize: 14,
     color: '#666',
-    marginTop: 2,
+    marginTop: 4,
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#f0f0f0',
+  },
+  parkingCard: {
+    backgroundColor: CARD_BACKGROUND,
+    borderRadius: 24,
+    margin: 16,
+    marginTop: 0,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  parkingInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  parkingLogoContainer: {
+    marginRight: 16,
+  },
+  parkingLogo: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  parkingLogoPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 125, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  parkingName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: SECONDARY_COLOR,
+  },
+  fabContainer: {
+    position: 'absolute',
+    bottom: 40,
+    right: 20,
+    zIndex: 10,
+  },
+  fabButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: PRIMARY_COLOR,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  fabText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   modalOverlay: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 24,
-    width: '90%',
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    backgroundColor: CARD_BACKGROUND,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    maxHeight: '90%',
+    paddingBottom: 30,
   },
-  closeButton: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    zIndex: 1,
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
   modalTitle: {
     fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 24,
-    textAlign: 'center',
+    fontWeight: '700',
+    color: SECONDARY_COLOR,
+  },
+  modalBody: {
+    padding: 24,
+  },
+  modalSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: SECONDARY_COLOR,
+    marginBottom: 16,
   },
   typeButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     marginBottom: 24,
   },
   typeButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#FF6F00',
-    backgroundColor: '#FFF',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: PRIMARY_COLOR,
+    backgroundColor: '#fff',
+    marginHorizontal: 6,
   },
   typeButtonSelected: {
-    backgroundColor: '#FF6F00',
-    borderColor: '#FF6F00',
-  },
-  typeIcon: {
-    marginRight: 8,
+    backgroundColor: PRIMARY_COLOR,
   },
   typeButtonText: {
     fontSize: 16,
-    color: '#FF6F00',
-    fontWeight: 'bold',
+    fontWeight: '600',
+    color: PRIMARY_COLOR,
+    marginLeft: 8,
   },
   typeButtonTextSelected: {
-    color: '#FFF',
+    color: '#fff',
   },
-  datePickers: {
+  dateSection: {
     marginBottom: 24,
   },
+  dateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  dateInput: {
+    flex: 1,
+    marginHorizontal: 6,
+  },
   dateLabel: {
-    fontSize: 16,
-    color: '#333',
-    marginBottom: 8,
+    fontSize: 14,
     fontWeight: '600',
+    color: SECONDARY_COLOR,
+    marginBottom: 8,
   },
   dateButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f8f9fa',
-    padding: 14,
+    padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#ddd',
-    marginBottom: 16,
-  },
-  dateIcon: {
-    marginRight: 12,
+    borderColor: '#e0e0e0',
   },
   dateButtonText: {
     fontSize: 16,
-    color: '#333',
+    color: SECONDARY_COLOR,
+    marginLeft: 12,
+    flex: 1,
   },
-  confirmMessage: {
+  chauffeurMessageCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 125, 0, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+  },
+  chauffeurMessageText: {
+    fontSize: 14,
+    color: SECONDARY_COLOR,
+    marginLeft: 12,
+    flex: 1,
+  },
+  summaryCard: {
+    backgroundColor: 'rgba(255, 125, 0, 0.1)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  summaryTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: SECONDARY_COLOR,
+    marginLeft: 8,
+  },
+  summaryText: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+  },
+  notificationCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#f8f9fa',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
   },
-  confirmIcon: {
-    marginRight: 12,
-  },
-  confirmText: {
+  notificationText: {
     fontSize: 14,
-    color: '#333',
+    color: SECONDARY_COLOR,
+    marginLeft: 12,
     flex: 1,
-    lineHeight: 20,
   },
-  notificationInfo: {
+  modalFooter: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    padding: 12,
-    backgroundColor: '#fff3e0',
-    borderRadius: 8,
-  },
-  notificationInfoText: {
-    fontSize: 14,
-    color: '#FF6F00',
-    marginLeft: 8,
-    fontWeight: '500',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
+    paddingHorizontal: 24,
+    paddingTop: 16,
   },
   cancelButton: {
-    backgroundColor: '#f8f9fa',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
     flex: 1,
+    backgroundColor: '#f8f9fa',
+    paddingVertical: 16,
+    borderRadius: 16,
     alignItems: 'center',
     marginRight: 12,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#e0e0e0',
   },
   cancelButtonText: {
-    color: '#666',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    color: '#666',
   },
   confirmButton: {
-    backgroundColor: '#FF6F00',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
     flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: PRIMARY_COLOR,
+    paddingVertical: 16,
+    borderRadius: 16,
     marginLeft: 12,
   },
   confirmButtonDisabled: {
-    backgroundColor: '#FFB74D',
+    backgroundColor: '#ffb366',
     opacity: 0.7,
   },
   confirmButtonText: {
-    color: '#FFF',
     fontSize: 16,
-    fontWeight: 'bold',
-  },
-  buttonDisabled: {
-    backgroundColor: '#ccc',
-    opacity: 0.6,
+    fontWeight: '600',
+    color: '#fff',
+    marginLeft: 8,
   },
 });
 

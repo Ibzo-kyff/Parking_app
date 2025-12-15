@@ -357,6 +357,20 @@ const takePhoto = async () => {
             <Feather name="chevron-right" size={20} color="#999" />
           </TouchableOpacity>
         </Link>
+        {userRole === 'PARKING' && (
+          <Link href="../(profil)/monparking" asChild>
+            <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
+              <View style={styles.menuIcon}>
+                <MaterialCommunityIcons name="parking" size={24} color="#FDB913" />
+              </View>
+              <View style={styles.menuTextContainer}>
+                <Text style={styles.menuItemText}>Mon Parking</Text>
+                <Text style={styles.menuItemSubText}>Modifier les informations de votre parking</Text>
+              </View>
+              <Feather name="chevron-right" size={20} color="#999" />
+            </TouchableOpacity>
+          </Link>
+        )}
         {userRole === 'CLIENT' && (
           /* NOUVEAU : Section Favoris */
           <Link href="../(profil)/favoris" asChild>

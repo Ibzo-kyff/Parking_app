@@ -1,10 +1,10 @@
 import axios, { AxiosError } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BASE_URL } from "../../config/env";
 
-export const API_URL = 'https://parkapp-pi.vercel.app/api/';
 
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: BASE_URL,
   withCredentials: true, // Pour compatibilité web, mais mobile ignore souvent
 });
 
@@ -25,7 +25,7 @@ api.interceptors.response.use(
           throw new Error('No refreshToken available');
         }
 
-        const response = await axios.post(`${API_URL}auth/refresh`, { refreshToken: storedRefreshToken }, {
+        const response = await axios.post(`${BASE_URL}auth/refresh`, { refreshToken: storedRefreshToken }, {
           withCredentials: true
         });
         
@@ -115,11 +115,36 @@ export const login = async (credentials: { email: string; password: string }): P
   }
 };
 
-// Supprime ou commente la standalone refreshToken, car interceptor gère
+export const register = async (userData: {
+  email: string;
+  password: string;
+  confirmPassword?: string;
+  nom?: string;
+  prenom?: string;
+  phone?: string;
+  address?: string;
+  role?: string;
+}): Promise<{
+  message: string;
+  accessToken?: string;
+  nom?: string;
+  prenom?: string;
+  email?: string;
+  role?: string;
+  emailVerified?: boolean;
+}> => {
+  try {
+    const response = await api.post('/auth/register', userData);
+    return response.data;
+  } catch (error) {
+    const err = error as AxiosError<{ message?: string }>;
+    throw new Error(err.response?.data?.message || 'Échec de l\'inscription');
+  }
+};
 // Si needed ailleurs, aligne-la :
 export const refreshAccessToken = async (refreshToken: string): Promise<{ accessToken: string; refreshToken?: string }> => {
   try {
-    const response = await axios.post(`${API_URL}auth/refresh`, { refreshToken }, {
+    const response = await axios.post(`${BASE_URL}auth/refresh`, { refreshToken }, {
       withCredentials: true
     });
     const { accessToken, refreshToken: newRefreshToken } = response.data;

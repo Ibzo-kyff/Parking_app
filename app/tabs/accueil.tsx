@@ -12,7 +12,8 @@ import {
 import { FontAwesome } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import Header from '../Header';
-import { getVehicules, getParkings, API_URL } from "../../components/services/accueil";
+import { getVehicules, getParkings } from "../../components/services/accueil";
+import { BASE_URL } from "../../config/env";
 import { router } from 'expo-router';
 
 type RootStackParamList = {
@@ -172,7 +173,7 @@ const Accueil: React.FC = () => {
                       uri: item.logo
                         ? item.logo.startsWith('http')
                           ? item.logo
-                          : `${API_URL}${item.logo}`
+                          : `${BASE_URL}${item.logo}`
                         : 'https://via.placeholder.com/150'
                     }}
                     style={styles.carouselImage}
@@ -248,7 +249,7 @@ const Accueil: React.FC = () => {
                           uri: item.photos && item.photos.length > 0
                             ? item.photos[0].startsWith('http')
                               ? item.photos[0]
-                              : `${API_URL}${item.photos[0]}`
+                              : `${BASE_URL}${item.photos[0]}`
                             : "https://via.placeholder.com/150"
                         }}
                         style={styles.scrollImageLarge}

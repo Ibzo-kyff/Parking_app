@@ -13,13 +13,14 @@ import {
   Dimensions,
   Modal,
   Switch,
+  FlatList,
 } from 'react-native';
 import { FontAwesome, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getVehicules } from '../../components/services/listeVoiture';
 import { router } from 'expo-router';
-import { BASE_URL } from '../../components/services/listeVoiture';
+import { BASE_URL } from '../../config/env';
 import { useLocalSearchParams } from 'expo-router';
 
 interface Parking {
@@ -37,7 +38,7 @@ interface Marque {
 
 interface Vehicule {
   id: number;
-  marqueRef?: Marque; // Relation avec la marque
+  marqueRef?: Marque;
   model: string;
   prix: number;
   photos: string[] | string;
@@ -47,9 +48,11 @@ interface Vehicule {
   garantie?: boolean;
   assurance?: boolean;
   status?: string;
+  year?: number;
 }
 
 const { width } = Dimensions.get('window');
+const CARD_WIDTH = (width - 36) / 2; // Deux colonnes avec espacement
 
 const ListVoiture = () => {
   const params = useLocalSearchParams();
@@ -73,10 +76,11 @@ const ListVoiture = () => {
     maxMileage: '',
     forSale: false,
     forRent: false,
+    minYear: '',
+    maxYear: '',
   });
   const filterAnim = useState(new Animated.Value(0))[0];
 
-  // Types de carburant courants
   const commonFuelTypes = ['Essence', 'Diesel', 'Hybride', 'Électrique', 'GPL'];
 
   useEffect(() => {
@@ -86,7 +90,6 @@ const ListVoiture = () => {
         setVehicules(vehiculesData);
         setFilteredVehicules(vehiculesData);
         
-        // Extraire les types de carburant uniques
         const fuelTypes = [...new Set(vehiculesData
           .map((v: { fuelType: any; }) => v.fuelType)
           .filter(Boolean))] as string[];
@@ -110,7 +113,6 @@ const ListVoiture = () => {
       ));
       setFilteredVehicules(filtered);
       
-      // Afficher les filtres après une recherche
       if (!showFilters) {
         Animated.timing(filterAnim, {
           toValue: 1,
@@ -123,7 +125,6 @@ const ListVoiture = () => {
       const filtered = applyAdvancedFilters(vehicules);
       setFilteredVehicules(filtered);
       
-      // Cacher les filtres si la recherche est vide
       if (showFilters) {
         Animated.timing(filterAnim, {
           toValue: 0,
@@ -133,52 +134,54 @@ const ListVoiture = () => {
       }
     }
   }, [searchQuery, vehicules, advancedFilters]);
-  // Appliquer la marque sélectionnée depuis les paramètres
+
   useEffect(() => {
     if (selectedMarqueFromParams) {
       setSearchQuery(selectedMarqueFromParams);
-      // Le filtre se fera automatiquement via l'effet existant de searchQuery
     }
   }, [selectedMarqueFromParams]);
 
   const applyAdvancedFilters = (vehicles: Vehicule[]) => {
     let filtered = [...vehicles];
     
-    // Filtre par prix minimum
     if (advancedFilters.minPrice) {
       const minPrice = parseFloat(advancedFilters.minPrice);
       filtered = filtered.filter(v => v.prix >= minPrice);
     }
     
-    // Filtre par prix maximum
     if (advancedFilters.maxPrice) {
       const maxPrice = parseFloat(advancedFilters.maxPrice);
       filtered = filtered.filter(v => v.prix <= maxPrice);
     }
     
-    // Filtre par garantie
     if (advancedFilters.withWarranty) {
       filtered = filtered.filter(v => v.garantie);
     }
     
-    // Filtre par assurance
     if (advancedFilters.withInsurance) {
       filtered = filtered.filter(v => v.assurance);
     }
     
-    // Filtre par kilométrage minimum
     if (advancedFilters.minMileage && advancedFilters.minMileage !== '') {
       const minMileage = parseInt(advancedFilters.minMileage);
       filtered = filtered.filter(v => v.mileage && v.mileage >= minMileage);
     }
     
-    // Filtre par kilométrage maximum
     if (advancedFilters.maxMileage && advancedFilters.maxMileage !== '') {
       const maxMileage = parseInt(advancedFilters.maxMileage);
       filtered = filtered.filter(v => v.mileage && v.mileage <= maxMileage);
     }
     
-    // Filtre par statut (en vente/en location)
+    if (advancedFilters.minYear && advancedFilters.minYear !== '') {
+      const minYear = parseInt(advancedFilters.minYear);
+      filtered = filtered.filter(v => v.year && v.year >= minYear);
+    }
+    
+    if (advancedFilters.maxYear && advancedFilters.maxYear !== '') {
+      const maxYear = parseInt(advancedFilters.maxYear);
+      filtered = filtered.filter(v => v.year && v.year <= maxYear);
+    }
+    
     if (advancedFilters.forSale) {
       filtered = filtered.filter(v => v.status === 'DISPONIBLE' || v.status === 'EN_VENTE');
     }
@@ -192,7 +195,11 @@ const ListVoiture = () => {
 
   const getPhotoUrl = (photos: string[] | string | undefined) => {
     if (!photos) return null;
+    
     const photo = Array.isArray(photos) ? photos[0] : photos;
+    
+    if (typeof photo !== 'string' || !photo) return null;
+    
     return photo.startsWith('http') ? photo : `${BASE_URL}${photo}`;
   };
 
@@ -216,13 +223,12 @@ const ListVoiture = () => {
       );
     }
     
-    // Appliquer le filtre spécifique
     switch(filterType) {
       case 'economique':
-        filtered = filtered.filter(v => v.prix < 10000000); // Moins de 10 millions
+        filtered = filtered.filter(v => v.prix < 10000000);
         break;
       case 'luxe':
-        filtered = filtered.filter(v => v.prix > 30000000); // Plus de 30 millions
+        filtered = filtered.filter(v => v.prix > 30000000);
         break;
       case 'vente':
         filtered = filtered.filter(v => v.status === 'DISPONIBLE' || v.status === 'EN_VENTE');
@@ -231,16 +237,13 @@ const ListVoiture = () => {
         filtered = filtered.filter(v => v.status === 'EN_LOCATION');
         break;
       default:
-        // Pour les filtres de carburant
         if (filterType !== 'all') {
           filtered = filtered.filter(v => v.fuelType === filterType);
         }
         break;
     }
     
-    // Appliquer les filtres avancés
     filtered = applyAdvancedFilters(filtered);
-    
     setFilteredVehicules(filtered);
   };
 
@@ -255,14 +258,138 @@ const ListVoiture = () => {
       maxMileage: '',
       forSale: false,
       forRent: false,
+      minYear: '',
+      maxYear: '',
     });
     setFilteredVehicules(vehicules);
+  };
+
+  const formatPrice = (price: number) => {
+    if (price >= 1000000) {
+      return `${(price / 1000000).toFixed(1)}M CFA`;
+    } else if (price >= 1000) {
+      return `${(price / 1000).toFixed(1)}K CFA`;
+    }
+    return `$${price}`;
+  };
+
+  const formatMileage = (mileage: number) => {
+    if (mileage >= 1000) {
+      return `${(mileage / 1000).toFixed(1)}K km`;
+    }
+    return `${mileage} km`;
+  };
+
+  const renderVehicleCard = ({ item }: { item: Vehicule }) => {
+    const photoUrl = getPhotoUrl(item.photos);
+    const parkingLogoUrl = item.parking?.logo
+      ? item.parking.logo.startsWith('http')
+        ? item.parking.logo
+        : `${BASE_URL}${item.parking.logo}`
+      : null;
+
+    return (
+      <TouchableOpacity 
+        style={styles.card}
+        onPress={() => navigateToDetails(item)}
+        activeOpacity={0.9}
+      >
+        {/* Image du véhicule */}
+        <View style={styles.imageContainer}>
+          {photoUrl ? (
+            <Image 
+              source={{ uri: photoUrl }} 
+              style={styles.carImage} 
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={styles.placeholderImage}>
+              <FontAwesome name="car" size={32} color="#aaa" />
+            </View>
+          )}
+          
+          {/* Badge du parking */}
+          {parkingLogoUrl && (
+            <View style={styles.parkingBadge}>
+              <Image 
+                source={{ uri: parkingLogoUrl }} 
+                style={styles.parkingBadgeImage} 
+                resizeMode="cover"
+              />
+            </View>
+          )}
+          
+          {/* Badge de statut */}
+          {item.status && (
+            <View style={[
+              styles.statusBadge,
+              item.status === 'EN_LOCATION' && styles.statusRent,
+              item.status === 'EN_VENTE' && styles.statusSale,
+              item.status === 'DISPONIBLE' && styles.statusAvailable
+            ]}>
+              <Text style={styles.statusText}>
+                {item.status === 'EN_LOCATION' ? 'Location' : 
+                 item.status === 'EN_VENTE' ? 'Vente' : 'Disponible'}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Informations du véhicule */}
+        <View style={styles.cardContent}>
+          <Text style={styles.carName} numberOfLines={1}>
+            {item.marqueRef?.name || 'Marque'} {item.model}
+          </Text>
+          
+          <View style={styles.carDetails}>
+            <View style={styles.detailRow}>
+              <Ionicons name="calendar-outline" size={14} color="#666" />
+              <Text style={styles.detailText}>
+                {item.year || 'N/A'} • {item.mileage ? formatMileage(item.mileage) : 'N/A km'}
+              </Text>
+            </View>
+            
+            <View style={styles.detailRow}>
+              <Ionicons name="speedometer" size={14} color="#666" />
+              <Text style={styles.detailText}>
+                {item.fuelType || 'Non spécifié'}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={styles.carPrice}>{formatPrice(item.prix)}</Text>
+          
+          <View style={styles.locationContainer}>
+            <Ionicons name="location-outline" size={14} color="#666" />
+            <Text style={styles.locationText} numberOfLines={1}>
+              {item.parking?.name || 'Localisation non spécifiée'}
+            </Text>
+          </View>
+          
+          {/* Badges d'options */}
+          <View style={styles.optionBadges}>
+            {item.garantie && (
+              <View style={styles.optionBadge}>
+                <Ionicons name="shield-checkmark" size={12} color="#28a745" />
+                <Text style={styles.optionBadgeText}>Garantie</Text>
+              </View>
+            )}
+            {item.assurance && (
+              <View style={styles.optionBadge}>
+                <Ionicons name="document-text-outline" size={12} color="#ff8000ff" />
+                <Text style={styles.optionBadgeText}>Assurance</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="blue" />
+        <ActivityIndicator size="large" color="#007AFF" />
       </View>
     );
   }
@@ -282,7 +409,8 @@ const ListVoiture = () => {
       <View style={styles.container}>
         {/* Header avec titre */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Liste des voitures</Text>
+          <Text style={styles.headerTitle}>Voitures disponibles</Text>
+          <Text style={styles.headerSubtitle}>{filteredVehicules.length} véhicules trouvés</Text>
         </View>
 
         {/* Barre de recherche */}
@@ -291,19 +419,27 @@ const ListVoiture = () => {
             <FontAwesome name="search" size={20} color="#888" style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Rechercher une voiture, marque..."
+              placeholder="Rechercher une marque, modèle..."
               value={searchQuery}
               onChangeText={setSearchQuery}
+              placeholderTextColor="#999"
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
                 <Ionicons name="close-circle" size={20} color="#888" />
               </TouchableOpacity>
             )}
           </View>
+          
+          <TouchableOpacity 
+            style={styles.filterToggleButton}
+            onPress={() => setShowAdvancedFilters(true)}
+          >
+            <MaterialIcons name="filter-list" size={24} color="#ff7d00" />
+          </TouchableOpacity>
         </View>
 
-        {/* Filtres contextuels (apparaissent seulement après recherche) */}
+        {/* Filtres contextuels */}
         {showFilters && (
           <Animated.View 
             style={[
@@ -320,14 +456,6 @@ const ListVoiture = () => {
               style={styles.filterScroll}
               contentContainerStyle={styles.filterContent}
             >
-              {/* Bouton filtre avancé */}
-              <TouchableOpacity 
-                style={styles.advancedFilterButton}
-                onPress={() => setShowAdvancedFilters(true)}
-              >
-                <MaterialIcons name="filter-list" size={20} color="#fff" />
-              </TouchableOpacity>
-
               <TouchableOpacity 
                 style={[styles.filterButton, activeFilter === 'all' && styles.filterButtonActive]}
                 onPress={() => applyFilter('all')}
@@ -337,7 +465,6 @@ const ListVoiture = () => {
                 </Text>
               </TouchableOpacity>
               
-              {/* Filtres de base */}
               <TouchableOpacity 
                 style={[styles.filterButton, activeFilter === 'economique' && styles.filterButtonActive]}
                 onPress={() => applyFilter('economique')}
@@ -374,10 +501,9 @@ const ListVoiture = () => {
                 </Text>
               </TouchableOpacity>
               
-              {/* Afficher les types de carburant disponibles comme filtres */}
               {commonFuelTypes.filter(fuel => 
                 availableFuelTypes.includes(fuel)
-              ).slice(0, 3).map((fuel) => (
+              ).map((fuel) => (
                 <TouchableOpacity 
                   key={fuel}
                   style={[styles.filterButton, activeFilter === fuel && styles.filterButtonActive]}
@@ -392,119 +518,37 @@ const ListVoiture = () => {
           </Animated.View>
         )}
 
-        {/* Résultats de recherche */}
-        <ScrollView 
-          style={styles.scrollView}
-          contentContainerStyle={[
-            styles.scrollContent,
-            showFilters && { paddingTop: 60 }
-          ]}
-          showsVerticalScrollIndicator={false}
-        >
-          {filteredVehicules.length === 0 ? (
-            <View style={styles.noResults}>
-              <FontAwesome name="search" size={50} color="#ccc" />
-              <Text style={styles.noResultsText}>Aucun véhicule trouvé</Text>
-              <Text style={styles.noResultsSubText}>Essayez d'autres termes de recherche ou modifiez vos filtres</Text>
-              <TouchableOpacity style={styles.resetFilterButton} onPress={resetFilters}>
-                <Text style={styles.resetFilterButtonText}>Réinitialiser les filtres</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            filteredVehicules.map((item) => {
-              const photoUrl = getPhotoUrl(item.photos);
-              const parkingLogoUrl = item.parking?.logo
-                ? item.parking.logo.startsWith('http')
-                  ? item.parking.logo
-                  : `${BASE_URL}${item.parking.logo}`
-                : null;
-              const parkingName = item.parking?.name || 'Parking inconnu';
-
-              return (
-                <View key={item.id} style={styles.card}>
-                  {/* Logo et nom du parking */}
-                  <View style={styles.parkingHeader}>
-                    {parkingLogoUrl ? (
-                      <Image 
-                        source={{ uri: parkingLogoUrl }} 
-                        style={styles.parkingLogo} 
-                        resizeMode="contain"
-                      />
-                    ) : (
-                      <FontAwesome name="building" size={24} color="gray" />
-                    )}
-                    <Text style={styles.parkingName} numberOfLines={1}>{parkingName}</Text>
-                  </View>
-
-                  {/* Image véhicule + infos */}
-                  <View style={styles.vehiculeContainer}>
-                    <TouchableOpacity 
-                      onPress={() => navigateToDetails(item)}
-                      style={styles.imageContainer}
-                    >
-                      {photoUrl ? (
-                        <Image 
-                          source={{ uri: photoUrl }} 
-                          style={styles.carImage} 
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={styles.placeholderImage}>
-                          <FontAwesome name="car" size={40} color="gray" />
-                        </View>
-                      )}
-                    </TouchableOpacity>
-
-                    <View style={styles.vehiculeInfo}>
-                      <Text style={styles.carTitle} numberOfLines={1}>
-                        {item.marqueRef?.name || 'Marque inconnue'} {item.model}
-                      </Text>
-                      <Text style={styles.carPrice}>Prix: {item.prix.toLocaleString()} FCFA</Text>
-                      
-                      {/* Badge de statut */}
-                      {item.status && (
-                        <View style={[
-                          styles.statusBadge,
-                          item.status === 'EN_LOCATION' && styles.rentBadge,
-                          item.status === 'EN_VENTE' && styles.saleBadge,
-                          item.status === 'DISPONIBLE' && styles.availableBadge
-                        ]}>
-                          <Text style={styles.statusText}>
-                            {item.status === 'EN_LOCATION' ? 'En location' : 
-                             item.status === 'EN_VENTE' ? 'En vente' : 'Disponible'}
-                          </Text>
-                        </View>
-                      )}
-                      
-                      {/* Informations supplémentaires */}
-                      <View style={styles.additionalInfo}>
-                        {item.fuelType && (
-                          <View style={styles.infoBadge}>
-                            <Ionicons name="flash" size={12} color="#666" />
-                            <Text style={styles.infoText}>{item.fuelType}</Text>
-                          </View>
-                        )}
-                        {item.garantie && (
-                          <View style={[styles.infoBadge, styles.warrantyBadge]}>
-                            <Ionicons name="shield-checkmark" size={12} color="#28a745" />
-                            <Text style={[styles.infoText, styles.warrantyText]}>Garantie</Text>
-                          </View>
-                        )}
-                      </View>
-
-                      <TouchableOpacity
-                        style={styles.infoButton}
-                        onPress={() => navigateToDetails(item)}
-                      >
-                        <Text style={styles.infoButtonText}>Infos</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              );
-            })
-          )}
-        </ScrollView>
+        {/* Liste des véhicules en grille 2 colonnes */}
+        {filteredVehicules.length === 0 ? (
+          <View style={styles.noResults}>
+            <FontAwesome name="car" size={60} color="#ddd" />
+            <Text style={styles.noResultsText}>Aucun véhicule trouvé</Text>
+            <Text style={styles.noResultsSubText}>
+              Essayez d'autres termes de recherche ou modifiez vos filtres
+            </Text>
+            <TouchableOpacity style={styles.resetFilterButton} onPress={resetFilters}>
+              <Text style={styles.resetFilterButtonText}>Réinitialiser les filtres</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredVehicules}
+            renderItem={renderVehicleCard}
+            keyExtractor={(item) => item.id.toString()}
+            numColumns={2}
+            columnWrapperStyle={styles.row}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            ListHeaderComponent={
+              <View style={styles.resultsHeader}>
+                <Text style={styles.resultsCount}>{filteredVehicules.length} résultats</Text>
+                <TouchableOpacity onPress={resetFilters}>
+                  <Text style={styles.clearFiltersText}>Effacer les filtres</Text>
+                </TouchableOpacity>
+              </View>
+            }
+          />
+        )}
 
         {/* Modal de filtres avancés */}
         <Modal
@@ -528,7 +572,7 @@ const ListVoiture = () => {
                   <Text style={styles.filterGroupTitle}>Prix (FCFA)</Text>
                   <View style={styles.priceInputs}>
                     <View style={styles.priceInput}>
-                      <Text style={styles.inputLabel}>Min</Text>
+                      <Text style={styles.inputLabel}>Minimum</Text>
                       <TextInput
                         style={styles.input}
                         placeholder="0"
@@ -538,13 +582,40 @@ const ListVoiture = () => {
                       />
                     </View>
                     <View style={styles.priceInput}>
-                      <Text style={styles.inputLabel}>Max</Text>
+                      <Text style={styles.inputLabel}>Maximum</Text>
                       <TextInput
                         style={styles.input}
-                        placeholder="Max"
+                        placeholder="Illimité"
                         keyboardType="numeric"
                         value={advancedFilters.maxPrice}
                         onChangeText={(text) => setAdvancedFilters({...advancedFilters, maxPrice: text})}
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                {/* Filtre par année */}
+                <View style={styles.filterGroup}>
+                  <Text style={styles.filterGroupTitle}>Année</Text>
+                  <View style={styles.priceInputs}>
+                    <View style={styles.priceInput}>
+                      <Text style={styles.inputLabel}>Minimum</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="2000"
+                        keyboardType="numeric"
+                        value={advancedFilters.minYear}
+                        onChangeText={(text) => setAdvancedFilters({...advancedFilters, minYear: text})}
+                      />
+                    </View>
+                    <View style={styles.priceInput}>
+                      <Text style={styles.inputLabel}>Maximum</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="2024"
+                        keyboardType="numeric"
+                        value={advancedFilters.maxYear}
+                        onChangeText={(text) => setAdvancedFilters({...advancedFilters, maxYear: text})}
                       />
                     </View>
                   </View>
@@ -555,20 +626,20 @@ const ListVoiture = () => {
                   <Text style={styles.filterGroupTitle}>Kilométrage</Text>
                   <View style={styles.priceInputs}>
                     <View style={styles.priceInput}>
-                      <Text style={styles.inputLabel}>Min</Text>
+                      <Text style={styles.inputLabel}>Minimum</Text>
                       <TextInput
                         style={styles.input}
-                        placeholder="0"
+                        placeholder="0 km"
                         keyboardType="numeric"
                         value={advancedFilters.minMileage}
                         onChangeText={(text) => setAdvancedFilters({...advancedFilters, minMileage: text})}
                       />
                     </View>
                     <View style={styles.priceInput}>
-                      <Text style={styles.inputLabel}>Max</Text>
+                      <Text style={styles.inputLabel}>Maximum</Text>
                       <TextInput
                         style={styles.input}
-                        placeholder="Max"
+                        placeholder="Illimité"
                         keyboardType="numeric"
                         value={advancedFilters.maxMileage}
                         onChangeText={(text) => setAdvancedFilters({...advancedFilters, maxMileage: text})}
@@ -581,17 +652,25 @@ const ListVoiture = () => {
                 <View style={styles.filterGroup}>
                   <Text style={styles.filterGroupTitle}>Options</Text>
                   <View style={styles.optionRow}>
-                    <Text style={styles.optionLabel}>Avec garantie</Text>
+                    <View style={styles.optionLabelContainer}>
+                      <Ionicons name="shield-checkmark" size={18} color="#28a745" />
+                      <Text style={styles.optionLabel}>Avec garantie</Text>
+                    </View>
                     <Switch
                       value={advancedFilters.withWarranty}
                       onValueChange={(value) => setAdvancedFilters({...advancedFilters, withWarranty: value})}
+                      trackColor={{ false: '#ddd', true: '#28a745' }}
                     />
                   </View>
                   <View style={styles.optionRow}>
-                    <Text style={styles.optionLabel}>Avec assurance</Text>
+                    <View style={styles.optionLabelContainer}>
+                      <Ionicons name="document-text-outline" size={18} color="#ff7d00" />
+                      <Text style={styles.optionLabel}>Avec assurance</Text>
+                    </View>
                     <Switch
                       value={advancedFilters.withInsurance}
                       onValueChange={(value) => setAdvancedFilters({...advancedFilters, withInsurance: value})}
+                      trackColor={{ false: '#ddd', true: '#007AFF' }}
                     />
                   </View>
                 </View>
@@ -600,17 +679,25 @@ const ListVoiture = () => {
                 <View style={styles.filterGroup}>
                   <Text style={styles.filterGroupTitle}>Type</Text>
                   <View style={styles.optionRow}>
-                    <Text style={styles.optionLabel}>En vente</Text>
+                    <View style={styles.optionLabelContainer}>
+                      <Ionicons name="cash" size={18} color="#ff7d00" />
+                      <Text style={styles.optionLabel}>En vente</Text>
+                    </View>
                     <Switch
                       value={advancedFilters.forSale}
                       onValueChange={(value) => setAdvancedFilters({...advancedFilters, forSale: value})}
+                      trackColor={{ false: '#ddd', true: '#FF3B30' }}
                     />
                   </View>
                   <View style={styles.optionRow}>
-                    <Text style={styles.optionLabel}>En location</Text>
+                    <View style={styles.optionLabelContainer}>
+                      <MaterialIcons name="directions-car" size={18} color="#ff7d00" />
+                      <Text style={styles.optionLabel}>En location</Text>
+                    </View>
                     <Switch
                       value={advancedFilters.forRent}
                       onValueChange={(value) => setAdvancedFilters({...advancedFilters, forRent: value})}
+                      trackColor={{ false: '#ddd', true: '#ff7d00' }}
                     />
                   </View>
                 </View>
@@ -645,32 +732,43 @@ const styles = StyleSheet.create({
   },
   container: { 
     flex: 1, 
-    backgroundColor: '#f8f9fa' 
+    backgroundColor: '#f5f5f7' 
   },
   header: {
     padding: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#e0e0e0',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 24,
+    paddingLeft: 55,
+    paddingTop: 15,
     fontWeight: 'bold',
-    textAlign: 'center',
+    color: '#1d1d1f',
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
   },
   searchContainer: {
+    flexDirection: 'row',
     padding: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#e0e0e0',
+    alignItems: 'center',
   },
   searchBar: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-    borderRadius: 10,
+    backgroundColor: '#f2f2f7',
+    borderRadius: 12,
     paddingHorizontal: 12,
-    height: 50,
+    height: 48,
+    marginRight: 12,
   },
   searchIcon: {
     marginRight: 10,
@@ -678,16 +776,23 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
+    color: '#1d1d1f',
     height: '100%',
+  },
+  clearButton: {
+    padding: 4,
+  },
+  filterToggleButton: {
+    padding: 8,
   },
   filterContainer: {
     position: 'absolute',
-    top: 130,
+    top: 160,
     left: 0,
     right: 0,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#e0e0e0',
     zIndex: 10,
     height: 60,
   },
@@ -699,42 +804,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 60,
   },
-  advancedFilterButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    backgroundColor: 'orange',
-    marginRight: 10,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   filterButton: {
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 20,
-    backgroundColor: '#f0f0f0',
-    marginRight: 10,
+    backgroundColor: '#f2f2f7',
+    marginRight: 8,
     height: 36,
     justifyContent: 'center',
   },
   filterButtonActive: {
-    backgroundColor: 'orange',
+    backgroundColor: '#ff7d00',
   },
   filterButtonText: {
-    color: '#333',
+    color: '#666',
     fontSize: 14,
+    fontWeight: '500',
   },
   filterButtonTextActive: {
     color: '#fff',
     fontWeight: '600',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
   },
   loadingContainer: { 
     flex: 1, 
@@ -742,71 +831,76 @@ const styles = StyleSheet.create({
     alignItems: 'center' 
   },
   noResults: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 50,
+    paddingHorizontal: 32,
   },
   noResultsText: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
     marginTop: 16,
-    color: '#555',
+    color: '#1d1d1f',
   },
   noResultsSubText: {
-    fontSize: 14,
-    color: '#888',
+    fontSize: 15,
+    color: '#666',
     marginTop: 8,
     textAlign: 'center',
-    paddingHorizontal: 20,
+    lineHeight: 20,
   },
   resetFilterButton: {
-    marginTop: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    backgroundColor: 'orange',
-    borderRadius: 8,
+    marginTop: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    backgroundColor: '#ff7d00',
+    borderRadius: 12,
   },
   resetFilterButtonText: {
     color: '#fff',
     fontWeight: '600',
+    fontSize: 15,
+  },
+  listContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  row: {
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  resultsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  resultsCount: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1d1d1f',
+  },
+  clearFiltersText: {
+    fontSize: 15,
+    color: '#ff7d00',
+    fontWeight: '500',
   },
   card: {
+    width: CARD_WIDTH,
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    overflow: 'hidden',
-  },
-  parkingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  parkingLogo: { 
-    width: 32, 
-    height: 32, 
-    borderRadius: 16, 
-    marginRight: 10 
-  },
-  parkingName: { 
-    fontSize: 15, 
-    fontWeight: '600',
-    flex: 1,
-  },
-  vehiculeContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center' 
+    shadowRadius: 8,
+    elevation: 4,
   },
   imageContainer: {
-    width: 140,
-    height: 90,
-    borderRadius: 8,
-    overflow: 'hidden',
+    width: '100%',
+    height: 120,
+    position: 'relative',
   },
   carImage: { 
     width: '100%', 
@@ -815,86 +909,111 @@ const styles = StyleSheet.create({
   placeholderImage: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#f2f2f7',
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 8,
   },
-  vehiculeInfo: { 
-    flex: 1, 
-    paddingLeft: 15, 
-    justifyContent: 'center' 
+  parkingBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  carTitle: { 
-    fontSize: 17, 
-    fontWeight: '600', 
-    marginBottom: 4,
-  },
-  carPrice: { 
-    fontSize: 16, 
-    fontWeight: 'bold', 
-    color: '#000', 
-    marginBottom: 8 
+  parkingBadgeImage: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
   },
   statusBadge: {
-    alignSelf: 'flex-start',
+    position: 'absolute',
+    top: 8,
+    right: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 4,
-    marginBottom: 8,
+    borderRadius: 6,
   },
-  rentBadge: {
-    backgroundColor: '#e3f2fd',
+  statusRent: {
+    backgroundColor: 'rgba(52, 199, 89, 0.15)',
   },
-  saleBadge: {
-    backgroundColor: '#f3e5f5',
+  statusSale: {
+    backgroundColor: 'rgba(255, 59, 48, 0.15)',
   },
-  availableBadge: {
-    backgroundColor: '#e8f5e8',
+  statusAvailable: {
+    backgroundColor: 'rgba(0, 122, 255, 0.15)',
   },
   statusText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
+    color: '#1d1d1f',
   },
-  additionalInfo: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 12,
+  cardContent: {
+    padding: 12,
   },
-  infoBadge: {
+  carName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1d1d1f',
+    marginBottom: 8,
+  },
+  carDetails: {
+    marginBottom: 8,
+  },
+  detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginRight: 8,
     marginBottom: 4,
   },
-  warrantyBadge: {
-    backgroundColor: '#d4edda',
+  detailText: {
+    fontSize: 13,
+    color: '#666',
+    marginLeft: 6,
   },
-  infoText: {
-    fontSize: 12,
+  carPrice: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1d1d1f',
+    marginBottom: 8,
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  locationText: {
+    fontSize: 13,
+    color: '#666',
+    marginLeft: 6,
+    flex: 1,
+  },
+  optionBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  optionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f2f2f7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginRight: 6,
+    marginBottom: 4,
+  },
+  optionBadgeText: {
+    fontSize: 11,
     color: '#666',
     marginLeft: 4,
-  },
-  warrantyText: {
-    color: '#28a745',
-  },
-  infoButton: {
-    backgroundColor: 'orange',
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  infoButtonText: { 
-    color: '#fff', 
-    fontWeight: 'bold',
-    fontSize: 14,
+    fontWeight: '500',
   },
   // Styles pour le modal
   modalOverlay: {
@@ -906,7 +1025,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '80%',
+    maxHeight: '85%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -914,22 +1033,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#f0f0f0',
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
+    color: '#1d1d1f',
   },
   modalBody: {
     padding: 20,
   },
   filterGroup: {
-    marginBottom: 24,
+    marginBottom: 28,
   },
   filterGroupTitle: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 12,
+    color: '#1d1d1f',
+    marginBottom: 16,
   },
   priceInputs: {
     flexDirection: 'row',
@@ -941,54 +1062,66 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 4,
+    marginBottom: 8,
+    fontWeight: '500',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
+    borderColor: '#e0e0e0',
+    borderRadius: 12,
+    padding: 12,
     fontSize: 16,
+    backgroundColor: '#f5f5f7',
+    color: '#1d1d1f',
   },
   optionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#f5f5f7',
+  },
+  optionLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   optionLabel: {
     fontSize: 16,
+    color: '#1d1d1f',
+    marginLeft: 12,
   },
   modalFooter: {
     flexDirection: 'row',
     padding: 20,
+    paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: '#f0f0f0',
   },
   resetButton: {
     flex: 1,
-    padding: 15,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
+    padding: 16,
+    backgroundColor: '#f2f2f7',
+    borderRadius: 12,
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
   resetButtonText: {
-    color: '#333',
+    color: '#666',
     fontWeight: '600',
+    fontSize: 16,
   },
   applyButton: {
     flex: 1,
-    padding: 15,
-    backgroundColor: 'orange',
-    borderRadius: 8,
+    padding: 16,
+    backgroundColor: '#ff7d00',
+    borderRadius: 12,
     alignItems: 'center',
   },
   applyButtonText: {
     color: '#fff',
     fontWeight: '600',
+    fontSize: 16,
   },
 });
 
