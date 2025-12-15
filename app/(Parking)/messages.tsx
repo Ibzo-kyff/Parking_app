@@ -20,12 +20,12 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
 
   const user = authState && authState.userId
     ? {
-        id: Number(authState.userId),
-        nom: authState.nom,
-        prenom: authState.prenom,
-        role: authState.role,
-        parkingId: authState.parkingId ? Number(authState.parkingId) : undefined,
-      }
+      id: Number(authState.userId),
+      nom: authState.nom,
+      prenom: authState.prenom,
+      role: authState.role,
+      parkingId: authState.parkingId ? Number(authState.parkingId) : undefined,
+    }
     : null;
 
   const {
@@ -99,7 +99,6 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
         {/* HEADER UNIQUEMENT SI PAS DE CHAT OUVERT */}
         {!selectedUserId && (
           <View style={styles.header}>
- */}
             <Text style={styles.headerTitle}>Messages</Text>
           </View>
         )}
@@ -108,7 +107,7 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
         {selectedUserId ? (
           <ChatWindow
             messages={messages}
-            onSendMessage={sendMessage}
+            onSendMessage={(text) => selectedUserId && sendMessage(text, selectedUserId)}
             onDeleteMessage={deleteMessage}
             onUpdateMessage={updateMessage}
             receiverId={selectedUserId}
@@ -116,23 +115,26 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
             receiverAvatar={receiverAvatar}
             loading={loading}
             onBack={() => setSelectedUserId(null)}
+            currentUserRole={(user?.role as "PARKING" | "CLIENT")}
           />
+        ) : user?.role === 'PARKING' ? (
+          // POUR LE PARKING : Liste des conversations (FlatList interne) -> PAS de ScrollView ici
+          <View style={{ flex: 1, padding: 16 }}>
+            <ChatList
+              conversations={conversations}
+              onSelectConversation={handleSelectConversation}
+              currentUserId={user.id}
+              currentUserRole={user.role}
+            />
+          </View>
         ) : (
+          // POUR LE CLIENT : Liste des parkings (map) -> ScrollView nécessaire
           <ScrollView contentContainerStyle={{ padding: 16 }}>
-            {/* TITRE UNIQUEMENT POUR USER */}
-            {user.role === 'USER' && (
+            {user?.role === 'USER' && (
               <Text style={styles.sectionTitle}>Parkings</Text>
             )}
 
-            {user.role === 'PARKING' ? (
-              // JUSTE LA LISTE DES CLIENTS
-              <ChatList
-                conversations={conversations}
-                onSelectConversation={handleSelectConversation}
-                currentUserId={user.id}
-                currentUserRole={user.role}
-              />
-            ) : loadingParkings ? (
+            {loadingParkings ? (
               <Text style={styles.loadingText}>Chargement des parkings...</Text>
             ) : parkings.length === 0 ? (
               <View style={styles.emptyState}>
@@ -225,14 +227,14 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
         {selectedUserId ? (
           <ChatWindow
             messages={messages}
-            onSendMessage={sendMessage}
+            onSendMessage={(text) => selectedUserId && sendMessage(text, selectedUserId)}
             onDeleteMessage={deleteMessage}
             onUpdateMessage={updateMessage}
             receiverId={selectedUserId}
             receiverName={receiverName}
             receiverAvatar={receiverAvatar}
             loading={loading}
-            onBack={() => setSelectedUserId(null)}
+            currentUserRole={(user?.role as "PARKING" | "CLIENT")}
           />
         ) : (
           <View style={styles.empty}>
@@ -259,7 +261,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   // Header
- header: {
+  header: {
     height: 60,
     backgroundColor: '#ffffffff',
     justifyContent: 'center',
@@ -279,12 +281,13 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E5EA',
     backgroundColor: '#fff',
   },
-  headerTitle: { 
+  headerTitle: {
     color: '#0c0c0cff',
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: -20, },
-    headerIcon: { padding: 4 },
+    marginBottom: -20,
+  },
+  headerIcon: { padding: 4 },
 
   // Sections
   sectionTitle: {

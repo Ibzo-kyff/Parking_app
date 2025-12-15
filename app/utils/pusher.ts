@@ -37,7 +37,7 @@ export const initializePusher = async (userId: number) => {
 
   pusherInstance = new Pusher('mt1', {
     cluster: 'mt1',
-  authEndpoint: `${API_URL}auth/pusher`,
+    authEndpoint: `${API_URL}auth/pusher`,
     auth: {
       headers: { Authorization: `Bearer ${token}` },
     },
@@ -58,7 +58,7 @@ export const initializePusher = async (userId: number) => {
   // subscribe returns a channel object in browser implementation
   try {
     if (pusherInstance.subscribe) {
-      pusherInstance.subscribe(`user_${userId}`);
+      pusherInstance.subscribe(`private-user_${userId}`);
     }
   } catch (e) {
     // ignore

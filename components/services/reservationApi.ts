@@ -1,7 +1,9 @@
+// reservationApi.ts
 import api from "./api";
 
 export type Reservation = {
   id: number;
+  status: "PENDING" | "ACCEPTED" | "COMPLETED" | "CANCELED";
   user: {
     nom: string;
     prenom: string;
@@ -11,9 +13,16 @@ export type Reservation = {
     marque: string;
     modele: string;
     imageUrl: string;
+    prix?: number;
+    fuelType?: string;
+    mileage?: number;
+    parking?: {
+      nom: string;
+    };
   };
-  dateDebut: string;
-  dateFin: string;
+  dateDebut: string | null;
+  dateFin: string | null;
+  type?: "ACHAT" | "LOCATION";
 };
 
 const BASE_URL = "https://parkapp-pi.vercel.app/api";
@@ -21,7 +30,6 @@ const BASE_URL = "https://parkapp-pi.vercel.app/api";
 // 🔹 Récupérer les réservations de l'utilisateur connecté
 export const getUserReservations = async (): Promise<Reservation[]> => {
   const response = await api.get("/reservations");
-  
   return response.data.map((item: Reservation) => ({
     ...item,
     vehicle: {
@@ -36,7 +44,6 @@ export const getUserReservations = async (): Promise<Reservation[]> => {
 // 🔹 Récupérer toutes les réservations du parking connecté
 export const getReservationsParking = async (): Promise<Reservation[]> => {
   const response = await api.get("/reservations/parking/all");
-
   return response.data.map((item: Reservation) => ({
     ...item,
     vehicle: {
@@ -48,24 +55,24 @@ export const getReservationsParking = async (): Promise<Reservation[]> => {
   }));
 };
 
-// 🔹 Récupérer toutes les réservations d'un parking par son ID (ADMIN ou parking propriétaire)
-export const getReservationsByParkingId = async (
-  parkingId: number
-): Promise<Reservation[]> => {
-  const response = await api.get(`/reservations/parking/${parkingId}`);
-
-  return response.data.map((item: Reservation) => ({
-    ...item,
-    vehicle: {
-      ...item.vehicle,
-      imageUrl: item.vehicle.imageUrl?.startsWith("http")
-        ? item.vehicle.imageUrl
-        : `${BASE_URL}${item.vehicle.imageUrl}`,
-    },
-  }));
+// 🔹 Mettre à jour le statut d'une réservation (utilisé pour accept, reject, cancel)
+export const updateReservationStatusApi = async (
+  id: number, 
+  status: "PENDING" | "ACCEPTED" | "COMPLETED" | "CANCELED", 
+  reason?: string
+): Promise<void> => {
+  await api.put(`/reservations/${id}/status`, { status, reason });
 };
 
-// 🔹 Annuler une réservation
+// 🔹 Fonctions utilitaires
+export const acceptReservationApi = async (id: number): Promise<void> => {
+  return updateReservationStatusApi(id, "ACCEPTED");
+};
+
+export const declineReservationApi = async (id: number): Promise<void> => {
+  return updateReservationStatusApi(id, "CANCELED", "Rejetée par le parking");
+};
+
 export const cancelReservationApi = async (id: number): Promise<void> => {
-  await api.delete(`/reservations/${id}`);
+  return updateReservationStatusApi(id, "CANCELED", "Annulée par le client");
 };
