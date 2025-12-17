@@ -24,7 +24,6 @@ import { useAuth } from '../context/AuthContext';
 import { favorisService } from './services/favorisService';
 import { viewsService } from './services/viewsService';
 import axios from 'axios';
-import { createReservationNotification } from './services/Notification';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 
@@ -606,6 +605,8 @@ function CarDetailScreen() {
         type: reservationType,
       };
 
+      console.log('📤 Envoi réservation:', body);
+
       const response = await fetch(`${BASE_URL}/reservations`, {
         method: 'POST',
         headers: {
@@ -617,6 +618,7 @@ function CarDetailScreen() {
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('❌ Erreur réponse serveur:', errorText);
         let errorData;
         try {
           errorData = JSON.parse(errorText);
@@ -627,8 +629,10 @@ function CarDetailScreen() {
       }
 
       const newReservation = await response.json();
+      console.log('✅ Réservation créée:', newReservation);
 
-      // Notification locale
+      // NOTIFICATION LOCALE POUR L'UTILISATEUR SEULEMENT
+      // NE PAS CRÉER DE NOTIFICATION BACKEND POUR ÉVITER LES DOUBLONS
       try {
         await showLocalNotification(
           "🎉 Réservation confirmée !",
@@ -639,27 +643,13 @@ function CarDetailScreen() {
             reservationType: reservationType
           }
         );
+        console.log('✅ Notification locale envoyée');
       } catch (notificationError) {
         console.warn('⚠️ Notification locale échouée:', notificationError);
       }
 
-      // Notification au parking
-      if (vehicule?.parking?.id) {
-        try {
-          const userInfo = user || { prenom: 'Utilisateur', nom: '', id: 0 };
-          
-          const parkingMessage = `${userInfo.prenom} ${userInfo.nom} a réservé ${vehicule.marqueRef?.name || ''} ${vehicule.model || ''} pour ${reservationType.toLowerCase()}. Prix: ${vehicule.prix ? `${vehicule.prix.toLocaleString()} FCFA` : ''}`;
-
-          await createReservationNotification({
-            title: "🚗 NOUVELLE RÉSERVATION !",
-            message: parkingMessage,
-            parkingId: vehicule.parking.id,
-            type: "RESERVATION"
-          });
-        } catch (notificationError) {
-          console.error("❌ Erreur notification parking:", notificationError);
-        }
-      }
+      // LE BACKEND CRÉERA AUTOMATIQUEMENT LES NOTIFICATIONS POUR LE PARKING ET L'UTILISATEUR
+      // NE PAS CRÉER DE NOTIFICATIONS BACKEND MANUELLEMENT POUR ÉVITER LES DOUBLONS
 
       Alert.alert(
         'Succès 🎉', 
@@ -668,7 +658,7 @@ function CarDetailScreen() {
           setModalVisible(false);
         }}]
       );
-      
+
     } catch (error: any) {
       console.error('❌ Erreur réservation:', error);
       Alert.alert('Erreur', error.message || 'Une erreur est survenue lors de la réservation');
@@ -747,19 +737,6 @@ function CarDetailScreen() {
         >
           <Ionicons name="chevron-back" size={28} color="#fff" />
         </TouchableOpacity>
-        {/* {!isParkingView && (
-          <TouchableOpacity 
-            style={styles.headerFavoriteButton}
-            onPress={toggleFavorite}
-          >
-            <FontAwesome 
-              name="heart" 
-              size={20} 
-              color={isFavorite ? "#FF3B30" : "#fff"} 
-              solid={isFavorite}
-            />
-          </TouchableOpacity>
-        )} */}
       </Animated.View>
 
       <Animated.ScrollView 
@@ -979,31 +956,6 @@ function CarDetailScreen() {
           </View>
         )}
 
-        {/* Parking Info */}
-        {/* {vehicule.parking && (
-          <View style={styles.parkingCard}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="business" size={20} color={SECONDARY_COLOR} />
-              <Text style={styles.sectionTitle}>Parking</Text>
-            </View>
-            <View style={styles.parkingInfo}>
-              <View style={styles.parkingLogoContainer}>
-                {vehicule.parking.logo ? (
-                  <Image 
-                    source={{ uri: vehicule.parking.logo.startsWith('http') ? vehicule.parking.logo : `${BASE_URL}${vehicule.parking.logo}` }}
-                    style={styles.parkingLogo}
-                  />
-                ) : (
-                  <View style={styles.parkingLogoPlaceholder}>
-                    <Ionicons name="business" size={24} color={PRIMARY_COLOR} />
-                  </View>
-                )}
-              </View>
-              <Text style={styles.parkingName}>{vehicule.parking.nom}</Text>
-            </View>
-          </View>
-        )} */}
-
         {/* Spacer for FAB */}
         <View style={{ height: 100 }} />
       </Animated.ScrollView>
@@ -1169,7 +1121,6 @@ function CarDetailScreen() {
                       <Ionicons name="checkmark-circle" size={20} color="#fff" />
                       <Text style={styles.confirmButtonText}>
                         Confirmer 
-                        {/* {reservationType === 'ACHAT' ? 'l\'achat' : 'la location'} */}
                       </Text>
                     </>
                   )}
