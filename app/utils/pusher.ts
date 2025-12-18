@@ -36,7 +36,7 @@ export const initializePusher = async (userId: number) => {
   const Pusher = loadPusher();
 
   pusherInstance = new Pusher('mt1', {
-    cluster: 'mt1',
+   cluster: 'mt1',
   authEndpoint: `${BASE_URL}auth/pusher`,
     auth: {
       headers: { Authorization: `Bearer ${token}` },
