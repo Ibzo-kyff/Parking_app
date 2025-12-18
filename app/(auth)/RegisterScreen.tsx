@@ -130,11 +130,7 @@ const handleRegister = async () => {
               <Ionicons name="call-outline" size={20} color="#777" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-<<<<<<< Updated upstream
-                placeholder="Téléphone"
-=======
                 placeholder="Numéro de téléphone"
->>>>>>> Stashed changes
                 value={formData.phone}
                 onChangeText={(text) => handleChange('phone', text)}
                 keyboardType="phone-pad"
@@ -168,11 +164,7 @@ const handleRegister = async () => {
               <Ionicons name="lock-closed-outline" size={20} color="#777" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-<<<<<<< Updated upstream
-                placeholder="Confirmez votre mot de passe"
-=======
                 placeholder="Confirmer le mot de passe"
->>>>>>> Stashed changes
                 value={formData.confirmPassword}
                 onChangeText={(text) => handleChange('confirmPassword', text)}
                 secureTextEntry={!showPassword}
