@@ -569,10 +569,17 @@ const MonParkingScreen: React.FC = () => {
       <ScrollView onScroll={handleScroll} scrollEventThrottle={16}>
         <View style={styles.headerRow}>
           <Text style={styles.title}>Gérer vos voitures</Text>
-          <TouchableOpacity style={styles.addButton} onPress={() => router.push('../(ParkingDetail)/AjoutParking')}>
-            <Ionicons name="add-circle" size={24} color="#FD6A00" />
-            <Text style={styles.addText}>Ajouter</Text>
-          </TouchableOpacity>
+          <TouchableOpacity 
+  style={styles.addButton} 
+  onPress={() => router.push({
+    pathname: '../(ParkingDetail)/AjoutParking',
+    params: { onReturn: 'refreshParking' } // juste un signal ici
+  })}
+>
+  <Ionicons name="add-circle" size={24} color="#FD6A00" />
+  <Text style={styles.addText}>Ajouter</Text>
+</TouchableOpacity>
+
         </View>
 
         <Text style={styles.total}>Total des voitures : {totalVoitures}</Text>
