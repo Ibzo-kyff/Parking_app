@@ -106,7 +106,7 @@ const handleRegister = async () => {
               <Ionicons name="person-outline" size={20} color="#777" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Entrez votre prenom"
+                placeholder="Entrez votre prénom"
                 value={formData.prenom}
                 onChangeText={(text) => handleChange('prenom', text)}
                 placeholderTextColor="#999"
@@ -130,7 +130,7 @@ const handleRegister = async () => {
               <Ionicons name="call-outline" size={20} color="#777" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Téléphone"
+                placeholder="Numéro de téléphone"
                 value={formData.phone}
                 onChangeText={(text) => handleChange('phone', text)}
                 keyboardType="phone-pad"
@@ -164,7 +164,7 @@ const handleRegister = async () => {
               <Ionicons name="lock-closed-outline" size={20} color="#777" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Confirmez votre mot de passe"
+                placeholder="Confirmer le mot de passe"
                 value={formData.confirmPassword}
                 onChangeText={(text) => handleChange('confirmPassword', text)}
                 secureTextEntry={!showPassword}
@@ -178,14 +178,14 @@ const handleRegister = async () => {
               disabled={loading}
             >
               <Text style={styles.buttonText}>
-                {loading ? 'Registering...' : 'Register'}
+                {loading ? 'Registering...' : 'S\'inscrire'}
               </Text>
             </TouchableOpacity>
 
             <View style={styles.loginContainer}>
               <Text style={styles.loginText}>Vous avez déjà un compte ? </Text>
               <TouchableOpacity onPress={() => router.replace('(auth)/LoginScreen')}>
-                <Text style={styles.loginLink}>Login</Text>
+                <Text style={styles.loginLink}>Se connecter</Text>
               </TouchableOpacity>
             </View>
           </View>
