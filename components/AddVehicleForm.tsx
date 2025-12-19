@@ -475,10 +475,10 @@ const AddVehicleForm: React.FC = () => {
     params: { refresh: 'true' }
   });
 } else {
-  router.replace('/tabs/accueil');
+  router.replace('/(Parking)/gestion');
 }
  {
-          router.replace('/tabs/accueil');
+          router.replace('/(Parking)/gestion');
         }
       }, 1500);
 
