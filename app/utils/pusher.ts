@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {getStoredAccessToken } from '../../components/services/api';
-import { BASE_URL } from "../../config/env";
+import Constants from 'expo-constants';
 let pusherInstance: any = null;
-
+const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL;
 const loadPusher = () => {
   // Use eval('require') to avoid Metro/webpack statically resolving native-only packages
   const dynamicRequire = (name: string) => {

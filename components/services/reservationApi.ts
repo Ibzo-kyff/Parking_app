@@ -1,6 +1,6 @@
 // reservationApi.ts
 import api from "./api";
-import { BASE_URL } from "../../config/env";
+import Constants from 'expo-constants';
 export type Reservation = {
   id: number;
   status: "PENDING" | "ACCEPTED" | "COMPLETED" | "CANCELED";
@@ -25,7 +25,7 @@ export type Reservation = {
   type?: "ACHAT" | "LOCATION";
 };
 
-
+const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL ;
 
 // 🔹 Récupérer les réservations de l'utilisateur connecté
 export const getUserReservations = async (): Promise<Reservation[]> => {

@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { BASE_URL } from "../../config/env";
+import Constants from 'expo-constants';
 
 // Interface pour les données utilisateur
 export interface User {
@@ -34,7 +34,7 @@ class ApiError extends Error {
     this.name = 'ApiError';
   }
 }
-
+const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL;
 // Service API principal
 export const apiService = {
   // Méthode générique pour les requêtes

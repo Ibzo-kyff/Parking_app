@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
-import { BASE_URL } from "../../config/env";
+import Constants from 'expo-constants';
 
+const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL;
 
 const api = axios.create({
   baseURL: BASE_URL,

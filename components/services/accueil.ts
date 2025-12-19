@@ -1,9 +1,9 @@
 // Services/accueil.ts
 import axios from "axios";
 import { Marque } from "../../app/(Clients)/tousLesMarques";
-import { BASE_URL } from "../../config/env";
+import Constants from 'expo-constants';
 
-
+const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL;
 // Récupérer les véhicules
 export const getVehicules = async () => {
   try {

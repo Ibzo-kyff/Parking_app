@@ -2,7 +2,7 @@
   "expo": {
     "name": "parking-app",
     "scheme": "parking-app",
-    "slug": "parking-app",
+    "slug": "mobilitymali",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -22,7 +22,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.mobilitysorganization.mobilitymali"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -38,6 +39,13 @@
           "defaultChannel": "default"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1beaf1c5-0dce-4ab9-9538-ffc58e18ff24"
+      }
+    },
+    "owner": "mobilitys-organization"
   }
 }

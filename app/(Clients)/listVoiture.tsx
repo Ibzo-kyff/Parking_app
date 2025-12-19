@@ -20,7 +20,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getVehicules } from '../../components/services/listeVoiture';
 import { router } from 'expo-router';
-import { BASE_URL } from '../../config/env';
+import Constants from 'expo-constants';
 import { useLocalSearchParams } from 'expo-router';
 
 interface Parking {
@@ -83,6 +83,8 @@ const ListVoiture = () => {
 
   const commonFuelTypes = ['Essence', 'Diesel', 'Hybride', 'Électrique', 'GPL'];
 
+  const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL ;
+  
   useEffect(() => {
     const fetchData = async () => {
       try {

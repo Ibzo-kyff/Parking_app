@@ -1,4 +1,4 @@
-import { BASE_URL } from "../../config/env";
+import Constants from 'expo-constants';
 export interface Parking {
   id: number;
   userId: number;
@@ -23,7 +23,7 @@ export interface Parking {
   };
   vehicles?: any[];
 }
-
+const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL;
 // Récupérer tous les parkings
 export const getParkings = async (): Promise<Parking[]> => {
   const res = await fetch(`${BASE_URL}/parkings`);

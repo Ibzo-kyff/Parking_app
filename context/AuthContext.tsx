@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, ReactNode, useEffect } from
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAuthToken } from '../components/services/api'; // Import setAuthToken
 import axios from 'axios'; // Pour refresh direct
-import { BASE_URL } from "../config/env";
+import Constants from 'expo-constants';
 
 interface AuthState {
   accessToken: string | null;
@@ -30,7 +30,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
+const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL;
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [authState, setAuthState] = useState<AuthState>({
     accessToken: null,
