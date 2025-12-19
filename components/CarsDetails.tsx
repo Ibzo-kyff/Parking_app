@@ -19,7 +19,7 @@ import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { FontAwesome5, MaterialIcons, Ionicons, Feather, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { BASE_URL } from '../config/env';
+import Constants from 'expo-constants';
 import { useAuth } from '../context/AuthContext';
 import { favorisService } from './services/favorisService';
 import { viewsService } from './services/viewsService';
@@ -101,7 +101,7 @@ function CarDetailScreen() {
   const [actionMenuVisible, setActionMenuVisible] = useState(false);
 
   const { authState, user } = useAuth();
-
+  const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL ;
   // Nouvel état pour les données complètes du véhicule
   const [vehicule, setVehicule] = useState<Vehicule | null>(null);
   const [loadingVehicle, setLoadingVehicle] = useState(true);

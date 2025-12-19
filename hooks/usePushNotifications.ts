@@ -3,7 +3,7 @@ import * as Device from 'expo-device';
 import { useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
-export const usePushNotifications = () => {
+export const usePushNotifications = (authToken?: string) => {
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
   const notificationListener = useRef<Notifications.Subscription | null>(null);
   const responseListener = useRef<Notifications.Subscription | null>(null);
@@ -15,8 +15,9 @@ export const usePushNotifications = () => {
     responseListener.current = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
 
     return () => {
-      Notifications.removeNotificationSubscription(notificationListener.current!);
-      Notifications.removeNotificationSubscription(responseListener.current!);
+      // use the subscription's remove() method to unregister listeners
+      notificationListener.current?.remove();
+      responseListener.current?.remove();
     };
   }, []);
 
@@ -52,12 +53,18 @@ export const usePushNotifications = () => {
   async function sendPushTokenToBackend(token: string) {
     // Utilisez votre API pour stocker le token (voir backend)
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // N'ajoutez l'Authorization que si authToken est fourni
+      if (authToken) {
+        headers.Authorization = `Bearer ${authToken}`;
+      }
+
       await fetch('/api/user/push-token', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${yourAuthToken}`, // Utilisez useAuth
-        },
+        headers,
         body: JSON.stringify({ token }),
       });
     } catch (error) {

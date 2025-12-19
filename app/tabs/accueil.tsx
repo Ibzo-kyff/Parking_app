@@ -13,7 +13,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import Header from '../Header';
 import { getVehicules, getParkings } from "../../components/services/accueil";
-import { BASE_URL } from "../../config/env";
+import Constants from 'expo-constants';
 import { router } from 'expo-router';
 
 type RootStackParamList = {
@@ -36,7 +36,7 @@ const Accueil: React.FC = () => {
   const [loadingVehicules, setLoadingVehicules] = useState(true);
   const [loadingParkings, setLoadingParkings] = useState(true);
   const [loadingMarques, setLoadingMarques] = useState(true);
-
+  const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL;
   useEffect(() => {
     const fetchVehicules = async () => {
       try {

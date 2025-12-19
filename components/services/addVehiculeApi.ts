@@ -1,9 +1,9 @@
-import { BASE_URL } from "../../config/env";
+import Constants from 'expo-constants';
 interface ApiResponse<T> {
   data?: T;
   error?: string;
 }
-
+const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL;
 export const apiService = {
   // Récupérer les informations de l'utilisateur
   async getUserInfo(accessToken: string): Promise<ApiResponse<any>> {
