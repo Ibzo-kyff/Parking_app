@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useChat } from '../../hooks/useChat';
@@ -27,6 +27,7 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
   const {
     messages, conversations, loading, sendMessage, loadConversation,
     deleteMessage, updateMessage, setCurrentParkingId,
+    retryMessage,
   } = useChat(initialParkingId);
 
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
@@ -39,14 +40,21 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
     if (initialParkingId) setCurrentParkingId(initialParkingId);
   }, [initialParkingId, setCurrentParkingId]);
 
-  const handleSelectConversation = (userId: number, name: string, logo?: string | null, parkingId?: number) => {
-    setSelectedUserId(userId);
-    setParkingName(name);
-    setParkingLogo(logo || null);
-    if (parkingId) {
-      setCurrentParkingId(parkingId);
+  const handleSelectConversation = async (userId: number, name: string, logo?: string | null, parkingId?: number) => {
+    try {
+      if (parkingId) setCurrentParkingId(parkingId);
+      // loadConversation returns messages or null on error
+      const msgs = await loadConversation(userId);
+      setParkingName(name);
+      setParkingLogo(logo || null);
+      if (msgs !== null) {
+        setSelectedUserId(userId);
+      } else {
+        console.warn('Impossible de charger la conversation pour userId:', userId);
+      }
+    } catch (err) {
+      console.error('handleSelectConversation error:', err);
     }
-    loadConversation(userId);
   };
 
   // Charger la liste des parkings pour l'affichage initial
@@ -67,11 +75,19 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
   }, []);
 
   if (isLoading) {
-    return <View style={styles.center}><Text>Chargement...</Text></View>;
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#ff7d00" />
+      </View>
+    );
   }
 
   if (!user) {
-    return <View style={styles.center}><Text>Connectez-vous pour chatter</Text></View>;
+    return (
+      <View style={styles.center}>
+        <Text>Connectez-vous pour chatter</Text>
+      </View>
+    );
   }
 
   // 🟩 Layout Mobile
@@ -83,18 +99,26 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
           onSendMessage={sendMessage}
           onDeleteMessage={deleteMessage}
           onUpdateMessage={updateMessage}
+          onRetryMessage={retryMessage}
           receiverId={selectedUserId}
+          receiverName={parkingName} // Pour CLIENT, c'est le nom du parking
+          receiverAvatar={parkingLogo} // Pour CLIENT, c'est le logo du parking
           parkingName={parkingName}
+          parkingLogo={parkingLogo}
           loading={loading}
           onBack={() => setSelectedUserId(null)}
-          parkingLogo={parkingLogo}
+          currentUserRole={user.role}
         />
       );
     }
 
     // 🟦 Liste des parkings avec header
     if (loadingParkings) {
-      return <View style={styles.center}><Text>Chargement des parkings...</Text></View>;
+      return (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#ff7d00" />
+        </View>
+      );
     }
 
     return (
@@ -109,9 +133,9 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
           {parkings.map((p) => (
             <TouchableOpacity
               key={p.id}
-              onPress={() => {
+              onPress={async () => {
                 if (p.user && p.user.id) {
-                  handleSelectConversation(p.user.id, p.name, p.logo, p.id);
+                  await handleSelectConversation(p.user.id, p.name, p.logo, p.id);
                 } else {
                   console.warn('Parking sans utilisateur associé', p.id);
                 }
@@ -140,10 +164,11 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
       <View style={styles.sidebar}>
         <ChatList
           conversations={conversations}
-          onSelectConversation={(userId, name, parkingId) =>
-            handleSelectConversation(userId, name, undefined, parkingId)
+          onSelectConversation={(userId, name, logo, parkingId) =>
+            handleSelectConversation(userId, name, logo, parkingId)
           }
           currentUserId={user.id}
+          currentUserRole={user.role}
         />
       </View>
       <View style={styles.main}>
@@ -153,11 +178,15 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
             onSendMessage={sendMessage}
             onDeleteMessage={deleteMessage}
             onUpdateMessage={updateMessage}
+            onRetryMessage={retryMessage}
             receiverId={selectedUserId}
+            receiverName={parkingName} // Pour CLIENT, c'est le nom du parking
+            receiverAvatar={parkingLogo} // Pour CLIENT, c'est le logo du parking
             parkingName={parkingName}
+            parkingLogo={parkingLogo}
             loading={loading}
             onBack={() => setSelectedUserId(null)}
-            parkingLogo={parkingLogo}
+            currentUserRole={user.role}
           />
         ) : (
           <View style={styles.empty}>
@@ -197,7 +226,7 @@ const styles = StyleSheet.create({
     color: '#0c0c0cff',
     fontSize: 18,
     fontWeight: 'bold',
-      marginBottom: -20,
+    marginBottom: -20,
   },
 
   // 🅿️ PARKING LIST

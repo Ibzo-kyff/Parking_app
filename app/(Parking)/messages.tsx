@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useChat } from '../../hooks/useChat';
@@ -20,12 +20,12 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
 
   const user = authState && authState.userId
     ? {
-      id: Number(authState.userId),
-      nom: authState.nom,
-      prenom: authState.prenom,
-      role: authState.role,
-      parkingId: authState.parkingId ? Number(authState.parkingId) : undefined,
-    }
+        id: Number(authState.userId),
+        nom: authState.nom,
+        prenom: authState.prenom,
+        role: authState.role,
+        parkingId: authState.parkingId ? Number(authState.parkingId) : undefined,
+      }
     : null;
 
   const {
@@ -37,11 +37,14 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
     deleteMessage,
     updateMessage,
     setCurrentParkingId,
+    retryMessage,
   } = useChat(initialParkingId);
 
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [receiverName, setReceiverName] = useState<string>('');
   const [receiverAvatar, setReceiverAvatar] = useState<string | null>(null);
+  const [parkingName, setParkingName] = useState<string>('');
+  const [parkingLogo, setParkingLogo] = useState<string | null>(null);
   const [parkings, setParkings] = useState<Parking[]>([]);
   const [loadingParkings, setLoadingParkings] = useState(false);
 
@@ -70,26 +73,46 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
     }
   }, [initialParkingId, setCurrentParkingId]);
 
-  const handleSelectConversation = (
-    userId: number,
-    name: string,
-    logo?: string | null,
-    parkingId?: number
-  ) => {
-    setSelectedUserId(userId);
-    setReceiverName(name);
-    setReceiverAvatar(logo || null);
+ const handleSelectConversation = async (userId: number, name: string, logo?: string | null, parkingId?: number) => {
+  try {
     if (parkingId) setCurrentParkingId(parkingId);
-    loadConversation(userId);
-  };
 
+    const msgs = await loadConversation(userId, parkingId); // ← attends le retour
+
+    if (msgs && msgs.length > 0) {
+      setSelectedUserId(userId);
+      setReceiverName(name);
+      setReceiverAvatar(logo || null);
+      setParkingName(name);
+      setParkingLogo(logo || null);
+    } else {
+      console.warn('Aucun message reçu pour cette conversation');
+      // Tu peux quand même ouvrir la conversation même sans message
+      setSelectedUserId(userId);
+      setReceiverName(name);
+      setReceiverAvatar(logo || null);
+      setParkingName(name);
+      setParkingLogo(logo || null);
+    }
+  } catch (err) {
+    console.error('Erreur chargement conversation:', err);
+  }
+};
   // === CHARGEMENT / AUTH ===
-  if (authLoading) {
-    return <View style={styles.center}><Text>Chargement...</Text></View>;
+  if (authLoading || loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#ff7d00" />
+      </View>
+    );
   }
 
   if (!user) {
-    return <View style={styles.center}><Text>Connectez-vous pour accéder au chat</Text></View>;
+    return (
+      <View style={styles.center}>
+        <Text>Connectez-vous pour accéder au chat</Text>
+      </View>
+    );
   }
 
   // === LAYOUT MOBILE ===
@@ -107,65 +130,71 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
         {selectedUserId ? (
           <ChatWindow
             messages={messages}
-            onSendMessage={(text) => selectedUserId && sendMessage(text, selectedUserId)}
+            onSendMessage={sendMessage}
             onDeleteMessage={deleteMessage}
             onUpdateMessage={updateMessage}
+            onRetryMessage={retryMessage}
             receiverId={selectedUserId}
             receiverName={receiverName}
             receiverAvatar={receiverAvatar}
+            parkingName={parkingName}
+            parkingLogo={parkingLogo}
             loading={loading}
             onBack={() => setSelectedUserId(null)}
-            currentUserRole={(user?.role as "PARKING" | "CLIENT")}
+            currentUserRole={user?.role || 'PARKING'}
           />
-        ) : user?.role === 'PARKING' ? (
-          // POUR LE PARKING : Liste des conversations (FlatList interne) -> PAS de ScrollView ici
-          <View style={{ flex: 1, padding: 16 }}>
-            <ChatList
-              conversations={conversations}
-              onSelectConversation={handleSelectConversation}
-              currentUserId={user.id}
-              currentUserRole={user.role}
-            />
-          </View>
         ) : (
-          // POUR LE CLIENT : Liste des parkings (map) -> ScrollView nécessaire
-          <ScrollView contentContainerStyle={{ padding: 16 }}>
-            {user?.role === 'USER' && (
-              <Text style={styles.sectionTitle}>Parkings</Text>
-            )}
+          // If the current user is a PARKING, render the ChatList directly
+          // inside a View to avoid nesting a FlatList inside a ScrollView.
+          user.role === 'PARKING' ? (
+            <View style={{ flex: 1 }}>
+              <ChatList
+                conversations={conversations}
+                onSelectConversation={handleSelectConversation}
+                currentUserId={user.id}
+                currentUserRole={user.role}
+              />
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={{ padding: 16 }}>
+              {/* TITRE UNIQUEMENT POUR USER */}
+              {user.role === 'USER' && (
+                <Text style={styles.sectionTitle}>Parkings</Text>
+              )}
 
-            {loadingParkings ? (
-              <Text style={styles.loadingText}>Chargement des parkings...</Text>
-            ) : parkings.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyText}>Aucun parking disponible</Text>
-              </View>
-            ) : (
-              parkings.map((p) => (
-                <TouchableOpacity
-                  key={p.id}
-                  onPress={() => {
-                    if (p.user?.id) {
-                      handleSelectConversation(p.user.id, p.name, p.logo, p.id);
-                    }
-                  }}
-                  style={styles.parkingCard}
-                >
-                  <Image
-                    source={{
-                      uri: p.logo || 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
+              {loadingParkings ? (
+                <Text style={styles.loadingText}>Chargement des parkings...</Text>
+              ) : parkings.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyText}>Aucun parking disponible</Text>
+                </View>
+              ) : (
+                parkings.map((p) => (
+                  <TouchableOpacity
+                    key={p.id}
+                    onPress={() => {
+                      if (p.user?.id) {
+                        handleSelectConversation(p.user.id, p.name, p.logo, p.id);
+                      }
                     }}
-                    style={styles.parkingLogo}
-                  />
-                  <View style={styles.parkingInfo}>
-                    <Text style={styles.parkingName}>{p.name}</Text>
-                    <Text style={styles.parkingMeta}>{p.city} • {p.capacity} places</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#999" />
-                </TouchableOpacity>
-              ))
-            )}
-          </ScrollView>
+                    style={styles.parkingCard}
+                  >
+                    <Image
+                      source={{
+                        uri: p.logo || 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
+                      }}
+                      style={styles.parkingLogo}
+                    />
+                    <View style={styles.parkingInfo}>
+                      <Text style={styles.parkingName}>{p.name}</Text>
+                      <Text style={styles.parkingMeta}>{p.city} • {p.capacity} places</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#999" />
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          )
         )}
       </View>
     );
@@ -227,14 +256,18 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
         {selectedUserId ? (
           <ChatWindow
             messages={messages}
-            onSendMessage={(text) => selectedUserId && sendMessage(text, selectedUserId)}
+            onSendMessage={sendMessage}
             onDeleteMessage={deleteMessage}
             onUpdateMessage={updateMessage}
+            onRetryMessage={retryMessage}
             receiverId={selectedUserId}
             receiverName={receiverName}
             receiverAvatar={receiverAvatar}
+            parkingName={parkingName}
+            parkingLogo={parkingLogo}
             loading={loading}
-            currentUserRole={(user?.role as "PARKING" | "CLIENT")}
+            onBack={() => setSelectedUserId(null)}
+            currentUserRole={user?.role || 'PARKING'}
           />
         ) : (
           <View style={styles.empty}>
@@ -281,7 +314,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E5EA',
     backgroundColor: '#fff',
   },
-  headerTitle: {
+  headerTitle: { 
     color: '#0c0c0cff',
     fontSize: 18,
     fontWeight: 'bold',

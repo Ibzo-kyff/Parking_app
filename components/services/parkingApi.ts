@@ -2,8 +2,8 @@ import { BASE_URL } from "../../config/env";
 export interface Parking {
   id: number;
   userId: number;
-  name: string;
-  address: string;
+  nom: string;
+  adresse: string;
   city: string;
   email: string;
   phone: string | null;
@@ -12,6 +12,7 @@ export interface Parking {
   hoursOfOperation: string | null;
   status: string;
   logo: string | null;
+
   createdAt: string;
   updatedAt: string;
   user?: {

@@ -26,12 +26,24 @@ export interface Message {
   parking?: {
     id: number;
     nom: string;
+    logo?: string;
   };
 }
 
-export interface Conversation {
-  [otherUserId: number]: Message[];
+export interface ConversationItem {
+  user: {
+    id: number;
+    nom: string;
+    prenom: string;
+    email?: string;
+    avatar?: string | null;
+    role: 'CLIENT' | 'PARKING';
+  };
+  lastMessage: Message;
+  parkingId?: number;
 }
+
+export type Conversation = ConversationItem[];
 
 export interface ConversationSummary {
   id: number;

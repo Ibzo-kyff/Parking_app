@@ -1,6 +1,8 @@
+// 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {getStoredAccessToken } from '../../components/services/api';
-import { BASE_URL } from "../../config/env";
+import { BASE_URL } from '../../config/env';
+import { getStoredAccessToken } from '../../components/services/api';
+
 let pusherInstance: any = null;
 
 const loadPusher = () => {
@@ -36,8 +38,7 @@ export const initializePusher = async (userId: number) => {
   const Pusher = loadPusher();
 
   pusherInstance = new Pusher('mt1', {
-    cluster: 'm
-    authEndpoint: `${API_URL}auth/pusher`,
+    cluster: 'mt1',
   authEndpoint: `${BASE_URL}auth/pusher`,
     auth: {
       headers: { Authorization: `Bearer ${token}` },
@@ -59,7 +60,7 @@ export const initializePusher = async (userId: number) => {
   // subscribe returns a channel object in browser implementation
   try {
     if (pusherInstance.subscribe) {
-      pusherInstance.subscribe(`private-user_${userId}`);
+      pusherInstance.subscribe(`user_${userId}`);
     }
   } catch (e) {
     // ignore

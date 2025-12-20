@@ -128,6 +128,51 @@ const isDatePassed = (dateString: string | null): boolean => {
   return date < now;
 };
 
+// Vérifier si l'annulation est possible pour le CLIENT (24h avant le début)
+const canClientCancelReservation = (dateDebut: string | null, type: ReservationType): boolean => {
+  // Pour les achats, pas de restriction (toujours annulable)
+  if (type === "ACHAT") return true;
+
+  // Pour les locations, vérifier 24h avant
+  if (!dateDebut) return true; // Si pas de date, on autorise
+
+  const startDate = new Date(dateDebut);
+  const now = new Date();
+
+  // Calculer la différence en heures
+  const diffInHours = (startDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+  // L'annulation est possible si plus de 24h restantes
+  return diffInHours > 24;
+};
+
+// Pour le PARKING, l'annulation est toujours possible
+const canParkingCancelReservation = (): boolean => {
+  return true; // Le parking peut toujours annuler
+};
+
+// Obtenir le temps restant avant le début
+const getTimeUntilStart = (dateDebut: string | null): string => {
+  if (!dateDebut) return "";
+
+  const startDate = new Date(dateDebut);
+  const now = new Date();
+
+  if (startDate < now) return "Déjà commencée";
+
+  const diffInMs = startDate.getTime() - now.getTime();
+  const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+  const diffInMinutes = Math.floor((diffInMs % (1000 * 60 * 60)) / (1000 * 60));
+
+  if (diffInHours >= 24) {
+    const diffInDays = Math.floor(diffInHours / 24);
+    const remainingHours = diffInHours % 24;
+    return `${diffInDays}j ${remainingHours}h`;
+  }
+
+  return `${diffInHours}h ${diffInMinutes}m`;
+};
+
 // Déterminer l'onglet basé sur le statut ET la date
 const mapStatusToTab = (reservation: Reservation): "À venir" | "Terminée" | "Annulée" => {
   if (reservation.status === "CANCELED") return "Annulée";
@@ -170,12 +215,6 @@ const ReservationPage: React.FC<ReservationListProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [showActionModal, setShowActionModal] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
-
-
-
-  // ... (existing imports)
-
-  // ... (inside component)
 
   // ------------------------ PUSHER EVENTS ----------------
   const handleReservationUpdate = async (data: any) => {
@@ -260,7 +299,19 @@ const ReservationPage: React.FC<ReservationListProps> = ({
     }
   };
 
-  const handleCancel = async (id: number) => {
+  const handleCancel = async (id: number, dateDebut: string | null, type: ReservationType) => {
+    // Vérifier si l'annulation est possible (24h avant le début pour les clients seulement)
+    if (!isParking && !canClientCancelReservation(dateDebut, type)) {
+      Alert.alert(
+        "Annulation impossible",
+        "Vous ne pouvez annuler une réservation que 24h avant son début.",
+        [
+          { text: "OK", style: "default" }
+        ]
+      );
+      return;
+    }
+
     Alert.alert(
       "Annuler la réservation",
       "Êtes-vous sûr de vouloir annuler cette réservation ?",
@@ -300,20 +351,44 @@ const ReservationPage: React.FC<ReservationListProps> = ({
   const filtered = reservations.filter((r) => mapStatusToTab(r) === activeTab);
 
   // ------------------ LOGIQUE BOUTONS ------------------
-  const getButtonText = (status: ReservationStatus, isDatePassed: boolean): string => {
+  const getButtonText = (status: ReservationStatus, isDatePassed: boolean, dateDebut: string | null, type: ReservationType): string => {
     if (isParking) {
+      // PARKING : Logique simplifiée
       if (status === "PENDING") return "GÉRER LA RÉSERVATION";
-      // Seulement si la date n'est pas passée, on peut annuler
-      if (status === "ACCEPTED" && !isDatePassed) return "ANNULER LA RÉSERVATION";
+      if (status === "ACCEPTED") return "ANNULER LA RÉSERVATION";
       return "VOIR LES DÉTAILS";
     } else {
+      // CLIENT : Logique avec restrictions
       // Priorité aux états terminés
       if (status === "COMPLETED" || isDatePassed) return "LOUER À NOUVEAU";
 
-      if (status === "PENDING" || status === "ACCEPTED") return "ANNULER LA RÉSERVATION";
+      if (status === "PENDING" || status === "ACCEPTED") {
+        if (canClientCancelReservation(dateDebut, type)) {
+          return "ANNULER LA RÉSERVATION";
+        } else {
+          return "ANNULATION IMPOSSIBLE";
+        }
+      }
 
       if (status === "CANCELED") return "RÉSERVER À NOUVEAU";
       return "VOIR LES DÉTAILS";
+    }
+  };
+
+  // Vérifier si le bouton doit être désactivé
+  const isButtonDisabled = (status: ReservationStatus, isDatePassed: boolean, dateDebut: string | null, type: ReservationType): boolean => {
+    if (isParking) {
+      // Le parking peut toujours cliquer sur les boutons
+      return false;
+    } else {
+      // Si la date est passée, le bouton "Louer à nouveau" doit être actif
+      if (isDatePassed) return false;
+
+      // Client : désactiver si annulation impossible
+      if (status === "PENDING" || status === "ACCEPTED") {
+        return !canClientCancelReservation(dateDebut, type);
+      }
+      return false;
     }
   };
 
@@ -328,27 +403,46 @@ const ReservationPage: React.FC<ReservationListProps> = ({
     const isPast = item.dateFin ? isDatePassed(item.dateFin) : false;
 
     if (isParking) {
+      // LOGIQUE PARKING : Annulation immédiate toujours possible
       if (item.status === "PENDING") {
         openActionModal(item);
-      } else if (item.status === "ACCEPTED" && !isPast) {
-        handleCancel(item.id);
+      } else if (item.status === "ACCEPTED") {
+        handleCancel(item.id, item.dateDebut, item.type);
       } else {
-        // Pour les autres statuts (y compris ACCEPTED passé), navigation vers les détails
+        // Pour les autres statuts, navigation vers les détails
         router.push(`/reservations/${item.id}`);
       }
       return;
     }
 
-    // Client
-    // Si c'est Terminé (Completed ou date passée) -> Louer à nouveau (page véhicule)
+    // LOGIQUE CLIENT : Avec restriction des 24h
+    // Si c'est Terminé (Completed ou date passée) -> Louer à nouveau
     if (item.status === "COMPLETED" || isPast) {
-      router.push(`/vehicles/${item.vehicle.id}`);
+      router.push({
+        pathname: '/(Clients)/CreateListingScreen',
+        params: { vehicule: JSON.stringify(item.vehicle) }
+      });
     } else if (item.status === "PENDING" || item.status === "ACCEPTED") {
-      handleCancel(item.id);
+      if (canClientCancelReservation(item.dateDebut, item.type)) {
+        handleCancel(item.id, item.dateDebut, item.type);
+      } else {
+        // Si l'annulation n'est pas possible
+        Alert.alert(
+          "Annulation impossible",
+          `Vous ne pouvez annuler que 24h avant le début de la réservation. Début prévu: ${formatDate(item.dateDebut)}`,
+          [{ text: "OK", style: "default" }]
+        );
+      }
     } else if (item.status === "CANCELED") {
-      router.push(`/vehicles/${item.vehicle.id}`);
+      router.push({
+        pathname: '/(Clients)/CreateListingScreen',
+        params: { vehicule: JSON.stringify(item.vehicle) }
+      });
     } else {
-      router.push(`/vehicles/${item.vehicle.id}`);
+      router.push({
+        pathname: '/(Clients)/CreateListingScreen',
+        params: { vehicule: JSON.stringify(item.vehicle) }
+      });
     }
   };
 
@@ -364,6 +458,12 @@ const ReservationPage: React.FC<ReservationListProps> = ({
     const StatusIconComponent = statusIcon.icon;
     const typeIcon = getTypeIcon(selectedReservation.type);
     const TypeIconComponent = typeIcon.icon;
+
+    // Pour le parking, toujours possible d'annuler
+    // Pour le client, vérifier la règle des 24h
+    const canCancel = isParking
+      ? canParkingCancelReservation()
+      : canClientCancelReservation(selectedReservation.dateDebut, selectedReservation.type);
 
     return (
       <Modal
@@ -408,13 +508,13 @@ const ReservationPage: React.FC<ReservationListProps> = ({
               {/* Statut et type */}
               <View style={styles.modalStatusContainer}>
                 <View style={[styles.modalStatusBadge, { backgroundColor: getStatusBgColor(selectedReservation.status) }]}>
-                  <StatusIconComponent name={statusIcon.name} size={16} color={statusIcon.color} />
+                  <StatusIconComponent name={statusIcon.name as any} size={16} color={statusIcon.color} />
                   <Text style={[styles.modalStatusText, { color: statusIcon.color }]}>
                     {translateStatus(selectedReservation.status)}
                   </Text>
                 </View>
                 <View style={[styles.modalTypeBadge, { backgroundColor: `${typeIcon.color}15` }]}>
-                  <TypeIconComponent name={typeIcon.name} size={16} color={typeIcon.color} />
+                  <TypeIconComponent name={typeIcon.name as any} size={16} color={typeIcon.color} />
                   <Text style={[styles.modalTypeText, { color: typeIcon.color }]}>
                     {selectedReservation.type === "ACHAT" ? "Achat" : "Location"}
                   </Text>
@@ -504,6 +604,11 @@ const ReservationPage: React.FC<ReservationListProps> = ({
                       <Text style={styles.modalInfoLabel}>Date de début</Text>
                       <Text style={styles.modalInfoValue}>
                         {formatDate(selectedReservation.dateDebut)}
+                        {selectedReservation.dateDebut && (
+                          <Text style={styles.timeUntilStart}>
+                            {" "}({getTimeUntilStart(selectedReservation.dateDebut)})
+                          </Text>
+                        )}
                       </Text>
                     </View>
                   </View>
@@ -532,6 +637,17 @@ const ReservationPage: React.FC<ReservationListProps> = ({
                           {calculateDays(selectedReservation.dateDebut, selectedReservation.dateFin)} jours
                         </Text>
                       </View>
+                    </View>
+                  )}
+                  {/* Information sur l'annulation (uniquement pour les clients) */}
+                  {!isParking && (
+                    <View style={styles.cancelInfoContainer}>
+                      <MaterialCommunityIcons name="information-outline" size={16} color="#FF9800" />
+                      <Text style={styles.cancelInfoText}>
+                        {canCancel
+                          ? "Vous pouvez annuler jusqu'à 24h avant le début"
+                          : "L'annulation n'est plus possible (moins de 24h restantes)"}
+                      </Text>
                     </View>
                   )}
                 </View>
@@ -572,11 +688,14 @@ const ReservationPage: React.FC<ReservationListProps> = ({
                 style={[styles.modalButton, styles.modalButtonCancel]}
                 onPress={() => {
                   setShowActionModal(false);
-                  handleCancel(selectedReservation.id);
+                  handleCancel(selectedReservation.id, selectedReservation.dateDebut, selectedReservation.type);
                 }}
+                disabled={!isParking && !canCancel}
               >
                 <Ionicons name="close-circle-outline" size={22} color="#F44336" />
-                <Text style={styles.modalButtonCancelText}>Annuler</Text>
+                <Text style={styles.modalButtonCancelText}>
+                  {!isParking && !canCancel ? "Annulation impossible" : "Annuler"}
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -725,6 +844,12 @@ const ReservationPage: React.FC<ReservationListProps> = ({
             const isPast = item.dateFin ? isDatePassed(item.dateFin) : false;
             const showCompletedBadge = isPast && item.status !== "CANCELED";
 
+            // Vérifier si le bouton doit être désactivé
+            const isDisabled = isButtonDisabled(item.status, isPast, item.dateDebut, item.type);
+            const canCancel = isParking
+              ? canParkingCancelReservation()
+              : canClientCancelReservation(item.dateDebut, item.type);
+
             // Calculer le nombre de jours pour cette réservation
             const reservationDays = calculateDays(item.dateDebut, item.dateFin);
 
@@ -748,7 +873,7 @@ const ReservationPage: React.FC<ReservationListProps> = ({
                   {/* Badge de statut */}
                   <View style={styles.statusContainer}>
                     <View style={[styles.statusBadge, { backgroundColor: getStatusBgColor(item.status) }]}>
-                      <StatusIconComponent name={statusIcon.name} size={14} color={statusIcon.color} />
+                      <StatusIconComponent name={statusIcon.name as any} size={14} color={statusIcon.color} />
                       <Text style={[styles.statusText, { color: statusIcon.color }]}>
                         {translateStatus(item.status)}
                       </Text>
@@ -763,7 +888,7 @@ const ReservationPage: React.FC<ReservationListProps> = ({
                   {/* Badge type */}
                   <View style={styles.typeBadgeContainer}>
                     <View style={[styles.typeBadge, { backgroundColor: `${typeIcon.color}20` }]}>
-                      <TypeIconComponent name={typeIcon.name} size={12} color={typeIcon.color} />
+                      <TypeIconComponent name={typeIcon.name as any} size={12} color={typeIcon.color} />
                       <Text style={[styles.typeText, { color: typeIcon.color }]}>
                         {item.type === "ACHAT" ? "Achat" : "Location"}
                       </Text>
@@ -791,7 +916,7 @@ const ReservationPage: React.FC<ReservationListProps> = ({
                     </View>
                   </View>
 
-                  {/* Détails techniques - MODIFIÉ : Icône voiture remplacée par "Jours" */}
+                  {/* Détails techniques */}
                   <View style={styles.detailsContainer}>
                     <View style={styles.detailItem}>
                       <MaterialIcons name="speed" size={16} color="#666" />
@@ -813,7 +938,14 @@ const ReservationPage: React.FC<ReservationListProps> = ({
                       <MaterialIcons name="play-arrow" size={14} color="#4CAF50" />
                       <View>
                         <Text style={styles.dateLabel}>Début</Text>
-                        <Text style={styles.dateText}>{formatDate(item.dateDebut)}</Text>
+                        <Text style={styles.dateText}>
+                          {formatDate(item.dateDebut)}
+                          {item.dateDebut && (
+                            <Text style={styles.timeUntilStartSmall}>
+                              {" "}({getTimeUntilStart(item.dateDebut)})
+                            </Text>
+                          )}
+                        </Text>
                       </View>
                     </View>
                     {item.dateFin && (
@@ -844,6 +976,35 @@ const ReservationPage: React.FC<ReservationListProps> = ({
                     </View>
                   )}
 
+                  {/* Information d'annulation pour le client */}
+                  {!isParking && (item.status === "PENDING" || item.status === "ACCEPTED") && (
+                    <View style={[
+                      styles.cancelWarningContainer,
+                      canCancel ? styles.cancelWarningInfo : styles.cancelWarningAlert
+                    ]}>
+                      <MaterialCommunityIcons
+                        name={canCancel ? "information-outline" : "alert-circle-outline"}
+                        size={14}
+                        color={canCancel ? "#4CAF50" : "#FF9800"}
+                      />
+                      <Text style={styles.cancelWarningText}>
+                        {canCancel
+                          ? "Annulation possible jusqu'à 24h avant le début"
+                          : "Annulation impossible (moins de 24h restantes)"}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Information pour le parking */}
+                  {isParking && (item.status === "PENDING" || item.status === "ACCEPTED") && (
+                    <View style={[styles.cancelWarningContainer, styles.cancelWarningInfo]}>
+                      <MaterialCommunityIcons name="shield-check" size={14} color="#4CAF50" />
+                      <Text style={styles.cancelWarningText}>
+                        "Vous pouvez annuler cette réservation à tout moment"
+                      </Text>
+                    </View>
+                  )}
+
                   {/* Séparateur */}
                   <View style={styles.separator} />
 
@@ -854,11 +1015,13 @@ const ReservationPage: React.FC<ReservationListProps> = ({
                       item.status === "CANCELED" && styles.actionButtonCanceled,
                       (item.status === "COMPLETED" || isPast) && styles.actionButtonCompleted,
                       item.status === "PENDING" && isParking && styles.actionButtonPending,
+                      isDisabled && styles.actionButtonDisabled,
                     ]}
                     onPress={() => handleButtonAction(item)}
+                    disabled={isDisabled}
                   >
                     <Text style={styles.actionButtonText}>
-                      {getButtonText(item.status, isPast)}
+                      {getButtonText(item.status, isPast, item.dateDebut, item.type)}
                     </Text>
                     <MaterialIcons name="arrow-forward" size={18} color="#FFF" />
                   </TouchableOpacity>
@@ -1188,7 +1351,7 @@ const styles = StyleSheet.create({
   dateContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: 8,
   },
   dateItem: {
     flexDirection: "row",
@@ -1210,6 +1373,42 @@ const styles = StyleSheet.create({
   },
   pastDate: {
     color: "#F44336",
+  },
+  timeUntilStart: {
+    fontSize: 12,
+    color: "#666",
+    fontStyle: "italic",
+  },
+  timeUntilStartSmall: {
+    fontSize: 10,
+    color: "#888",
+    fontStyle: "italic",
+  },
+  cancelWarningContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginBottom: 8,
+    alignSelf: "flex-start",
+  },
+  cancelWarningInfo: {
+    backgroundColor: "#E8F5E9",
+  },
+  cancelWarningAlert: {
+    backgroundColor: "#FFF3E0",
+  },
+  cancelWarningText: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+  },
+  cancelWarningInfoText: {
+    color: "#2E7D32",
+  },
+  cancelWarningAlertText: {
+    color: "#E65100",
   },
   clientContainer: {
     flexDirection: "row",
@@ -1266,6 +1465,9 @@ const styles = StyleSheet.create({
   },
   actionButtonPending: {
     backgroundColor: "#2196F3",
+  },
+  actionButtonDisabled: {
+    backgroundColor: "#BDBDBD",
   },
   actionButtonText: {
     color: "#FFF",
@@ -1425,6 +1627,23 @@ const styles = StyleSheet.create({
     color: "#333",
     fontWeight: "500",
     fontFamily: "Inter_500Medium",
+  },
+  cancelInfoContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: "#FFF3E0",
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#FF9800",
+  },
+  cancelInfoText: {
+    fontSize: 13,
+    color: "#E65100",
+    fontFamily: "Inter_400Regular",
+    flex: 1,
   },
   priceRow: {
     flexDirection: "column",

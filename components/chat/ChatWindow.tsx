@@ -24,20 +24,28 @@ const { height } = Dimensions.get('window');
 
 interface Props {
   messages: Message[];
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, receiverId: number) => void;
   onDeleteMessage: (id: number) => void;
   onUpdateMessage: (id: number, text: string) => void;
+  onRetryMessage?: (message: Message) => void;
   receiverId: number;
-  receiverName: string;
+  receiverName?: string;
   receiverAvatar?: string | null;
+  parkingName?: string;
+  parkingLogo?: string | null;
   loading: boolean;
   onBack?: () => void;
-  currentUserRole: 'CLIENT' | 'PARKING';
+  currentUserRole?: 'CLIENT' | 'PARKING' | 'USER';
+  headerBackgroundColor?: string;
+  headerTextColor?: string;
 }
 
 export const ChatWindow: React.FC<Props> = ({
   messages,
   onSendMessage,
+  onDeleteMessage,
+  onUpdateMessage,
+  onRetryMessage,
   receiverId,
   parkingName,
   loading,
@@ -45,6 +53,9 @@ export const ChatWindow: React.FC<Props> = ({
   parkingLogo,
   receiverName,
   receiverAvatar,
+  currentUserRole,
+  headerBackgroundColor = '#ce8754ff',
+  headerTextColor = '#ffffff',
 }) => {
   const { user } = useAuth();
   const flatListRef = useRef<FlatList<Message>>(null);
@@ -52,20 +63,38 @@ export const ChatWindow: React.FC<Props> = ({
   const slideAnim = useRef(new Animated.Value(100)).current;
 
   const displayedMessages = useMemo(() => {
-    return [...messages].sort(
-      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
-  }, [messages]);
+    const userId = Number(user?.id);
+    const otherId = Number(receiverId);
 
-  // 🔹 Détermination du nom à afficher selon le rôle
+    const filtered = messages.filter((m) => {
+      const sId = Number(m.senderId);
+      const rId = Number(m.receiverId);
+      const sObj = m.sender?.id ? Number(m.sender.id) : undefined;
+      const rObj = m.receiver?.id ? Number(m.receiver.id) : undefined;
+
+      const match =
+        (sId === userId && rId === otherId) ||
+        (sId === otherId && rId === userId) ||
+        (sObj === userId && rObj === otherId) ||
+        (sObj === otherId && rObj === userId);
+      
+      if (!match) {
+        console.debug('[ChatWindow] message not in conversation', { id: m.id, sId, rId, sObj, rObj, userId, otherId });
+      }
+
+      return match;
+    });
+
+    return [...filtered].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [messages, receiverId, user?.id]);
+
   const displayName = useMemo(() => {
-    if (user?.role === 'PARKING') {
+    if (currentUserRole === 'PARKING') {
       return receiverName?.trim() || 'Client inconnu';
     }
     return parkingName?.trim() || 'Parking inconnu';
-  }, [user?.role, receiverName, parkingName]);
+  }, [currentUserRole, receiverName, parkingName]);
 
-  // 🔹 Fonction pour récupérer les initiales du nom et prénom
   const getInitials = useCallback((name: string) => {
     const cleaned = name.trim();
     if (!cleaned) return '?';
@@ -76,10 +105,8 @@ export const ChatWindow: React.FC<Props> = ({
     return cleaned.slice(0, 2).toUpperCase();
   }, []);
 
-  // 🔹 Même si un avatar ou logo existe, on privilégie les initiales
   const displayInitials = getInitials(displayName);
 
-  // Animation du menu contextuel
   const openMenu = () => {
     setShowMenu(true);
     Animated.spring(slideAnim, {
@@ -116,11 +143,25 @@ export const ChatWindow: React.FC<Props> = ({
     scrollToEnd();
   }, [displayedMessages, scrollToEnd]);
 
+  const handleSend = (content: string) => {
+    if (!content.trim()) return;
+    if (receiverId == null) {
+      console.warn('No receiverId provided, message not sent');
+      return;
+    }
+    onSendMessage(content, receiverId);
+    scrollToEnd();
+  };
+
   const renderMessage = useCallback(
     ({ item }: { item: Message }) => (
-      <MessageBubble message={item} isOwn={item.senderId === user?.id} />
+      <MessageBubble 
+        message={item} 
+        isOwn={item.senderId === user?.id}
+        onRetry={onRetryMessage}
+      />
     ),
-    [user?.id]
+    [user?.id, onRetryMessage]
   );
 
   const keyExtractor = useCallback((item: Message) => String(item.id), []);
@@ -133,31 +174,32 @@ export const ChatWindow: React.FC<Props> = ({
     >
       <SafeAreaView style={styles.safeArea}>
         {/* HEADER */}
-        <View style={styles.header}>
+        <View style={[styles.header, { backgroundColor: headerBackgroundColor }]}>
           <View style={styles.headerLeft}>
             {onBack && (
               <TouchableOpacity onPress={onBack} style={styles.backButton} accessibilityLabel="Retour">
-                <Ionicons name="arrow-back" size={24} color="#fff" />
+                <Ionicons name="arrow-back" size={24} color={headerTextColor} />
               </TouchableOpacity>
             )}
           </View>
 
-          {/* 🔹 Remplacement du logo/avatar par les initiales */}
           <View style={styles.headerCenter}>
             <View style={[styles.headerLogo, styles.fallbackAvatar]}>
-              <Text style={styles.fallbackAvatarText}>{displayInitials}</Text>
+              <Text style={[styles.fallbackAvatarText, { color: headerTextColor }]}>
+                {displayInitials}
+              </Text>
             </View>
             <View style={styles.headerTextContainer}>
-              <Text style={styles.headerName} numberOfLines={1}>
+              <Text style={[styles.headerName, { color: headerTextColor }]} numberOfLines={1}>
                 {displayName}
               </Text>
-              <Text style={styles.headerStatus}>En ligne</Text>
+              <Text style={[styles.headerStatus, { color: `${headerTextColor}CC` }]}>En ligne</Text>
             </View>
           </View>
 
           <View style={styles.headerRight}>
             <TouchableOpacity onPress={openMenu} style={styles.menuButton} accessibilityLabel="Options">
-              <Ionicons name="ellipsis-vertical" size={20} color="#fff" />
+              <Ionicons name="ellipsis-vertical" size={20} color={headerTextColor} />
             </TouchableOpacity>
           </View>
         </View>
@@ -193,20 +235,26 @@ export const ChatWindow: React.FC<Props> = ({
 
         {/* MESSAGES */}
         <View style={styles.messagesWrapper}>
-          <FlatList
-            ref={flatListRef}
-            data={displayedMessages}
-            renderItem={renderMessage}
-            keyExtractor={keyExtractor}
-            contentContainerStyle={styles.messagesContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            initialNumToRender={15}
-            maxToRenderPerBatch={10}
-            windowSize={21}
-            removeClippedSubviews={true}
-            onContentSizeChange={scrollToEnd}
-          />
+          {displayedMessages.length === 0 && !loading ? (
+            <View style={styles.emptyConversation}>
+              <Text style={styles.emptyConversationText}>Aucun message dans cette conversation</Text>
+            </View>
+          ) : (
+            <FlatList
+              ref={flatListRef}
+              data={displayedMessages}
+              renderItem={renderMessage}
+              keyExtractor={keyExtractor}
+              contentContainerStyle={styles.messagesContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              initialNumToRender={15}
+              maxToRenderPerBatch={10}
+              windowSize={21}
+              removeClippedSubviews={true}
+              onContentSizeChange={scrollToEnd}
+            />
+          )}
         </View>
 
         {/* LOADER */}
@@ -219,7 +267,7 @@ export const ChatWindow: React.FC<Props> = ({
         {/* INPUT */}
         <View style={styles.footer}>
           <MessageInput
-            onSend={(content) => onSendMessage(content, receiverId)}
+            onSend={handleSend}
             disabled={loading}
             autoFocus={false}
           />
@@ -239,7 +287,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#ce8754ff',
     borderBottomWidth: 0.5,
     borderBottomColor: 'rgba(255, 255, 255, 0.3)',
     paddingTop: Platform.OS === 'ios' ? 50 : 40,
@@ -265,14 +312,15 @@ const styles = StyleSheet.create({
   fallbackAvatarText: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#007AFF',
   },
   headerTextContainer: { marginLeft: 12, flex: 1 },
-  headerName: { color: '#fff', fontSize: 18, fontWeight: '700', letterSpacing: 0.2 },
-  headerStatus: { color: 'rgba(255, 255, 255, 0.8)', fontSize: 12, marginTop: 4, fontWeight: '400' },
+  headerName: { fontSize: 18, fontWeight: '700', letterSpacing: 0.2 },
+  headerStatus: { fontSize: 12, marginTop: 4, fontWeight: '400' },
 
   messagesWrapper: { flex: 1, backgroundColor: '#F7F9FC' },
   messagesContent: { padding: 16, paddingBottom: 24 },
+  emptyConversation: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  emptyConversationText: { color: '#8c8c8c', fontSize: 15 },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255, 255, 255, 0.8)',

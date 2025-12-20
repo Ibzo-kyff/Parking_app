@@ -27,8 +27,8 @@ export const ChatList: React.FC<Props> = ({ conversations, onSelectConversation,
       });
     }
 
-    return Object.entries(conversations).map(([otherUserId, msgs]) => {
-      const messages: Message[] = Array.isArray(msgs) ? msgs : (msgs?.messages || []);
+    return Object.entries(conversations as Record<string, any>).map(([otherUserId, msgs]: [string, any]) => {
+      const messages: Message[] = Array.isArray(msgs) ? msgs : (msgs?.messages ?? []);
       const lastMsg: Message | undefined = messages.length > 0 ? messages[0] : undefined;
       const otherUser = lastMsg
         ? lastMsg.senderId === currentUserId
@@ -79,7 +79,7 @@ export const ChatList: React.FC<Props> = ({ conversations, onSelectConversation,
     const time = formatTime(lastMsg?.createdAt);
     
     // Statut de lecture
-    const isUnread = lastMsg && !lastMsg.isRead && lastMsg.senderId !== currentUserId;
+    const isUnread = lastMsg && !lastMsg.read && lastMsg.senderId !== currentUserId;
     const messageCount = isUnread ? 1 : 0; // Vous pouvez adapter cette logique selon vos besoins
 
     const logo = user?.avatar || lastMsg?.parking?.logo;

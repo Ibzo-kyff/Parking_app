@@ -1,14 +1,27 @@
+// Fichier: chatService (complet, avec modifications)
 import api from './api'; // Votre instance axios
 import { Message, Conversation } from '../../app/type/chat';
+
 export const chatService = {
-  // Envoyer un message
-  sendMessage: async (receiverId: number, content: string, parkingId?: number) => {
-    return api.post<Message>('/messages', { receiverId, content, parkingId });
+  // Envoyer un message (optionally include clientTempId for optimistic matching)
+  sendMessage: async (
+    receiverId: number,
+    content: string,
+    parkingId?: number,
+    clientTempId?: string
+  ) => {
+    const payload: any = { receiverId, content, parkingId };
+    if (clientTempId) payload.clientTempId = clientTempId;
+    return api.post<Message>('/messages', payload);
   },
 
   // Récupérer une conversation
-  getConversation: async (userId: number, page: number = 1, pageSize: number = 20) => {
-    return api.get(`/messages/conversation/${userId}?page=${page}&pageSize=${pageSize}`);
+  getConversation: async (userId: number, parkingId?: number, page: number = 1, pageSize: number = 20) => {
+    let url = `/messages/conversation/${userId}?page=${page}&pageSize=${pageSize}`;
+    if (parkingId !== undefined) {
+      url += `&parkingId=${parkingId}`;
+    }
+    return api.get(url);
   },
 
   // Récupérer toutes les conversations
