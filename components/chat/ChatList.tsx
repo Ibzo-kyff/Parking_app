@@ -1,57 +1,40 @@
 import React from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
-import { Conversation, Message } from '../../app/type/chat';
+import { ConversationList, Message } from '../../app/type/chat';
 
 interface Props {
-  conversations: Conversation | any[] | Record<string, Message[]>;
+  conversations: ConversationList;
   onSelectConversation: (userId: number, displayName: string, logo?: string | null, parkingId?: number) => void;
   currentUserId: number;
   currentUserRole?: string;
 }
 
 export const ChatList: React.FC<Props> = ({ conversations, onSelectConversation, currentUserId, currentUserRole }) => {
-  const dataArray: any[] = React.useMemo(() => {
-    if (!conversations) return [];
+  const dataArray = React.useMemo(() => {
+    if (!conversations || !Array.isArray(conversations)) return [];
 
-    if (Array.isArray(conversations)) {
-      return conversations.map((item) => {
-        const user = item.user || item;
-        const lastMsg = item.lastMessage || item.last?.lastMessage;
-        const parkingId = item.parkingId ?? lastMsg?.parking?.id ?? lastMsg?.parkingId;
-        return {
-          id: user?.id || item.id,
-          user,
-          lastMessage: lastMsg,
-          parkingId,
-        };
-      });
-    }
-
-    return Object.entries(conversations).map(([otherUserId, msgs]) => {
-      const messages: Message[] = Array.isArray(msgs) ? msgs : (msgs?.messages || []);
-      const lastMsg: Message | undefined = messages.length > 0 ? messages[0] : undefined;
-      const otherUser = lastMsg
-        ? lastMsg.senderId === currentUserId
-          ? lastMsg.receiver
-          : lastMsg.sender
-        : null;
+    return conversations.map((item) => {
+      const user = item.user;
+      const lastMsg = item.lastMessage;
+      // On cherche le parkingId dans le message ou l'item
+      const parkingId = (item as any).parkingId ?? lastMsg?.parkingId ?? lastMsg?.parking?.id;
 
       return {
-        id: Number(otherUserId),
-        user: otherUser,
+        id: user?.id,
+        user,
         lastMessage: lastMsg,
-        parkingId: lastMsg?.parkingId ?? lastMsg?.parking?.id,
+        parkingId,
       };
     });
-  }, [conversations, currentUserId]);
+  }, [conversations]);
 
   const formatTime = (dateString?: string) => {
     if (!dateString) return '';
-    
+
     const date = new Date(dateString);
     const now = new Date();
     const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-    
+
     if (diffInHours < 24) {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } else if (diffInHours < 168) {
@@ -77,7 +60,7 @@ export const ChatList: React.FC<Props> = ({ conversations, onSelectConversation,
     // Aperçu & heure
     const preview = lastMsg?.content || 'Aucun message';
     const time = formatTime(lastMsg?.createdAt);
-    
+
     // Statut de lecture
     const isUnread = lastMsg && !lastMsg.isRead && lastMsg.senderId !== currentUserId;
     const messageCount = isUnread ? 1 : 0; // Vous pouvez adapter cette logique selon vos besoins
@@ -94,7 +77,7 @@ export const ChatList: React.FC<Props> = ({ conversations, onSelectConversation,
             <Text style={styles.avatarText}>{initials}</Text>
           </View>
         </View>
-        
+
         <View style={styles.contentContainer}>
           <View style={styles.headerRow}>
             <Text style={styles.name} numberOfLines={1}>
@@ -106,9 +89,9 @@ export const ChatList: React.FC<Props> = ({ conversations, onSelectConversation,
               </Text>
             )}
           </View>
-          
+
           <View style={styles.previewRow}>
-            <Text 
+            <Text
               style={[
                 styles.preview,
                 isUnread && styles.previewUnread
@@ -117,7 +100,7 @@ export const ChatList: React.FC<Props> = ({ conversations, onSelectConversation,
             >
               {preview}
             </Text>
-            
+
             {messageCount > 0 && (
               <View style={styles.unreadBadge}>
                 <Text style={styles.unreadBadgeText}>{messageCount}</Text>

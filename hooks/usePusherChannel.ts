@@ -1,65 +1,73 @@
-import { useEffect, useState } from 'react';
-import { initializePusher, cleanupPusher } from '../app/utils/pusher';
+import { useEffect, useRef } from 'react';
+import { initializePusher } from '../app/utils/pusher';
 import { useAuth } from '../context/AuthContext';
 
-type EventHandler = (data: any) => void;
-
 interface EventBinding {
-    eventName: string;
-    handler: EventHandler;
+  eventName: string;
+  handler: (data: any) => void;
 }
 
-export const usePusherChannel = (events: EventBinding[] = []) => {
-    const { user } = useAuth();
-    const [pusher, setPusher] = useState<any>(null);
+/**
+ * Hook stabilisé pour Pusher.
+ * Écoute le canal "private-user-{id}" avec un tiret pour correspondre au backend.
+ */
+export const usePusherChannel = (events: EventBinding[]) => {
+  const { user } = useAuth();
+  const eventsRef = useRef<EventBinding[]>(events);
 
-    useEffect(() => {
-        if (!user) return;
+  // Mise à jour de la référence pour accéder aux derniers handlers sans re-render
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
 
-        let pusherInstance: any = null;
-        let channel: any = null;
+  useEffect(() => {
+    if (!user || !user.id) return;
 
-        const setupPusher = async () => {
-            pusherInstance = await initializePusher(user.id);
-            setPusher(pusherInstance);
+    let channel: any;
+    let pusher: any;
+    const userId = Number(user.id);
+    const channelName = `private-user-${userId}`; // IMPORTANT: Tiret (-) pour matcher le backend
 
-            // S'abonner au channel privé
-            const channelName = `private-user_${user.id}`;
-            channel = pusherInstance.subscribe(channelName);
+    const init = async () => {
+      try {
+        console.log(`🔌 Pusher: Connexion au canal unique: ${channelName}`);
+        pusher = await initializePusher(userId);
+        channel = pusher.subscribe(channelName);
 
-            channel.bind('pusher:subscription_succeeded', () => {
-                console.log(`✅ Abonné avec succès au channel : ${channelName}`);
-            });
+        channel.bind('pusher:subscription_succeeded', () => {
+          console.log(`✅ [Pusher] Abonnement réussi à ${channelName}`);
+        });
 
-            channel.bind('pusher:subscription_error', (status: any) => {
-                console.error(`❌ Erreur abonnement channel ${channelName}:`, status);
-            });
+        channel.bind('pusher:subscription_error', (status: any) => {
+          console.error(`❌ [Pusher] Erreur d'abonnement à ${channelName}:`, status);
+        });
 
-            // Binder les événements
-            events.forEach(({ eventName, handler }) => {
-                channel.bind(eventName, (data: any) => {
-                    console.log(`📡 Événement Pusher reçu [${eventName}]:`, data);
-                    handler(data);
-                });
-            });
-        };
+        // Binding dynamique via Ref pour éviter les stale closures
+        const eventNames = Array.from(new Set(eventsRef.current.map(e => e.eventName)));
 
-        setupPusher();
+        eventNames.forEach(eventName => {
+          channel.bind(eventName, (data: any) => {
+            console.log(`📡 [Pusher] Événement [${eventName}] reçu sur ${channelName}`);
+            eventsRef.current
+              .filter(e => e.eventName === eventName)
+              .forEach(e => e.handler(data));
+          });
+        });
 
-        return () => {
-            // Nettoyage
-            if (channel) {
-                events.forEach(({ eventName, handler }) => {
-                    channel.unbind(eventName);
-                });
-                if (pusherInstance) {
-                    const channelName = `private-user_${user.id}`;
-                    pusherInstance.unsubscribe(channelName);
-                }
-            }
-            // cleanupPusher(); // Optionnel selon si singleton ou non, mais prudent de garder
-        };
-    }, [user, events]); // Attention: events doit être stable (useMemo ou défini hors render)
+      } catch (error) {
+        console.error('❌ Pusher error:', error);
+      }
+    };
 
-    return pusher;
+    init();
+
+    return () => {
+      if (channel) {
+        console.log(`🔌 Pusher: Nettoyage (unbind/unsubscribe) de ${channelName}`);
+        const eventNames = Array.from(new Set(eventsRef.current.map(e => e.eventName)));
+        eventNames.forEach(ename => channel.unbind(ename));
+        pusher.unsubscribe(channelName);
+      }
+    };
+  }, [user?.id]); // Ne dépend que de l'ID utilisateur pour la stabilité
 };

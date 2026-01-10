@@ -7,7 +7,7 @@ import Constants from 'expo-constants';
 interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
-  role: string | null;
+  role: 'CLIENT' | 'PARKING' | 'USER' | null;
   userId: string | null;
   parkingId: string | null;
   emailVerified: boolean;
@@ -20,12 +20,12 @@ interface AuthContextType {
   setAuthState: (state: Partial<AuthState>) => void;
   clearAuthState: () => void;
   isLoading: boolean;
-  refreshAuth: () => Promise<boolean>; 
+  refreshAuth: () => Promise<boolean>;
   user: {
     id: number | null;
     nom: string | null;
     prenom: string | null;
-    role: string | null;
+    role: 'CLIENT' | 'PARKING' | 'USER' | null;
   } | null;
 }
 
@@ -109,7 +109,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     try {
-      const response = await axios.post(`${BASE_URL}auth/refresh`, { refreshToken: authState.refreshToken }, {
+      const response = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken: authState.refreshToken }, {
         withCredentials: true
       });
       const { accessToken, refreshToken: newRefreshToken } = response.data; // ← AJOUT : Gère rotation
@@ -128,19 +128,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const user = React.useMemo(() => {
+    if (!authState || !authState.userId) return null;
+    return {
+      id: Number(authState.userId),
+      nom: authState.nom,
+      prenom: authState.prenom,
+      role: authState.role,
+    };
+  }, [authState.userId, authState.nom, authState.prenom, authState.role]);
+
   return (
-    <AuthContext.Provider value={{ 
-      authState, 
-      setAuthState: updateAuthState, 
-      clearAuthState, 
+    <AuthContext.Provider value={{
+      authState,
+      setAuthState: updateAuthState,
+      clearAuthState,
       isLoading,
       refreshAuth,
-      user: authState && authState.userId ? {
-        id: authState.userId ? Number(authState.userId) : null,
-        nom: authState.nom,
-        prenom: authState.prenom,
-        role: authState.role,
-      } : null,
+      user,
     }}>
       {children}
     </AuthContext.Provider>

@@ -41,49 +41,39 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
     case 'CLIENT':
       return (
         <Tabs screenOptions={commonOptions}>
-          {/* Accueil */}
           <Tabs.Screen
             name="accueil"
             options={{
               title: 'Accueil',
-              tabBarIcon: ({ color, focused }) =>
-                getIcon('home', color, focused),
+              tabBarIcon: ({ color, focused }) => getIcon('home', color, focused),
             }}
           />
-          {/* Réservations */}
           <Tabs.Screen
             name="reservation"
             options={{
               title: 'Réservations',
-              tabBarIcon: ({ color, focused }) =>
-                getIcon('calendar', color, focused),
+              tabBarIcon: ({ color, focused }) => getIcon('calendar', color, focused),
             }}
           />
-          {/* Parkings */}
           <Tabs.Screen
             name="parking"
             options={{
               title: 'Parkings',
-              tabBarIcon: ({ color, focused }) =>
-                getIcon('car', color, focused),
+              tabBarIcon: ({ color, focused }) => getIcon('car', color, focused),
             }}
           />
-          {/* Messages */}
           <Tabs.Screen
             name="messages"
             options={{
               title: 'Messages',
-              tabBarIcon: ({ color, focused }) =>
-                getIcon('chatbubbles', color, focused),
+              tabBarIcon: ({ color, focused }) => getIcon('chatbubbles', color, focused),
             }}
           />
-          {/* Profil */}
           <Tabs.Screen
             name="profile"
             options={{
               title: 'Profil',
-              tabBarIcon: ({ color, focused }) =>
-                getIcon('person', color, focused),
+              tabBarIcon: ({ color, focused }) => getIcon('person', color, focused),
             }}
           />
         </Tabs>
@@ -91,49 +81,39 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
     case 'PARKING':
       return (
         <Tabs screenOptions={commonOptions}>
-          {/* Accueil */}
           <Tabs.Screen
             name="accueil"
             options={{
               title: 'Accueil',
-              tabBarIcon: ({ color, focused }) =>
-                getIcon('home', color, focused),
+              tabBarIcon: ({ color, focused }) => getIcon('home', color, focused),
             }}
           />
-          {/* Réservations */}
           <Tabs.Screen
             name="Reservation"
             options={{
               title: 'Réservation',
-              tabBarIcon: ({ color, focused }) =>
-                getIcon('clipboard', color, focused),
+              tabBarIcon: ({ color, focused }) => getIcon('clipboard', color, focused),
             }}
           />
-          {/* Gestion */}
           <Tabs.Screen
             name="gestion"
             options={{
               title: 'Gestion',
-              tabBarIcon: ({ color, focused }) =>
-                getIcon('settings', color, focused),
+              tabBarIcon: ({ color, focused }) => getIcon('settings', color, focused),
             }}
           />
-          {/* Messages */}
           <Tabs.Screen
             name="messages"
             options={{
               title: 'Messages',
-              tabBarIcon: ({ color, focused }) =>
-                getIcon('chatbubbles', color, focused),
+              tabBarIcon: ({ color, focused }) => getIcon('chatbubbles', color, focused),
             }}
           />
-          {/* Profil */}
           <Tabs.Screen
             name="profile"
             options={{
               title: 'Profil',
-              tabBarIcon: ({ color, focused }) =>
-                getIcon('person', color, focused),
+              tabBarIcon: ({ color, focused }) => getIcon('person', color, focused),
             }}
           />
         </Tabs>
@@ -148,10 +128,10 @@ const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: '#fff',
     borderRadius: 25,
-    height: 60, 
+    height: 60,
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
- 
+
     shadowColor: '#000',
     shadowOpacity: 0.2,
     shadowOffset: { width: 0, height: -8 },

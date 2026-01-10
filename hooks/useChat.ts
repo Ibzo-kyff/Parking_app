@@ -1,162 +1,240 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { chatService } from '../components/services/chatServices';
-import { Message, Conversation } from '../app/type/chat';
+import { Message, ConversationList } from '../app/type/chat';
 import { useAuth } from '../context/AuthContext';
 import { usePusherChannel } from './usePusherChannel';
-import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
 
 export const useChat = (parkingId?: number) => {
   const { user } = useAuth();
+
   const [messages, setMessages] = useState<Message[]>([]);
-  const [conversations, setConversations] = useState<Conversation>({});
-  const [currentParkingId, setCurrentParkingId] = useState<number | undefined>(parkingId);
+  const [conversations, setConversations] = useState<ConversationList>([]);
   const [loading, setLoading] = useState(false);
+  const [currentParkingId, setCurrentParkingId] = useState<number | undefined>(parkingId);
   const [activePartnerId, setActivePartnerId] = useState<number | null>(null);
 
-  // ---------------- PUSHER EVENTS ----------------
-  const handleNewMessage = useCallback(async (data: Message) => {
-    if (!user) return;
+  const userRef = useRef(user);
 
-    // 1. Mise à jour de l'état "messages" si le message concerne la conversation active OU si c'est mon message (envoyé depuis un autre device par ex)
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  // Tri des messages par date
+  const sortMessages = (msgs: Message[]) => {
+    return [...msgs].sort((a, b) =>
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+  };
+
+  /* =====================
+     LOAD CONVERSATIONS
+  ====================== */
+  const loadConversations = useCallback(async () => {
+    if (!userRef.current) return;
+    try {
+      const res = await chatService.getConversations();
+      setConversations(Array.isArray(res.data) ? res.data : []);
+    } catch (e) {
+      console.error('❌ Erreur chargement conversations:', e);
+    }
+  }, []);
+
+  /* =====================
+     PUSHER EVENTS
+  ====================== */
+  const onNewMessage = useCallback((data: Message) => {
+    const currentUser = userRef.current;
+    if (!currentUser?.id) return;
+
+    const myId = Number(currentUser.id);
+
     setMessages(prev => {
-      // Le message est pertinent pour l'affichage si :
-      // - Je suis l'expéditeur (cas multi-device ou écho)
-      // - OU l'expéditeur est mon partenaire actif
-      // - OU le destinataire est mon partenaire actif (si j'envoie)
-      const isRelevant =
-        data.senderId === user.id ||
-        (activePartnerId !== null && (data.senderId === activePartnerId || data.receiverId === activePartnerId));
-
-      if (isRelevant) {
-        // Déduplication : on vérifie si l'ID existe déjà
-        if (prev.some(m => m.id === data.id)) return prev;
-        return [...prev, data];
+      // 1. Remplacement d'un message optimiste existant
+      if (data.clientTempId) {
+        const index = prev.findIndex(m => String(m.clientTempId) === String(data.clientTempId));
+        if (index !== -1) {
+          const copy = [...prev];
+          copy[index] = { ...data, status: 'sent' };
+          return sortMessages(copy);
+        }
       }
+
+      // 2. Éviter les doublons par ID
+      if (prev.some(m => m.id === data.id)) return prev;
+
+      // 3. Ajouter si le message fait partie de cette conversation
+      if (Number(data.senderId) === myId || Number(data.receiverId) === myId) {
+        return sortMessages([...prev, { ...data, status: 'sent' }]);
+      }
+
       return prev;
     });
 
-    // 2. Notification Locale
-    // On notifie seulement si c'est un message entrant (pas de moi)
-    if (data.senderId !== user.id) {
-      // Si on est déjà en train de parler avec cette personne, on peut éviter la notif ou faire un son discret
-      // Ici, on notifie quand même pour être sûr (le système OS gère souvent le foreground)
-      // Ou on peut conditionner : if (activePartnerId !== data.senderId) { ... }
+    loadConversations();
+  }, [loadConversations]);
 
-      try {
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: "Nouveau message",
-            body: data.content, // Attention à la confidentialité/longueur
-            sound: 'default',
-            data: { messageId: data.id, senderId: data.senderId }
-          },
-          trigger: null, // Immédiat
-        });
-      } catch (e) { console.log('Erreur notification chat', e); }
-    }
-  }, [user, activePartnerId]);
+  const onUpdateMessage = useCallback((data: Message) => {
+    setMessages(prev => prev.map(m => (m.id === data.id ? data : m)));
+    loadConversations();
+  }, [loadConversations]);
 
-  const handleUpdateMessage = useCallback((data: Message) => {
-    setMessages(prev => prev.map(m => m.id === data.id ? data : m));
+  const onDeleteMessage = useCallback((id: number) => {
+    setMessages(prev => prev.filter(m => m.id !== id));
+    loadConversations();
+  }, [loadConversations]);
+
+  const onMessageRead = useCallback((data: Message) => {
+    setMessages(prev =>
+      prev.map(m => (m.id === data.id ? { ...m, read: true } : m))
+    );
   }, []);
 
-  const handleDeleteMessage = useCallback((messageId: number) => {
-    setMessages(prev => prev.map(m =>
-      m.id === messageId ? { ...m, deletedAt: new Date().toISOString() } : m
-    ));
-  }, []);
+  const pusherEvents = useMemo(
+    () => [
+      { eventName: 'newMessage', handler: onNewMessage },
+      { eventName: 'updateMessage', handler: onUpdateMessage },
+      { eventName: 'deleteMessage', handler: onDeleteMessage },
+      { eventName: 'messageRead', handler: onMessageRead },
+    ],
+    [onNewMessage, onUpdateMessage, onDeleteMessage, onMessageRead]
+  );
 
-  const handleMessageRead = useCallback((data: Message) => {
-    setMessages(prev => prev.map(m => m.id === data.id ? { ...m, read: true } : m));
-  }, []);
-
-  const pusherEvents = useMemo(() => [
-    { eventName: 'newMessage', handler: handleNewMessage },
-    { eventName: 'updateMessage', handler: handleUpdateMessage },
-    { eventName: 'deleteMessage', handler: handleDeleteMessage },
-    { eventName: 'messageRead', handler: handleMessageRead },
-  ], [handleNewMessage, handleUpdateMessage, handleDeleteMessage, handleMessageRead]);
-
-  // Utilisation du hook centralisé
   usePusherChannel(pusherEvents);
 
-  // ---------------- API CALLS ----------------
-  const loadConversations = async () => {
+  /* =====================
+     LOAD ONE CONVERSATION
+  ====================== */
+  const loadConversation = async (otherUserId: number, parkingIdOverride?: number) => {
+    // Utilisation immédiate de l'override ou de la valeur actuelle du state
+    const pId = parkingIdOverride !== undefined ? parkingIdOverride : currentParkingId;
+
+    console.log(`📂 [loadConversation] Chargement discussion avec ${otherUserId} (parkingId: ${pId})`);
+    setActivePartnerId(otherUserId);
+    setMessages([]);
     setLoading(true);
+
     try {
-      const { data } = await chatService.getConversations();
-      setConversations(data);
-    } catch (error) {
-      console.error('Erreur chargement conversations:', error);
+      const res = await chatService.getConversation(otherUserId, pId);
+      const data = Array.isArray(res.data) ? res.data : res.data?.messages || [];
+      console.log(`📡 [loadConversation] ${data.length} messages récupérés du serveur`);
+      setMessages(sortMessages(data));
+    } catch (e) {
+      console.error('❌ [loadConversation] Erreur:', e);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  const loadConversation = async (otherUserId: number) => {
-    setActivePartnerId(otherUserId); // Marquer cet utilisateur comme actif
-    setLoading(true);
-    try {
-      const { data } = await chatService.getConversation(otherUserId);
-      setMessages(data.messages);
-
-      if (data.parkingId) {
-        setCurrentParkingId(data.parkingId);
-      }
-
-      const unreadMessages = data.messages.filter((m: Message) => !m.read && m.receiverId === user?.id);
-      unreadMessages.forEach((msg: Message) => chatService.markAsRead(msg.id));
-    } catch (error) {
-      console.error('Erreur chargement conversation:', error);
-    }
-    setLoading(false);
-  };
-
+  /* =====================
+     SEND MESSAGE
+  ====================== */
   const sendMessage = async (content: string, receiverId: number) => {
-    if (!content.trim() || !user) return;
-    try {
-      const { data } = await chatService.sendMessage(receiverId, content.trim(), currentParkingId);
+    if (!content.trim() || !userRef.current?.id) return;
 
-      // Mise à jour optimiste/manuelle (en attendant Pusher pour confirmer ou doubler)
+    setActivePartnerId(receiverId);
+
+    console.log('📤 [sendMessage] Envoi message:', {
+      receiverId,
+      content,
+      myId: userRef.current.id,
+      activePartnerId: receiverId,
+      parkingId: currentParkingId,
+    });
+
+    const clientTempId = Date.now().toString();
+
+    const optimistic: Message = {
+      id: Number(clientTempId),
+      clientTempId,
+      senderId: userRef.current.id,
+      receiverId,
+      content: content.trim(),
+      createdAt: new Date().toISOString(),
+      read: false,
+      status: 'sending',
+    };
+
+    console.log('➕ [sendMessage] Ajout message optimiste');
+    setMessages(prev => {
+      console.log(`📊 [sendMessage] Messages avant: ${prev.length}, après: ${prev.length + 1}`);
+      return [...prev, optimistic];
+    });
+
+    try {
+      const { data } = await chatService.sendMessage(
+        receiverId,
+        content,
+        currentParkingId,
+        clientTempId
+      );
+
+      console.log('✅ [sendMessage] Réponse serveur reçue:', data);
+
+      // Mise à jour immédiate avec les données réelles du serveur
       setMessages(prev => {
-        if (prev.some(m => m.id === data.id)) return prev;
-        return [...prev, data];
+        const index = prev.findIndex(m => String(m.clientTempId) === String(clientTempId));
+        if (index !== -1) {
+          const copy = [...prev];
+          copy[index] = { ...data, status: 'sent' };
+          console.log(`📝 [sendMessage] Message optimiste mis à jour avec ID réel: ${data.id}`);
+          return sortMessages(copy);
+        }
+        return sortMessages([...prev, { ...data, status: 'sent' }]);
       });
-    } catch (error) {
-      console.error('Erreur envoi message:', error);
+
+      // Recharger les conversations pour mettre à jour le dernier message dans la liste
+      loadConversations();
+    } catch (e) {
+      console.error('❌ [sendMessage] Erreur envoi API:', e);
+      setMessages(prev =>
+        prev.map(m =>
+          m.clientTempId === clientTempId ? { ...m, status: 'failed' } : m
+        )
+      );
     }
   };
 
-  const deleteMessage = async (messageId: number) => {
-    try {
-      await chatService.deleteMessage(messageId);
-      setMessages(prev => prev.filter(m => m.id !== messageId));
-    } catch (error) {
-      console.error('Erreur suppression:', error);
-    }
-  };
-
-  const updateMessage = async (messageId: number, newContent: string) => {
-    try {
-      const { data } = await chatService.updateMessage(messageId, newContent);
-      setMessages(prev => prev.map(m => m.id === messageId ? data : m));
-    } catch (error) {
-      console.error('Erreur modification:', error);
-    }
+  const retryMessage = async (msg: Message) => {
+    setMessages(prev => prev.filter(m => m.clientTempId !== msg.clientTempId));
+    await sendMessage(msg.content, msg.receiverId);
   };
 
   useEffect(() => {
-    if (parkingId !== undefined) {
-      setCurrentParkingId(parkingId);
-    }
-  }, [parkingId]);
+    if (userRef.current) loadConversations();
+  }, [loadConversations]);
 
-  useEffect(() => {
-    if (user) loadConversations();
-  }, [user, currentParkingId]);
+  // 🔹 Filtrer les messages pour la conversation active uniquement
+  const filteredMessages = useMemo(() => {
+    if (!activePartnerId || !userRef.current?.id) {
+      console.log('🔍 [useChat] Pas de filtre actif, retour de tous les messages:', messages.length);
+      return messages;
+    }
+
+    const myId = Number(userRef.current.id);
+    const partnerId = Number(activePartnerId);
+
+    const filtered = messages.filter(m => {
+      const senderId = Number(m.senderId);
+      const receiverId = Number(m.receiverId);
+
+      return (
+        (senderId === myId && receiverId === partnerId) ||
+        (senderId === partnerId && receiverId === myId)
+      );
+    });
+
+    return filtered;
+  }, [messages, activePartnerId]);
 
   return {
-    messages, conversations, loading, sendMessage, loadConversation,
-    deleteMessage, updateMessage, setCurrentParkingId, currentParkingId,
+    messages: filteredMessages,
+    conversations,
+    loading,
+    loadConversation,
+    sendMessage,
+    retryMessage,
+    setCurrentParkingId,
+    currentParkingId,
+    resetActivePartner: () => setActivePartnerId(null),
   };
 };

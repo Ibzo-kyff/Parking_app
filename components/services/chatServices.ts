@@ -1,19 +1,21 @@
 import api from './api'; // Votre instance axios
-import { Message, Conversation } from '../../app/type/chat';
+import { Message, Conversation, ConversationList } from '../../app/type/chat';
 export const chatService = {
   // Envoyer un message
-  sendMessage: async (receiverId: number, content: string, parkingId?: number) => {
-    return api.post<Message>('/messages', { receiverId, content, parkingId });
+  sendMessage: async (receiverId: number, content: string, parkingId?: number, clientTempId?: string) => {
+    return api.post<Message>('/messages', { receiverId, content, parkingId, clientTempId });
   },
 
   // Récupérer une conversation
-  getConversation: async (userId: number, page: number = 1, pageSize: number = 20) => {
-    return api.get(`/messages/conversation/${userId}?page=${page}&pageSize=${pageSize}`);
+  getConversation: async (userId: number, parkingId?: number, page: number = 1, pageSize: number = 20) => {
+    let url = `/messages/conversation/${userId}?page=${page}&pageSize=${pageSize}`;
+    if (parkingId) url += `&parkingId=${parkingId}`;
+    return api.get(url);
   },
 
   // Récupérer toutes les conversations
   getConversations: async () => {
-    return api.get<Conversation>('/messages/conversations');
+    return api.get<ConversationList>('/messages/conversations');
   },
 
   // Mettre à jour un message
@@ -28,7 +30,7 @@ export const chatService = {
 
   // Marquer comme lu
   markAsRead: async (messageId: number) => {
-    return api.put(`/messages/${messageId}/read`);
+    return api.patch(`/messages/${messageId}/read`);
   },
 };
 
