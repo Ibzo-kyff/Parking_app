@@ -26,7 +26,7 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
 
   const {
     messages, conversations, loading, sendMessage, loadConversation,
-    deleteMessage, updateMessage, setCurrentParkingId,
+    setCurrentParkingId, resetActivePartner,
   } = useChat(initialParkingId);
 
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
@@ -46,7 +46,7 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
     if (parkingId) {
       setCurrentParkingId(parkingId);
     }
-    loadConversation(userId);
+    loadConversation(userId, parkingId);
   };
 
   // Charger la liste des parkings pour l'affichage initial
@@ -81,12 +81,13 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
         <ChatWindow
           messages={messages}
           onSendMessage={sendMessage}
-          onDeleteMessage={deleteMessage}
-          onUpdateMessage={updateMessage}
           receiverId={selectedUserId}
           parkingName={parkingName}
           loading={loading}
-          onBack={() => setSelectedUserId(null)}
+          onBack={() => {
+            setSelectedUserId(null);
+            resetActivePartner();
+          }}
           parkingLogo={parkingLogo}
         />
       );
@@ -140,10 +141,10 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
       <View style={styles.sidebar}>
         <ChatList
           conversations={conversations}
-          onSelectConversation={(userId, name, parkingId) =>
-            handleSelectConversation(userId, name, undefined, parkingId)
+          onSelectConversation={(userId, name, logo, parkingId) =>
+            handleSelectConversation(userId, name, logo, parkingId)
           }
-          currentUserId={user.id}
+          currentUserId={Number(user.id)}
         />
       </View>
       <View style={styles.main}>
@@ -151,12 +152,13 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
           <ChatWindow
             messages={messages}
             onSendMessage={sendMessage}
-            onDeleteMessage={deleteMessage}
-            onUpdateMessage={updateMessage}
             receiverId={selectedUserId}
             parkingName={parkingName}
             loading={loading}
-            onBack={() => setSelectedUserId(null)}
+            onBack={() => {
+              setSelectedUserId(null);
+              resetActivePartner();
+            }}
             parkingLogo={parkingLogo}
           />
         ) : (
@@ -197,7 +199,7 @@ const styles = StyleSheet.create({
     color: '#0c0c0cff',
     fontSize: 18,
     fontWeight: 'bold',
-      marginBottom: -20,
+    marginBottom: -20,
   },
 
   // 🅿️ PARKING LIST

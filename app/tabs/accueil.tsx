@@ -135,7 +135,7 @@ const Accueil: React.FC = () => {
   return (
     <View style={styles.container}>
       <Header />
-      <ScrollView style={styles.mainScrollView}> {/* Nouveau ScrollView pour rendre la page scrollable */}
+      <ScrollView style={styles.mainScrollView}>{/* Nouveau ScrollView pour rendre la page scrollable */}
         <View style={styles.searchBarContainer}>
           <FontAwesome name="search" size={24} color="#999" style={styles.searchIcon} />
           <TextInput
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
     borderRadius: 10,
   },
-  carouselOverlay: { // Nouvel overlay pour texte promo
+  carouselOverlay: { // Nouveau overlay pour texte promo
     position: 'absolute',
     bottom: 10,
     left: 0,

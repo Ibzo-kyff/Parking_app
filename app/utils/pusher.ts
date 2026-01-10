@@ -1,79 +1,91 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {getStoredAccessToken } from '../../components/services/api';
+import { getStoredAccessToken } from '../../components/services/api';
 import Constants from 'expo-constants';
-let pusherInstance: any = null;
-const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL;
-const loadPusher = () => {
-  // Use eval('require') to avoid Metro/webpack statically resolving native-only packages
-  const dynamicRequire = (name: string) => {
-    try {
-      // eslint-disable-next-line no-eval
-      return eval("require")(name);
-    } catch (e) {
-      return null;
-    }
-  };
+import Pusher from 'pusher-js/react-native';
 
-  // Detect React Native runtime
-  if (typeof navigator !== 'undefined' && navigator.product === 'ReactNative') {
-    const rnMod = dynamicRequire('pusher-js/react-native');
-    if (rnMod) return rnMod && rnMod.default ? rnMod.default : rnMod;
-  }
+let pusherInstance: Pusher | null = null;
 
-  // Fallback to browser implementation
-  const webMod = dynamicRequire('pusher-js') || dynamicRequire('pusher-js/dist/web/pusher');
-  if (webMod) return webMod && webMod.default ? webMod.default : webMod;
+const BASE_URL =
+  Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL;
 
-  throw new Error('Pusher library not available in this environment');
-};
-
-export const initializePusher = async (userId: number) => {
+/**
+ * Initialise l'instance Pusher (temps réel uniquement)
+ */
+export const initializePusher = async (userId: number): Promise<Pusher> => {
   if (pusherInstance) return pusherInstance;
 
-  // try to read the access token stored by the axios api helper
-  const token = (await getStoredAccessToken()) || (await AsyncStorage.getItem('token'));
+  console.log('📡 [Pusher] Initialisation pour utilisateur:', userId);
+  console.log('📡 [Pusher] Auth endpoint:', `${BASE_URL}/auth/pusher`);
 
-  const Pusher = loadPusher();
-
-  pusherInstance = new Pusher('mt1', {
+  pusherInstance = new Pusher('4ae0add35ba25c29e453', {
     cluster: 'mt1',
-    authEndpoint: `${BASE_URL}auth/pusher`,
-    auth: {
-      headers: { Authorization: `Bearer ${token}` },
+    authorizer: (channel: any) => {
+      return {
+        authorize: async (socketId: string, callback: (error: any, data: any) => void) => {
+          try {
+            const freshToken = await getStoredAccessToken();
+            if (!freshToken) {
+              console.error('❌ [Pusher] Auth: Aucun token trouvé');
+              return callback(new Error('No token'), null);
+            }
+
+            console.log(`🔐 [Pusher] Tentative d'auth pour canal: ${channel.name}`);
+
+            // On utilise axios pour l'auth car c'est plus fiable en React Native
+            const response = await fetch(`${BASE_URL}/auth/pusher`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${freshToken}`,
+              },
+              body: JSON.stringify({
+                socket_id: socketId,
+                channel_name: channel.name,
+              }),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({}));
+              console.error(`❌ [Pusher] Auth Error ${response.status}:`, errorData);
+              return callback(new Error(`Status ${response.status}`), null);
+            }
+
+            const data = await response.json();
+            console.log(`✅ [Pusher] Auth Success pour: ${channel.name}`);
+            callback(null, data);
+          } catch (error) {
+            console.error('❌ [Pusher] Auth Exception:', error);
+            callback(error, null);
+          }
+        },
+      };
     },
+    enabledTransports: ['ws', 'wss'],
+    forceTLS: true,
   });
 
-  // pusher-js/react-native and pusher-js have slightly different APIs for
-  // connection lifecycle, but both support subscribe and disconnect.
-  try {
-    if (pusherInstance.connect) {
-      // Some RN builds expose connect as async-friendly
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      pusherInstance.connect();
-    }
-  } catch (e) {
-    // ignore
-  }
+  pusherInstance.connection.bind('connected', () => {
+    console.log('✅ [Pusher] Connecté');
+  });
 
-  // subscribe returns a channel object in browser implementation
-  try {
-    if (pusherInstance.subscribe) {
-      pusherInstance.subscribe(`private-user_${userId}`);
-    }
-  } catch (e) {
-    // ignore
-  }
+  pusherInstance.connection.bind('state_change', (states: any) => {
+    console.log('📡 [Pusher] État:', states.current);
+  });
+
+  pusherInstance.connection.bind('error', (err: any) => {
+    console.error('❌ [Pusher] Erreur:', err);
+  });
 
   return pusherInstance;
 };
 
+/**
+ * Nettoyage Pusher
+ */
 export const cleanupPusher = () => {
   if (pusherInstance) {
-    try {
-      if (pusherInstance.disconnect) pusherInstance.disconnect();
-    } catch (e) {
-      // ignore
-    }
+    console.log('🔌 [Pusher] Déconnexion');
+    pusherInstance.disconnect();
     pusherInstance = null;
   }
 };

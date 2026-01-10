@@ -37,6 +37,8 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
     deleteMessage,
     updateMessage,
     setCurrentParkingId,
+    retryMessage,
+    resetActivePartner,
   } = useChat(initialParkingId);
 
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
@@ -110,12 +112,16 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
             onSendMessage={(text) => selectedUserId && sendMessage(text, selectedUserId)}
             onDeleteMessage={deleteMessage}
             onUpdateMessage={updateMessage}
+            onRetryMessage={retryMessage}
             receiverId={selectedUserId}
             receiverName={receiverName}
             receiverAvatar={receiverAvatar}
             loading={loading}
-            onBack={() => setSelectedUserId(null)}
-            currentUserRole={(user?.role as "PARKING" | "CLIENT")}
+            onBack={() => {
+              setSelectedUserId(null);
+              resetActivePartner();
+            }}
+            currentUserRole={user?.role as any}
           />
         ) : user?.role === 'PARKING' ? (
           // POUR LE PARKING : Liste des conversations (FlatList interne) -> PAS de ScrollView ici
@@ -230,11 +236,16 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
             onSendMessage={(text) => selectedUserId && sendMessage(text, selectedUserId)}
             onDeleteMessage={deleteMessage}
             onUpdateMessage={updateMessage}
+            onRetryMessage={retryMessage}
             receiverId={selectedUserId}
             receiverName={receiverName}
             receiverAvatar={receiverAvatar}
             loading={loading}
-            currentUserRole={(user?.role as "PARKING" | "CLIENT")}
+            onBack={() => {
+              setSelectedUserId(null);
+              resetActivePartner();
+            }}
+            currentUserRole={user?.role as any}
           />
         ) : (
           <View style={styles.empty}>
