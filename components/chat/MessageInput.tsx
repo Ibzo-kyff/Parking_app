@@ -8,13 +8,17 @@ interface Props {
   autoFocus?: boolean;
 }
 
-export const MessageInput: React.FC<Props> = ({ onSend, disabled, autoFocus = false }) => {
+export const MessageInput: React.FC<Props> = ({
+  onSend,
+  disabled,
+  autoFocus = false,
+}) => {
   const [content, setContent] = useState('');
-  const inputRef = useRef<any>(null);
+  const inputRef = useRef<TextInput | null>(null);
 
   useEffect(() => {
     if (autoFocus && inputRef.current) {
-      try { inputRef.current.focus(); } catch (e) { /* ignore */ }
+      inputRef.current.focus();
     }
   }, [autoFocus]);
 
@@ -40,9 +44,13 @@ export const MessageInput: React.FC<Props> = ({ onSend, disabled, autoFocus = fa
         keyboardAppearance="default"
         textAlignVertical="top"
         editable={!disabled}
-        keyboardShouldPersistTaps="handled"
       />
-      <TouchableOpacity onPress={handleSend} style={styles.sendBtn} disabled={!content.trim() || disabled}>
+
+      <TouchableOpacity
+        onPress={handleSend}
+        style={styles.sendBtn}
+        disabled={!content.trim() || disabled}
+      >
         <Feather name="send" size={20} color="white" />
       </TouchableOpacity>
     </View>
@@ -50,16 +58,27 @@ export const MessageInput: React.FC<Props> = ({ onSend, disabled, autoFocus = fa
 };
 
 const styles = StyleSheet.create({
-  container: { 
-    flexDirection: 'row', padding: 12, backgroundColor: 'white', alignItems: 'flex-end' 
+  container: {
+    flexDirection: 'row',
+    padding: 12,
+    backgroundColor: 'white',
+    alignItems: 'flex-end',
   },
-  input: { 
-    flex: 1, borderWidth: 1, borderColor: '#E5E5EA', 
-    borderRadius: 20, padding: 12, maxHeight: 100 
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 20,
+    padding: 12,
+    maxHeight: 100,
   },
-  sendBtn: { 
-    backgroundColor: '#007AFF', borderRadius: 20, 
-    width: 40, height: 40, justifyContent: 'center', 
-    alignItems: 'center', marginLeft: 8 
+  sendBtn: {
+    backgroundColor: '#ff7d00',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
 });

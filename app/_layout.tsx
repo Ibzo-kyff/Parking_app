@@ -3,24 +3,28 @@ import { SafeAreaView } from 'react-native';
 import { AuthProvider } from '../context/AuthContext';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 
-export default function RootLayout() {
-  usePushNotifications(); // Initialisation des notifications
+function AppContent() {
+  usePushNotifications();
 
   return (
+    <SafeAreaView style={{ flex: 1 }}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+        }}
+      >
+        <Stack.Screen name="index" />
+        {/* On retire les noms explicites qui causent des warnings si Expo Router les gère déjà */}
+        <Stack.Screen name="tabs" />
+      </Stack>
+    </SafeAreaView>
+  );
+}
+
+export default function RootLayout() {
+  return (
     <AuthProvider>
-      <SafeAreaView style={{ flex: 1 }}>
-        <Stack
-          screenOptions={{
-            headerShown: false, // Masquer les en-têtes par défaut
-          }}
-        >
-          <Stack.Screen name="index" />
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="tabs" />
-          <Stack.Screen name="(Parking)" />
-          <Stack.Screen name="(Clients)" />
-        </Stack>
-      </SafeAreaView>
+      <AppContent />
     </AuthProvider>
   );
 }

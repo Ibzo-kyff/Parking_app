@@ -7,7 +7,9 @@ export interface Message {
   read: boolean;
   createdAt: string;
   deletedAt?: string;
-  sender: {
+  clientTempId?: string;
+  status?: 'sending' | 'sent' | 'failed';
+  sender?: {
     image: string | null | undefined;
     id: number;
     nom: string;
@@ -15,7 +17,7 @@ export interface Message {
     email: string;
     role: 'CLIENT' | 'PARKING';
   };
-  receiver: {
+  receiver?: {
     image: string | null | undefined;
     id: number;
     nom: string;
@@ -28,6 +30,19 @@ export interface Message {
     nom: string;
   };
 }
+
+export interface ConversationItem {
+  user: {
+    id: number;
+    nom: string;
+    prenom: string;
+    image?: string | null;
+    role: 'CLIENT' | 'PARKING';
+  };
+  lastMessage: Message;
+}
+
+export type ConversationList = ConversationItem[];
 
 export interface Conversation {
   [otherUserId: number]: Message[];

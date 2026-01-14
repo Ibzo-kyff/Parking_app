@@ -10,25 +10,40 @@ const api = axios.create({
 
 let authToken: string | null = null;
 
-// Intercepteur corrigé : Sur 401 pour token expiré
+// Intercepteur de requête : Attache le token automatiquement
+api.interceptors.request.use(
+  async (config) => {
+    if (!authToken) {
+      authToken = await AsyncStorage.getItem('accessToken');
+    }
+    if (authToken) {
+      config.headers.Authorization = `Bearer ${authToken}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Intercepteur de réponse : Gère l'expiration du token (401 ou 403)
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as typeof error.config & { _retry?: boolean };
-    
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) { // ← CHANGEMENT : 401 au lieu de 403
+
+    // Si 401 (Unauthorized) ou 403 (Forbidden), on tente un refresh
+    if ((error.response?.status === 401 || error.response?.status === 403) && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;
-      
+
       try {
         const storedRefreshToken = await AsyncStorage.getItem('refreshToken');
         if (!storedRefreshToken) {
           throw new Error('No refreshToken available');
         }
 
-        const response = await axios.post(`${BASE_URL}auth/refresh`, { refreshToken: storedRefreshToken }, {
+        const response = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken: storedRefreshToken }, {
           withCredentials: true
         });
-        
+
         const { accessToken, refreshToken: newRefreshToken } = response.data; // ← AJOUT : Extrait newRefreshToken si présent (rotation)
         if (accessToken) {
           await setAuthToken(accessToken);
@@ -47,7 +62,7 @@ api.interceptors.response.use(
         // Rediriger vers login si dans un component, mais ici c'est global
       }
     }
-    
+
     return Promise.reject(error);
   }
 );
@@ -99,7 +114,7 @@ export const login = async (credentials: { email: string; password: string }): P
       nom,
       prenom
     };
-    
+
     await AsyncStorage.setItem('authState', JSON.stringify(authState));
 
     if (refreshToken) {
@@ -144,7 +159,7 @@ export const register = async (userData: {
 // Si needed ailleurs, aligne-la :
 export const refreshAccessToken = async (refreshToken: string): Promise<{ accessToken: string; refreshToken?: string }> => {
   try {
-    const response = await axios.post(`${BASE_URL}auth/refresh`, { refreshToken }, {
+    const response = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken }, {
       withCredentials: true
     });
     const { accessToken, refreshToken: newRefreshToken } = response.data;
@@ -175,16 +190,23 @@ export const logout = async (): Promise<void> => {
   } finally {
     await clearAuthToken();
     await AsyncStorage.multiRemove([
-      'accessToken', 
-      'role', 
-      'emailVerified', 
-      'nom', 
-      'prenom', 
+      'accessToken',
+      'role',
+      'emailVerified',
+      'nom',
+      'prenom',
       'userId',
       'parkingId',
       'authState',
       'refreshToken' // ← AJOUT
     ]);
+
+    try {
+      const { cleanupPusher } = require('../../app/utils/pusher');
+      cleanupPusher();
+    } catch (e) {
+      // Ignorer si échec require
+    }
   }
 };
 // Les autres fonctions restent inchangées...
@@ -203,15 +225,15 @@ export const sendPasswordResetOTP = async (email: string): Promise<any> => {
 };
 
 export const resetPassword = async (
-  email: string, 
-  otp: string, 
+  email: string,
+  otp: string,
   newPassword: string
 ): Promise<any> => {
   try {
-    const response = await api.post('/auth/reset-password', { 
-      email, 
-      otp, 
-      password: newPassword 
+    const response = await api.post('/auth/reset-password', {
+      email,
+      otp,
+      password: newPassword
     });
     return response.data;
   } catch (error) {
