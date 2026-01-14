@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView, Image } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Dimensions, 
+  TouchableOpacity, 
+  ScrollView, 
+  Image,
+  SafeAreaView
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useChat } from '../../hooks/useChat';
 import { getParkings, Parking } from '../../components/services/parkingApi';
@@ -12,7 +22,7 @@ interface Props {
   initialParkingId?: number;
 }
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 const isTablet = width > 768;
 
 const Messages: React.FC<Props> = ({ initialParkingId }) => {
@@ -37,6 +47,8 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
     deleteMessage,
     updateMessage,
     setCurrentParkingId,
+    retryMessage,
+    resetActivePartner,
   } = useChat(initialParkingId);
 
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
@@ -85,272 +97,715 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
 
   // === CHARGEMENT / AUTH ===
   if (authLoading) {
-    return <View style={styles.center}><Text>Chargement...</Text></View>;
+    return (
+      <View style={styles.center}>
+        <LinearGradient
+          colors={['#667eea', '#764ba2']}
+          style={styles.loadingGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <Ionicons name="chatbubbles" size={48} color="#fff" />
+          <Text style={styles.loadingText}>Chargement...</Text>
+        </LinearGradient>
+      </View>
+    );
   }
 
   if (!user) {
-    return <View style={styles.center}><Text>Connectez-vous pour accéder au chat</Text></View>;
+    return (
+      <View style={styles.center}>
+        <LinearGradient
+          colors={['#f093fb', '#f5576c']}
+          style={styles.authGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <Ionicons name="lock-closed" size={48} color="#fff" />
+          <Text style={styles.authText}>Connectez-vous pour accéder au chat</Text>
+        </LinearGradient>
+      </View>
+    );
   }
 
   // === LAYOUT MOBILE ===
   if (!isTablet) {
     return (
-      <View style={{ flex: 1 }}>
-        {/* HEADER UNIQUEMENT SI PAS DE CHAT OUVERT */}
-        {!selectedUserId && (
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>Messages</Text>
-          </View>
-        )}
-
-        {/* CONTENU */}
-        {selectedUserId ? (
-          <ChatWindow
-            messages={messages}
-            onSendMessage={(text) => selectedUserId && sendMessage(text, selectedUserId)}
-            onDeleteMessage={deleteMessage}
-            onUpdateMessage={updateMessage}
-            receiverId={selectedUserId}
-            receiverName={receiverName}
-            receiverAvatar={receiverAvatar}
-            loading={loading}
-            onBack={() => setSelectedUserId(null)}
-            currentUserRole={(user?.role as "PARKING" | "CLIENT")}
-          />
-        ) : user?.role === 'PARKING' ? (
-          // POUR LE PARKING : Liste des conversations (FlatList interne) -> PAS de ScrollView ici
-          <View style={{ flex: 1, padding: 16 }}>
-            <ChatList
-              conversations={conversations}
-              onSelectConversation={handleSelectConversation}
-              currentUserId={user.id}
-              currentUserRole={user.role}
-            />
-          </View>
-        ) : (
-          // POUR LE CLIENT : Liste des parkings (map) -> ScrollView nécessaire
-          <ScrollView contentContainerStyle={{ padding: 16 }}>
-            {user?.role === 'USER' && (
-              <Text style={styles.sectionTitle}>Parkings</Text>
-            )}
-
-            {loadingParkings ? (
-              <Text style={styles.loadingText}>Chargement des parkings...</Text>
-            ) : parkings.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyText}>Aucun parking disponible</Text>
+      <SafeAreaView style={styles.safeArea}>
+        <LinearGradient
+          colors={['#f8f9ff', '#ffffff']}
+          style={{ flex: 1 }}
+        >
+          {/* HEADER UNIQUEMENT SI PAS DE CHAT OUVERT */}
+          {!selectedUserId ? (
+            <LinearGradient
+              colors={['#ff7d00', '#ff7d00']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.header}
+            >
+              <View style={styles.headerContent}>
+                <Ionicons name="chatbubbles" size={24} color="#fff" />
+                <Text style={styles.headerTitle}>Messages</Text>
               </View>
-            ) : (
-              parkings.map((p) => (
-                <TouchableOpacity
-                  key={p.id}
-                  onPress={() => {
-                    if (p.user?.id) {
-                      handleSelectConversation(p.user.id, p.name, p.logo, p.id);
-                    }
-                  }}
-                  style={styles.parkingCard}
-                >
-                  <Image
-                    source={{
-                      uri: p.logo || 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
-                    }}
-                    style={styles.parkingLogo}
-                  />
-                  <View style={styles.parkingInfo}>
-                    <Text style={styles.parkingName}>{p.name}</Text>
-                    <Text style={styles.parkingMeta}>{p.city} • {p.capacity} places</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#999" />
-                </TouchableOpacity>
-              ))
-            )}
-          </ScrollView>
-        )}
-      </View>
+            </LinearGradient>
+          ) : null}
+
+          {/* CONTENU */}
+          {selectedUserId ? (
+            <ChatWindow
+              messages={messages}
+              onSendMessage={(text) => selectedUserId && sendMessage(text, selectedUserId)}
+              onDeleteMessage={deleteMessage}
+              onUpdateMessage={updateMessage}
+              onRetryMessage={retryMessage}
+              receiverId={selectedUserId}
+              receiverName={receiverName}
+              receiverAvatar={receiverAvatar}
+              loading={loading}
+              onBack={() => {
+                setSelectedUserId(null);
+                resetActivePartner();
+              }}
+              currentUserRole={user?.role as any}
+            />
+          ) : user?.role === 'PARKING' ? (
+            // POUR LE PARKING : Liste des conversations
+            <View style={{ flex: 1, paddingTop: 20 }}>
+              <Text style={styles.sectionTitle}>Conversations récentes</Text>
+              <ChatList
+                conversations={conversations}
+                onSelectConversation={handleSelectConversation}
+                currentUserId={user.id}
+                currentUserRole={user.role}
+              />
+            </View>
+          ) : (
+            // POUR LE CLIENT : Liste des parkings
+            <ScrollView 
+              contentContainerStyle={styles.parkingListContainer}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.welcomeSection}>
+                <Text style={styles.welcomeText}>Bonjour, {user.prenom} 👋</Text>
+                <Text style={styles.welcomeSubtext}>Sélectionnez un parking pour discuter</Text>
+              </View>
+
+              {loadingParkings ? (
+                <View style={styles.loadingContainer}>
+                  <Ionicons name="refresh-circle" size={40} color="#667eea" />
+                  <Text style={styles.loadingParkingsText}>Chargement des parkings...</Text>
+                </View>
+              ) : parkings.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Ionicons name="car-outline" size={64} color="#d1d5db" />
+                  <Text style={styles.emptyTitle}>Aucun parking disponible</Text>
+                  <Text style={styles.emptySubtext}>Revenez plus tard</Text>
+                </View>
+              ) : (
+                <View style={styles.parkingsGrid}>
+                  {parkings.map((p) => (
+                    <TouchableOpacity
+                      key={p.id}
+                      onPress={() => {
+                        if (p.user?.id) {
+                          handleSelectConversation(p.user.id, p.name, p.logo, p.id);
+                        }
+                      }}
+                      style={styles.parkingCard}
+                    >
+                      <LinearGradient
+                        colors={['#f8f9ff', '#ffffff']}
+                        style={styles.cardGradient}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                      >
+                        <View style={styles.cardContent}>
+                          <View style={styles.logoContainer}>
+                            <Image
+                              source={{
+                                uri: p.logo || 'https://cdn-icons-png.flaticon.com/512/2099/2099235.png',
+                              }}
+                              style={styles.parkingLogo}
+                            />
+                          </View>
+                          <View style={styles.parkingInfo}>
+                            <Text style={styles.parkingName} numberOfLines={1}>
+                              {p.name}
+                            </Text>
+                            <View style={styles.parkingMeta}>
+                              <Ionicons name="location-outline" size={12} color="#666" />
+                              <Text style={styles.parkingCity} numberOfLines={1}>
+                                {p.city}
+                              </Text>
+                            </View>
+                            <View style={styles.capacityBadge}>
+                              <Ionicons name="car-sport-outline" size={12} color="#667eea" />
+                              <Text style={styles.capacityText}>{p.capacity} places</Text>
+                            </View>
+                          </View>
+                          <Ionicons 
+                            name="chatbubble-ellipses" 
+                            size={20} 
+                            color="#667eea" 
+                            style={styles.chatIcon}
+                          />
+                        </View>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+          )}
+        </LinearGradient>
+      </SafeAreaView>
     );
   }
 
   // === LAYOUT TABLETTE / DESKTOP ===
   return (
-    <View style={styles.container}>
-      <View style={styles.sidebar}>
-        <View style={styles.headerDesktop}>
-          <Text style={styles.headerTitle}>Messages</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <LinearGradient
+        colors={['#f8f9ff', '#ffffff']}
+        style={{ flex: 1, flexDirection: 'row' }}
+      >
+        {/* SIDEBAR */}
+        <View style={styles.sidebar}>
+          <LinearGradient
+            colors={['#667eea', '#764ba2']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.sidebarHeader}
+          >
+            <View style={styles.headerContent}>
+              <Ionicons name="chatbubbles" size={24} color="#fff" />
+              <Text style={styles.headerTitle}>Messages</Text>
+            </View>
+          </LinearGradient>
+
+          {user.role === 'PARKING' ? (
+            // JUSTE LA LISTE DES CLIENTS
+            <View style={styles.sidebarContent}>
+              <Text style={styles.sidebarTitle}>Conversations</Text>
+              <ChatList
+                conversations={conversations}
+                onSelectConversation={handleSelectConversation}
+                currentUserId={user.id}
+                currentUserRole={user.role}
+              />
+            </View>
+          ) : (
+            <ScrollView 
+              style={styles.sidebarContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.welcomeSection}>
+                <Text style={styles.welcomeText}>Bonjour, {user.prenom}</Text>
+                <Text style={styles.welcomeSubtext}>Parkings disponibles</Text>
+              </View>
+              
+              {parkings.length === 0 ? (
+                <View style={styles.emptySidebar}>
+                  <Ionicons name="car-outline" size={48} color="#d1d5db" />
+                  <Text style={styles.emptySidebarText}>Aucun parking</Text>
+                </View>
+              ) : (
+                parkings.map((p) => (
+                  <TouchableOpacity
+                    key={p.id}
+                    onPress={() => {
+                      if (p.user?.id) {
+                        handleSelectConversation(p.user.id, p.name, p.logo, p.id);
+                      }
+                    }}
+                    style={[
+                      styles.sidebarItem,
+                      selectedUserId === p.user?.id && styles.sidebarItemActive,
+                    ]}
+                  >
+                    <View style={styles.sidebarItemContent}>
+                      <View style={styles.sidebarLogoContainer}>
+                        <Image
+                          source={{
+                            uri: p.logo || 'https://cdn-icons-png.flaticon.com/512/2099/2099235.png',
+                          }}
+                          style={styles.sidebarLogo}
+                        />
+                        {selectedUserId === p.user?.id && (
+                          <View style={styles.activeIndicator} />
+                        )}
+                      </View>
+                      <View style={styles.sidebarItemInfo}>
+                        <Text style={styles.sidebarItemText} numberOfLines={1}>
+                          {p.name}
+                        </Text>
+                        <Text style={styles.sidebarMeta} numberOfLines={1}>
+                          {p.city}
+                        </Text>
+                      </View>
+                      {selectedUserId === p.user?.id ? (
+                        <Ionicons name="chatbubble" size={20} color="#667eea" />
+                      ) : (
+                        <Ionicons name="chatbubble-outline" size={20} color="#999" />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          )}
         </View>
 
-        {user.role === 'PARKING' ? (
-          // JUSTE LA LISTE DES CLIENTS
-          <ChatList
-            conversations={conversations}
-            onSelectConversation={handleSelectConversation}
-            currentUserId={user.id}
-            currentUserRole={user.role}
-          />
-        ) : (
-          <View style={{ flex: 1 }}>
-            <Text style={styles.sidebarTitle}>Parkings</Text>
-            {parkings.length === 0 ? (
-              <Text style={styles.emptySidebarText}>Aucun parking</Text>
-            ) : (
-              parkings.map((p) => (
-                <TouchableOpacity
-                  key={p.id}
-                  onPress={() => {
-                    if (p.user?.id) {
-                      handleSelectConversation(p.user.id, p.name, p.logo, p.id);
-                    }
-                  }}
-                  style={[
-                    styles.sidebarItem,
-                    selectedUserId === p.user?.id && styles.sidebarItemActive,
-                  ]}
-                >
-                  <Image
-                    source={{
-                      uri: p.logo || 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
-                    }}
-                    style={styles.sidebarLogo}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.sidebarItemText}>{p.name}</Text>
-                    <Text style={styles.sidebarMeta}>{p.city}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))
-            )}
-          </View>
-        )}
-      </View>
-
-      <View style={styles.main}>
-        {selectedUserId ? (
-          <ChatWindow
-            messages={messages}
-            onSendMessage={(text) => selectedUserId && sendMessage(text, selectedUserId)}
-            onDeleteMessage={deleteMessage}
-            onUpdateMessage={updateMessage}
-            receiverId={selectedUserId}
-            receiverName={receiverName}
-            receiverAvatar={receiverAvatar}
-            loading={loading}
-            currentUserRole={(user?.role as "PARKING" | "CLIENT")}
-          />
-        ) : (
-          <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>Sélectionnez une conversation</Text>
-            <Text style={styles.emptySubtitle}>
-              {user.role === 'PARKING'
-                ? 'Les clients qui vous ont contacté apparaîtront ici'
-                : 'Choisissez un parking pour commencer'}
-            </Text>
-          </View>
-        )}
-      </View>
-    </View>
+        {/* MAIN CONTENT */}
+        <View style={styles.main}>
+          {selectedUserId ? (
+            <ChatWindow
+              messages={messages}
+              onSendMessage={(text) => selectedUserId && sendMessage(text, selectedUserId)}
+              onDeleteMessage={deleteMessage}
+              onUpdateMessage={updateMessage}
+              onRetryMessage={retryMessage}
+              receiverId={selectedUserId}
+              receiverName={receiverName}
+              receiverAvatar={receiverAvatar}
+              loading={loading}
+              onBack={() => {
+                setSelectedUserId(null);
+                resetActivePartner();
+              }}
+              currentUserRole={user?.role as any}
+            />
+          ) : (
+            <View style={styles.emptyStateDesktop}>
+              <LinearGradient
+                colors={['#667eea', '#764ba2']}
+                style={styles.emptyGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Ionicons name="chatbubbles-outline" size={72} color="#fff" />
+              </LinearGradient>
+              <Text style={styles.emptyStateTitle}>Bienvenue dans le chat</Text>
+              <Text style={styles.emptyStateSubtitle}>
+                {user.role === 'PARKING'
+                  ? 'Les clients qui vous contactent apparaîtront ici'
+                  : 'Sélectionnez un parking pour commencer la discussion'}
+              </Text>
+              <View style={styles.emptyStateTips}>
+                <Text style={styles.tipsTitle}>💡 Conseils :</Text>
+                <Text style={styles.tipText}>• Soyez poli et clair dans vos messages</Text>
+                <Text style={styles.tipText}>• Les parkings répondent généralement sous 24h</Text>
+                <Text style={styles.tipText}>• Vous pouvez envoyer des photos si besoin</Text>
+              </View>
+            </View>
+          )}
+        </View>
+      </LinearGradient>
+    </SafeAreaView>
   );
 };
 
 export default Messages;
 
-// === STYLES MODERNES & PROPRES ===
+// === STYLES MODERNES & ÉLÉGANTS ===
 const styles = StyleSheet.create({
-  container: { flex: 1, flexDirection: 'row' },
-  sidebar: { width: 300, borderRightWidth: 1, borderRightColor: '#E5E5EA', backgroundColor: '#fff' },
-  main: { flex: 1, backgroundColor: '#f5f5f5' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-
-  // Header
-  header: {
-    height: 60,
-    backgroundColor: '#ffffffff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    marginBottom: 10,
-  },
-
-  headerDesktop: {
-    height: 56,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+  safeArea: {
+    flex: 1,
     backgroundColor: '#fff',
   },
-  headerTitle: {
-    color: '#0c0c0cff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: -20,
+  container: { 
+    flex: 1, 
+    flexDirection: 'row',
+    backgroundColor: '#f8f9ff',
   },
-  headerIcon: { padding: 4 },
+  sidebar: { 
+    width: 320, 
+    backgroundColor: '#fff',
+    shadowColor: '#ff7d00',
+    shadowOffset: { width: 4, height: 0 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+    zIndex: 10,
+  },
+  main: { 
+    flex: 1, 
+    backgroundColor: '#f8f9ff',
+  },
+  center: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    backgroundColor: '#f8f9ff',
+  },
 
-  // Sections
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    color: '#1F2A44',
+  // Gradients et backgrounds
+  loadingGradient: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  authGradient: {
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#f5576c',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+  },
+  cardGradient: {
+    borderRadius: 16,
+    padding: 1,
+  },
+  emptyGradient: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+
+  // Headers
+  header: {
+    height: 100,
+    paddingTop: 40,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  mobileHeader: {
+    height: 70,
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  backButton: {
+    padding: 8,
+    marginRight: 12,
+  },
+  mobileHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+    flex: 1,
+  },
+  sidebarHeader: {
+    height: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 24,
+    paddingHorizontal: 20,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  headerIcon: { 
+    padding: 4,
+  },
+
+  // Content areas
+  sidebarContent: {
+    flex: 1,
+    paddingTop: 20,
+  },
+  parkingListContainer: {
+    padding: 20,
+    paddingTop: 0,
+  },
+
+  // Welcome section
+  welcomeSection: {
+    marginBottom: 24,
+    paddingHorizontal: 4,
+  },
+  welcomeText: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#1F2A44',
+    marginBottom: 4,
+  },
+  welcomeSubtext: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
+  },
+
+  // Section titles
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2A44',
+    marginBottom: 16,
+    paddingHorizontal: 20,
+    letterSpacing: 0.3,
   },
   sidebarTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
+    fontWeight: '700',
     color: '#1F2A44',
-    paddingHorizontal: 16,
+    marginBottom: 16,
+    paddingHorizontal: 20,
   },
 
-  // Parking Card (mobile)
+  // Parking cards (mobile)
+  parkingsGrid: {
+    gap: 16,
+  },
   parkingCard: {
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    backgroundColor: '#fff',
+  },
+  cardContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    marginBottom: 12,
+    padding: 16,
+    borderRadius: 16,
     backgroundColor: '#fff',
-    borderRadius: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+  },
+  logoContainer: {
+    position: 'relative',
+    marginRight: 16,
   },
   parkingLogo: {
     width: 56,
     height: 56,
     borderRadius: 12,
-    marginRight: 14,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#f0f4ff',
   },
-  parkingInfo: { flex: 1 },
-  parkingName: { fontSize: 16, fontWeight: '600', color: '#1F2A44' },
-  parkingMeta: { color: '#666', marginTop: 4, fontSize: 14 },
-
-  // Sidebar Item (tablet)
-  sidebarItem: {
+  parkingInfo: {
+    flex: 1,
+  },
+  parkingName: { 
+    fontSize: 16, 
+    fontWeight: '700', 
+    color: '#1F2A44',
+    marginBottom: 6,
+  },
+  parkingMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    marginHorizontal: 12,
+    gap: 4,
     marginBottom: 8,
-    borderRadius: 12,
-    backgroundColor: '#f9f9f9',
   },
-  sidebarItemActive: { backgroundColor: '#e3f2fd' },
-  sidebarLogo: { width: 40, height: 40, borderRadius: 10, marginRight: 12, backgroundColor: '#f0f0f0' },
-  sidebarItemText: { fontSize: 15, fontWeight: '600', color: '#1F2A44' },
-  sidebarMeta: { fontSize: 13, color: '#666' },
+  parkingCity: { 
+    color: '#666', 
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  capacityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f4ff',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    gap: 4,
+  },
+  capacityText: { 
+    fontSize: 12, 
+    color: '#667eea',
+    fontWeight: '600',
+  },
+  chatIcon: {
+    marginLeft: 8,
+  },
 
-  // États vides
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
-  emptyTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 8, color: '#1F2A44' },
-  emptySubtitle: { color: '#666', fontSize: 14, textAlign: 'center' },
-  emptyState: { alignItems: 'center', marginTop: 40 },
-  emptyText: { color: '#999', fontSize: 15 },
-  emptySidebarText: { textAlign: 'center', color: '#999', marginTop: 20, paddingHorizontal: 16 },
+  // Sidebar items (tablet)
+  sidebarItem: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  sidebarItemActive: {
+    backgroundColor: '#f0f4ff',
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  sidebarItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  sidebarLogoContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  sidebarLogo: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#f0f4ff',
+  },
+  activeIndicator: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#10b981',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  sidebarItemInfo: {
+    flex: 1,
+  },
+  sidebarItemText: { 
+    fontSize: 15, 
+    fontWeight: '700', 
+    color: '#1F2A44',
+    marginBottom: 2,
+  },
+  sidebarMeta: { 
+    fontSize: 13, 
+    color: '#666',
+    fontWeight: '500',
+  },
 
-  loadingText: { textAlign: 'center', color: '#666', marginTop: 20 },
+  // Empty states
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  emptyStateDesktop: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptySidebar: {
+    alignItems: 'center',
+    paddingTop: 60,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2A44',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    color: '#999',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  emptyStateTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#1F2A44',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  emptyStateSubtitle: {
+    color: '#666',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 32,
+    maxWidth: 400,
+    lineHeight: 24,
+  },
+  emptySidebarText: { 
+    textAlign: 'center', 
+    color: '#999', 
+    marginTop: 12,
+    fontSize: 14,
+  },
+
+  // Loading states
+  loadingText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 16,
+  },
+  authText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  loadingParkingsText: {
+    color: '#667eea',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 12,
+  },
+
+  // Tips section
+  emptyStateTips: {
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 16,
+    marginTop: 24,
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  tipsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2A44',
+    marginBottom: 12,
+  },
+  tipText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+    lineHeight: 20,
+  },
 });

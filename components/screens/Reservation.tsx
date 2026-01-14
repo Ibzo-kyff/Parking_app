@@ -171,12 +171,6 @@ const ReservationPage: React.FC<ReservationListProps> = ({
   const [showActionModal, setShowActionModal] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
 
-
-
-  // ... (existing imports)
-
-  // ... (inside component)
-
   // ------------------------ PUSHER EVENTS ----------------
   const handleReservationUpdate = async (data: any) => {
     // 1. Rafraîchir les données
@@ -633,7 +627,6 @@ const ReservationPage: React.FC<ReservationListProps> = ({
   return (
     <View style={styles.mainContainer}>
       {renderActionModal()}
-
       {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.headerContent}>

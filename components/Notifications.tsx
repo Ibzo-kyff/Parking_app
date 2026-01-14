@@ -69,18 +69,18 @@ const Notifications = () => {
         setLoading(false);
         return;
       }
-      
+
       // S'assurer que data est un tableau
       const notificationsData = Array.isArray(data) ? data : [];
-      
+
       // Déduplication supplémentaire côté frontend
       const uniqueNotifications = notificationsData.filter((notification, index, self) => {
         const key = `${notification.title}_${notification.message}_${notification.type}`;
-        return index === self.findIndex(n => 
+        return index === self.findIndex(n =>
           `${n.title}_${n.message}_${n.type}` === key
         );
       });
-      
+
       const formatted = uniqueNotifications.map((n: any) => ({
         id: n.id,
         title: n.title || "Sans titre",
@@ -214,8 +214,8 @@ const Notifications = () => {
         <View style={{ marginTop: 40, marginBottom: 20 }}>
           <Text style={styles.header}>Notifications</Text>
           <Text style={styles.subHeader}>
-            {userRole === 'PARKING' ? `Parking ID: ${parkingId}` : 
-             (userRole === 'CLIENT' || userRole === 'USER') ? `Utilisateur ID: ${userId}` : ''}
+            {userRole === 'PARKING' ? `Parking ID: ${parkingId}` :
+              (userRole === 'CLIENT' || userRole === 'USER') ? `Utilisateur ID: ${userId}` : ''}
           </Text>
         </View>
 
@@ -258,12 +258,10 @@ const Notifications = () => {
           onRefresh={handleRefresh}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                Aucune notification
-              </Text>
+              <Text style={styles.emptyText}>Aucune notification</Text>
               <Text style={styles.emptySubText}>
-                {userRole === 'PARKING' 
-                  ? "Les nouvelles réservations apparaîtront ici" 
+                {userRole === 'PARKING'
+                  ? "Les nouvelles réservations apparaîtront ici"
                   : "Vos notifications apparaîtront ici"}
               </Text>
             </View>
@@ -364,6 +362,8 @@ const styles = StyleSheet.create({
   titre: { fontSize: 16, fontWeight: "bold", marginBottom: 4 },
   date: { fontSize: 12, color: "gray", marginBottom: 6 },
   message: { fontSize: 14, color: "#555", marginRight: 60 },
+  unreadMessage: { fontWeight: '700', color: '#000' },
+  chatHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   unreadBadge: {
     position: "absolute",
     top: 10,

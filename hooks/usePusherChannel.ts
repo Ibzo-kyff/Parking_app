@@ -1,65 +1,53 @@
-import { useEffect, useState } from 'react';
-import { initializePusher, cleanupPusher } from '../app/utils/pusher';
+import { useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { initializePusher } from '../app/utils/pusher';
+import { Channel } from 'pusher-js';
 
-type EventHandler = (data: any) => void;
-
-interface EventBinding {
-    eventName: string;
-    handler: EventHandler;
+interface PusherEvent {
+  eventName: string;
+  handler: (data: any) => void;
 }
 
-export const usePusherChannel = (events: EventBinding[] = []) => {
-    const { user } = useAuth();
-    const [pusher, setPusher] = useState<any>(null);
+export const usePusherChannel = (events: PusherEvent[]) => {
+  const { user } = useAuth();
+  const channelRef = useRef<Channel | null>(null);
 
-    useEffect(() => {
-        if (!user) return;
+  useEffect(() => {
+    if (!user?.id) return;
 
-        let pusherInstance: any = null;
-        let channel: any = null;
+    let mounted = true;
+    const channelName = `private-user-${user.id}`;
 
-        const setupPusher = async () => {
-            pusherInstance = await initializePusher(user.id);
-            setPusher(pusherInstance);
+    const setupPusher = async () => {
+      try {
+        const pusher = await initializePusher(Number(user.id));
 
-            // S'abonner au channel privé
-            const channelName = `private-user_${user.id}`;
-            channel = pusherInstance.subscribe(channelName);
+        if (!mounted) return;
 
-            channel.bind('pusher:subscription_succeeded', () => {
-                console.log(`✅ Abonné avec succès au channel : ${channelName}`);
-            });
+        console.log(`🔌 [usePusherChannel] Abonnement au canal: ${channelName}`);
+        const channel = pusher.subscribe(channelName);
+        channelRef.current = channel;
 
-            channel.bind('pusher:subscription_error', (status: any) => {
-                console.error(`❌ Erreur abonnement channel ${channelName}:`, status);
-            });
+        // Bind events
+        events.forEach(({ eventName, handler }) => {
+          channel.bind(eventName, handler);
+        });
 
-            // Binder les événements
-            events.forEach(({ eventName, handler }) => {
-                channel.bind(eventName, (data: any) => {
-                    console.log(`📡 Événement Pusher reçu [${eventName}]:`, data);
-                    handler(data);
-                });
-            });
-        };
+      } catch (error) {
+        console.error('❌ [usePusherChannel] Erreur setup:', error);
+      }
+    };
 
-        setupPusher();
+    setupPusher();
 
-        return () => {
-            // Nettoyage
-            if (channel) {
-                events.forEach(({ eventName, handler }) => {
-                    channel.unbind(eventName);
-                });
-                if (pusherInstance) {
-                    const channelName = `private-user_${user.id}`;
-                    pusherInstance.unsubscribe(channelName);
-                }
-            }
-            // cleanupPusher(); // Optionnel selon si singleton ou non, mais prudent de garder
-        };
-    }, [user, events]); // Attention: events doit être stable (useMemo ou défini hors render)
-
-    return pusher;
+    return () => {
+      mounted = false;
+      if (channelRef.current) {
+        console.log(`🔌 [usePusherChannel] Nettoyage events pour ${channelName}`);
+        events.forEach(({ eventName, handler }) => {
+          channelRef.current?.unbind(eventName, handler);
+        });
+      }
+    };
+  }, [user?.id, events]);
 };
