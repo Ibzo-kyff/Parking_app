@@ -43,6 +43,7 @@ interface Vehicule {
   photos: string[] | string;
   dureeGarantie?: number;
   mileage?: number;
+  transmission?: string;
   fuelType?: string;
   carteGrise?: boolean;
   assurance?: boolean;
@@ -90,7 +91,9 @@ function CarDetailScreen() {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
+  const [modalPayVisible, setModalPayVisible] = useState(false);
+  const [currentReservation, setCurrentReservation] = useState<any>(null); // Pour stocker la réservation créée
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   // États pour le favoris
   const [isFavorite, setIsFavorite] = useState(false);
 
@@ -206,16 +209,16 @@ function CarDetailScreen() {
     }
   }
 
-  async function showLocalNotification(title: string, body: string, data: any) {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title,
-        body,
-        data,
-      },
-      trigger: null,
-    });
-  }
+  async function showLocalNotification(title: string, body: string, data?: any) {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title,
+          body,
+          ...(data !== undefined ? { data } : {}),
+        },
+        trigger: null,
+      });
+    }
 
   // Fonction pour vérifier l'état favoris
   const checkFavoriteStatus = async () => {
@@ -631,33 +634,19 @@ function CarDetailScreen() {
       const newReservation = await response.json();
       console.log('✅ Réservation créée:', newReservation);
 
-      // NOTIFICATION LOCALE POUR L'UTILISATEUR SEULEMENT
-      // NE PAS CRÉER DE NOTIFICATION BACKEND POUR ÉVITER LES DOUBLONS
-      try {
-        await showLocalNotification(
-          "🎉 Réservation confirmée !",
-          `Votre ${reservationType.toLowerCase()} de ${vehicule.marqueRef?.name || ''} ${vehicule.model || ''} est confirmée.`,
-          {
-            type: 'RESERVATION_CONFIRMATION',
-            vehicleId: vehicule.id,
-            reservationType: reservationType
-          }
-        );
-        console.log('✅ Notification locale envoyée');
-      } catch (notificationError) {
-        console.warn('⚠️ Notification locale échouée:', notificationError);
-      }
-
-      // LE BACKEND CRÉERA AUTOMATIQUEMENT LES NOTIFICATIONS POUR LE PARKING ET L'UTILISATEUR
-      // NE PAS CRÉER DE NOTIFICATIONS BACKEND MANUELLEMENT POUR ÉVITER LES DOUBLONS
-
       Alert.alert(
-        'Succès 🎉', 
-        `Réservation ${reservationType.toLowerCase()} confirmée !\n\nLe parking a été notifié de votre réservation.`,
-        [{ text: 'OK', onPress: () => {
-          setModalVisible(false);
-        }}]
-      );
+      'Succès 🎉', 
+      `Réservation ${reservationType.toLowerCase()} confirmée !\n\nVeuillez maintenant choisir un mode de paiement.`,
+      [
+        {
+          text: 'Choisir le paiement',
+          onPress: () => {
+            setCurrentReservation(newReservation);
+            setModalPayVisible(true);
+          }
+        }
+      ]
+    );
 
     } catch (error: any) {
       console.error('❌ Erreur réservation:', error);
@@ -874,48 +863,49 @@ function CarDetailScreen() {
           </View>
           
           <View style={styles.featuresGrid}>
-            {renderFeatureItem(
-              <Ionicons name="calendar" size={24} color={PRIMARY_COLOR} />,
-              'Année',
-              vehicule.year,
-              !!vehicule.year
-            )}
-            
-            {renderFeatureItem(
-              <Feather name="activity" size={24} color={PRIMARY_COLOR} />,
-              'Kilométrage',
-              vehicule.mileage ? formatMileage(vehicule.mileage) : null,
-              vehicule.mileage !== undefined
-            )}
-            
-            {renderFeatureItem(
-              getFuelIcon(vehicule.fuelType),
-              'Carburant',
-              vehicule.fuelType,
-              !!vehicule.fuelType
-            )}
-            
-            {renderFeatureItem(
-              <FontAwesome5 name="user-tie" size={22} color={PRIMARY_COLOR} />,
-              'Chauffeur',
-              vehicule.chauffeur,
-              vehicule.chauffeur !== undefined
-            )}
-            
-            {renderFeatureItem(
-              <MaterialCommunityIcons name="license" size={24} color={PRIMARY_COLOR} />,
-              'Carte Grise',
-              vehicule.carteGrise,
-              vehicule.carteGrise !== undefined
-            )}
-            
-            {renderFeatureItem(
-              <Ionicons name="document-text" size={24} color={PRIMARY_COLOR} />,
-              'Vignette',
-              vehicule.vignette,
-              vehicule.vignette !== undefined
-            )}
-          </View>
+  {renderFeatureItem(
+    <Ionicons name="calendar" size={24} color={PRIMARY_COLOR} />,
+    'Année',
+    vehicule.year,
+    !!vehicule.year
+  )}
+  
+  {renderFeatureItem(
+    <Feather name="activity" size={24} color={PRIMARY_COLOR} />,
+    'Kilométrage',
+    vehicule.mileage ? formatMileage(vehicule.mileage) : null,
+    vehicule.mileage !== undefined
+  )}
+  
+  {renderFeatureItem(
+    getFuelIcon(vehicule.fuelType),
+    'Carburant',
+    vehicule.fuelType,
+    !!vehicule.fuelType
+  )}
+
+  {/* ← NOUVELLE LIGNE ICI */}
+  {renderFeatureItem(
+    <MaterialCommunityIcons name="cog-transfer" size={24} color={PRIMARY_COLOR} />,
+    'Boîte de vitesse',
+    vehicule.transmission,
+    !!vehicule.transmission
+  )}
+  
+  {renderFeatureItem(
+    <MaterialCommunityIcons name="license" size={24} color={PRIMARY_COLOR} />,
+    'Carte Grise',
+    vehicule.carteGrise,
+    vehicule.carteGrise !== undefined
+  )}
+  
+  {renderFeatureItem(
+    <Ionicons name="document-text" size={24} color={PRIMARY_COLOR} />,
+    'Vignette',
+    vehicule.vignette,
+    vehicule.vignette !== undefined
+  )}
+</View>
         </View>
 
         {/* Description */}
@@ -1130,6 +1120,128 @@ function CarDetailScreen() {
           </View>
         </Modal>
       )}
+      {/* Modal de Paiement */}
+<Modal
+  animationType="slide"
+  transparent={true}
+  visible={modalPayVisible}
+  onRequestClose={() => setModalPayVisible(false)}
+>
+  <View style={styles.modalOverlay}>
+    <View style={styles.modalContent}>
+      <View style={styles.modalHeader}>
+        <Text style={styles.modalTitle}>Choix du paiement</Text>
+        <TouchableOpacity onPress={() => setModalPayVisible(false)}>
+          <Ionicons name="close" size={24} color={SECONDARY_COLOR} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.modalBody}>
+        <Text style={styles.paymentAmount}>
+          Montant : <Text style={{ fontWeight: 'bold', color: PRIMARY_COLOR }}>
+            {formatPrice(vehicule.prix)}
+          </Text>
+        </Text>
+
+        <Text style={styles.paymentSubtitle}>
+          Sélectionnez votre mode de paiement préféré
+        </Text>
+
+        {/* Option Espèces - Disponible */}
+        <TouchableOpacity
+          style={styles.paymentOption}
+          onPress={async () => {
+            setIsProcessingPayment(true);
+            // Simulation du paiement en espèces
+            setTimeout(async () => {
+              try {
+                // Ici tu pourras plus tard appeler une API pour confirmer le paiement en espèces
+                // Pour l'instant, on simule une confirmation
+
+                await showLocalNotification(
+                  "💰 Paiement en espèces",
+                  `Vous avez choisi de payer en espèces le véhicule ${vehicule.marqueRef?.name || ''} ${vehicule.model}. Le parking vous contactera pour organiser le règlement.`
+                );
+
+                Alert.alert(
+                  'Paiement en espèces ✅',
+                  'Votre choix a été enregistré.\nLe parking vous contactera bientôt pour organiser le paiement et la remise du véhicule.',
+                  [{
+                    text: 'Terminer',
+                    onPress: () => {
+                      setModalPayVisible(false);
+                      setModalVisible(false); // Ferme aussi le modal de réservation
+                      // Optionnel : rediriger vers mes réservations
+                    }
+                  }]
+                );
+              } catch (err) {
+                Alert.alert('Erreur', 'Une erreur est survenue');
+              } finally {
+                setIsProcessingPayment(false);
+              }
+            }, 1500);
+          }}
+          disabled={isProcessingPayment}
+        >
+          <View style={styles.paymentOptionContent}>
+            <View style={styles.paymentIconContainer}>
+              <FontAwesome5 name="money-bill-wave" size={28} color="#28a745" />
+            </View>
+            <View style={styles.paymentTextContainer}>
+              <Text style={styles.paymentOptionTitle}>Espèces</Text>
+              <Text style={styles.paymentOptionDesc}>Paiement en main propre lors de la remise</Text>
+            </View>
+            <Ionicons name="checkmark-circle" size={24} color="#28a745" />
+          </View>
+        </TouchableOpacity>
+
+        {/* Option Orange Money - Verrouillée */}
+        <View style={[styles.paymentOption, styles.paymentOptionDisabled]}>
+          <View style={styles.paymentOptionContent}>
+            <View style={styles.paymentIconContainer}>
+              <Image 
+                source={require('../assets/orange-money-logo.png')} // À ajouter dans tes assets
+                style={{ width: 40, height: 40 }}
+                resizeMode="contain"
+              />
+            </View>
+            <View style={styles.paymentTextContainer}>
+              <Text style={styles.paymentOptionTitle}>Orange Money</Text>
+              <Text style={styles.paymentOptionDesc}>Bientôt disponible</Text>
+            </View>
+            <MaterialIcons name="lock" size={24} color="#999" />
+          </View>
+        </View>
+
+        {/* Option Wave - Verrouillée */}
+        <View style={[styles.paymentOption, styles.paymentOptionDisabled]}>
+          <View style={styles.paymentOptionContent}>
+            <View style={styles.paymentIconContainer}>
+              <Image 
+                source={require('../assets/wave-logo.png')} // À ajouter dans tes assets
+                style={{ width: 40, height: 40 }}
+                resizeMode="contain"
+              />
+            </View>
+            <View style={styles.paymentTextContainer}>
+              <Text style={styles.paymentOptionTitle}>Wave</Text>
+              <Text style={styles.paymentOptionDesc}>Bientôt disponible</Text>
+            </View>
+            <MaterialIcons name="lock" size={24} color="#999" />
+          </View>
+        </View>
+
+        {isProcessingPayment && (
+          <View style={styles.processingContainer}>
+            <ActivityIndicator size="small" color={PRIMARY_COLOR} />
+            <Text style={styles.processingText}>Traitement en cours...</Text>
+          </View>
+        )}
+      </View>
+    </View>
+  </View>
+</Modal>
     </SafeAreaView>
   );
 }
@@ -1766,6 +1878,60 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginLeft: 8,
   },
+  paymentAmount: {
+  fontSize: 18,
+  textAlign: 'center',
+  marginBottom: 8,
+},
+paymentSubtitle: {
+  fontSize: 15,
+  color: '#666',
+  textAlign: 'center',
+  marginBottom: 24,
+},
+paymentOption: {
+  backgroundColor: '#fff',
+  borderRadius: 16,
+  padding: 16,
+  marginBottom: 12,
+  borderWidth: 1,
+  borderColor: '#e0e0e0',
+},
+paymentOptionDisabled: {
+  opacity: 0.6,
+  backgroundColor: '#f8f9fa',
+},
+paymentOptionContent: {
+  flexDirection: 'row',
+  alignItems: 'center',
+},
+paymentIconContainer: {
+  marginRight: 16,
+},
+paymentTextContainer: {
+  flex: 1,
+},
+paymentOptionTitle: {
+  fontSize: 16,
+  fontWeight: '600',
+  color: SECONDARY_COLOR,
+},
+paymentOptionDesc: {
+  fontSize: 13,
+  color: '#888',
+  marginTop: 4,
+},
+processingContainer: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginTop: 20,
+},
+processingText: {
+  marginLeft: 10,
+  color: '#666',
+  fontSize: 14,
+},
 });
 
 export default CarDetailScreen;
