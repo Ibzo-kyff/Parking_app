@@ -312,7 +312,7 @@ const takePhoto = async () => {
         
         {refreshing && (
           <View style={styles.refreshingIndicator}>
-            <ActivityIndicator size="small" color="#FDB913" />
+            <ActivityIndicator size="small" color="#ff7d00" />
             <Text style={styles.refreshingText}>Mise à jour...</Text>
           </View>
         )}
@@ -322,7 +322,7 @@ const takePhoto = async () => {
         <Link href="../(profil)/infopersonnel" asChild>
           <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
             <View style={styles.menuIcon}>
-              <Ionicons name="person-outline" size={24} color="#FDB913" />
+              <Ionicons name="person-outline" size={24} color="#ff7d00" />
             </View>
             <View style={styles.menuTextContainer}>
               <Text style={styles.menuItemText}>Informations personnelles</Text>
@@ -335,7 +335,7 @@ const takePhoto = async () => {
         <Link href="../(profil)/parametre" asChild>
           <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
             <View style={styles.menuIcon}>
-              <Feather name="settings" size={24} color="#FDB913" />
+              <Feather name="settings" size={24} color="#ff7d00" />
             </View>
             <View style={styles.menuTextContainer}>
               <Text style={styles.menuItemText}>Paramètres</Text>
@@ -348,7 +348,7 @@ const takePhoto = async () => {
         <Link href="../(profil)/aide" asChild>
           <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
             <View style={styles.menuIcon}>
-              <Feather name="help-circle" size={24} color="#FDB913" />
+              <Feather name="help-circle" size={24} color="#ff7d00" />
             </View>
             <View style={styles.menuTextContainer}>
               <Text style={styles.menuItemText}>Aide & Support</Text>
@@ -361,7 +361,7 @@ const takePhoto = async () => {
           <Link href="../(profil)/monparking" asChild>
             <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
               <View style={styles.menuIcon}>
-                <MaterialCommunityIcons name="parking" size={24} color="#FDB913" />
+                <MaterialCommunityIcons name="parking" size={24} color="#ff7d00" />
               </View>
               <View style={styles.menuTextContainer}>
                 <Text style={styles.menuItemText}>Mon Parking</Text>
@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(253, 185, 19, 0.15)',
+    backgroundColor: 'rgba(196, 194, 190, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
@@ -559,9 +559,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     marginBottom: 15,
+    backgroundColor: '#ff7d00',
   },
   logoutButtonText: {
-    color: '#FDB913',
+    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },

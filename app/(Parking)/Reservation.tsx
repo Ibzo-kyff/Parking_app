@@ -3,6 +3,7 @@ import {
   getReservationsParking,
   acceptReservationApi,
   declineReservationApi,
+  cancelReservationParkingApi,
 } from "../../components/services/reservationApi";
 
 export default function ReservationsParking() {
@@ -11,6 +12,7 @@ export default function ReservationsParking() {
       fetchReservations={getReservationsParking}
       acceptReservation={acceptReservationApi}
       declineReservation={declineReservationApi}
+      cancelReservation={cancelReservationParkingApi}
       isParking={true}
     />
   );

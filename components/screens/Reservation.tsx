@@ -21,7 +21,7 @@ import { Ionicons, MaterialIcons, FontAwesome5, MaterialCommunityIcons } from "@
 import { usePusherChannel } from "../../hooks/usePusherChannel";
 
 // ---------------- TYPES BACKEND ------------------
-export type ReservationStatus = "PENDING" | "ACCEPTED" | "COMPLETED" | "CANCELED";
+export type ReservationStatus = "PENDING" | "ACCEPTED" | "COMPLETED" | "CANCELED" | "DECLINED";
 export type ReservationType = "ACHAT" | "LOCATION";
 
 export type Reservation = {
@@ -61,6 +61,7 @@ const translateStatus = (status: ReservationStatus): string => {
     ACCEPTED: "Acceptée",
     COMPLETED: "Terminée",
     CANCELED: "Annulée",
+    DECLINED: "Refusée",
   };
   return map[status] || status;
 };
@@ -71,13 +72,14 @@ const getStatusIcon = (status: ReservationStatus) => {
     case "ACCEPTED": return { name: "check-circle", color: "#4CAF50", icon: MaterialCommunityIcons };
     case "COMPLETED": return { name: "flag-checkered", color: "#2196F3", icon: MaterialCommunityIcons };
     case "CANCELED": return { name: "close-circle", color: "#F44336", icon: MaterialCommunityIcons };
+    case "DECLINED": return { name: "minus-circle", color: "#E53935", icon: MaterialCommunityIcons };
     default: return { name: "help-circle", color: "#757575", icon: MaterialCommunityIcons };
   }
 };
 
 const getTypeIcon = (type: ReservationType) => {
   switch (type) {
-    case "ACHAT": return { name: "shopping", color: "#9C27B0", icon: MaterialIcons };
+    case "ACHAT": return { name: "shopping-cart", color: "#9C27B0", icon: MaterialIcons };
     case "LOCATION": return { name: "car-rental", color: "#FF6200", icon: MaterialIcons };
     default: return { name: "help", color: "#757575", icon: MaterialIcons };
   }
@@ -89,6 +91,7 @@ const getStatusBgColor = (status: ReservationStatus): string => {
     ACCEPTED: "#E8F5E9",
     COMPLETED: "#E3F2FD",
     CANCELED: "#FFEBEE",
+    DECLINED: "#FFEBEE",
   };
   return colors[status] || "#F5F5F5";
 };
@@ -130,7 +133,7 @@ const isDatePassed = (dateString: string | null): boolean => {
 
 // Déterminer l'onglet basé sur le statut ET la date
 const mapStatusToTab = (reservation: Reservation): "À venir" | "Terminée" | "Annulée" => {
-  if (reservation.status === "CANCELED") return "Annulée";
+  if (reservation.status === "CANCELED" || reservation.status === "DECLINED") return "Annulée";
 
   // Si la date de fin est dépassée, c'est terminé
   if (reservation.dateFin && isDatePassed(reservation.dateFin)) {
@@ -228,16 +231,24 @@ const ReservationPage: React.FC<ReservationListProps> = ({
   };
 
   // ------------------------ ACTIONS ----------------------
+
   const handleAccept = async (id: number) => {
     if (!acceptReservation) return;
     try {
       await acceptReservation(id);
-      await loadReservations();
+
+      // Mise à jour optimiste locale
+      setReservations(prev => prev.map(r => r.id === id ? { ...r, status: "ACCEPTED" } : r));
+
       Alert.alert("Succès", "Réservation acceptée avec succès");
       setShowActionModal(false);
       setSelectedReservation(null);
+
+      // Rafraîchissement en arrière-plan
+      loadReservations();
     } catch (err: any) {
-      Alert.alert("Erreur", err.message || "Impossible d'accepter");
+      const message = err.response?.data?.message || err.message || "Impossible d'accepter";
+      Alert.alert("Erreur", message);
     }
   };
 
@@ -245,12 +256,19 @@ const ReservationPage: React.FC<ReservationListProps> = ({
     if (!declineReservation) return;
     try {
       await declineReservation(id);
-      await loadReservations();
+
+      // Mise à jour optimiste locale
+      setReservations(prev => prev.map(r => r.id === id ? { ...r, status: "CANCELED" } : r));
+
       Alert.alert("Succès", "Réservation déclinée");
       setShowActionModal(false);
       setSelectedReservation(null);
+
+      // Rafraîchissement en arrière-plan
+      loadReservations();
     } catch (err: any) {
-      Alert.alert("Erreur", err.message || "Impossible de décliner");
+      const message = err.response?.data?.message || err.message || "Impossible de décliner";
+      Alert.alert("Erreur", message);
     }
   };
 
@@ -266,12 +284,19 @@ const ReservationPage: React.FC<ReservationListProps> = ({
           onPress: async () => {
             try {
               await cancelReservation(id);
-              await loadReservations();
+
+              // Mise à jour optimiste locale
+              setReservations(prev => prev.map(r => r.id === id ? { ...r, status: "CANCELED" } : r));
+
               Alert.alert("Succès", "Réservation annulée");
               setShowActionModal(false);
               setSelectedReservation(null);
+
+              // Rafraîchissement en arrière-plan
+              loadReservations();
             } catch (err: any) {
-              Alert.alert("Erreur", err.message || "Impossible d'annuler");
+              const message = err.response?.data?.message || err.message || "Impossible d'annuler";
+              Alert.alert("Erreur", message);
             }
           },
         },
@@ -402,13 +427,13 @@ const ReservationPage: React.FC<ReservationListProps> = ({
               {/* Statut et type */}
               <View style={styles.modalStatusContainer}>
                 <View style={[styles.modalStatusBadge, { backgroundColor: getStatusBgColor(selectedReservation.status) }]}>
-                  <StatusIconComponent name={statusIcon.name} size={16} color={statusIcon.color} />
+                  <StatusIconComponent name={statusIcon.name as any} size={16} color={statusIcon.color} />
                   <Text style={[styles.modalStatusText, { color: statusIcon.color }]}>
                     {translateStatus(selectedReservation.status)}
                   </Text>
                 </View>
                 <View style={[styles.modalTypeBadge, { backgroundColor: `${typeIcon.color}15` }]}>
-                  <TypeIconComponent name={typeIcon.name} size={16} color={typeIcon.color} />
+                  <TypeIconComponent name={typeIcon.name as any} size={16} color={typeIcon.color} />
                   <Text style={[styles.modalTypeText, { color: typeIcon.color }]}>
                     {selectedReservation.type === "ACHAT" ? "Achat" : "Location"}
                   </Text>
@@ -565,7 +590,6 @@ const ReservationPage: React.FC<ReservationListProps> = ({
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalButtonCancel]}
                 onPress={() => {
-                  setShowActionModal(false);
                   handleCancel(selectedReservation.id);
                 }}
               >
@@ -576,7 +600,6 @@ const ReservationPage: React.FC<ReservationListProps> = ({
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalButtonDecline]}
                 onPress={() => {
-                  setShowActionModal(false);
                   handleDecline(selectedReservation.id);
                 }}
               >
@@ -587,7 +610,6 @@ const ReservationPage: React.FC<ReservationListProps> = ({
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalButtonAccept]}
                 onPress={() => {
-                  setShowActionModal(false);
                   handleAccept(selectedReservation.id);
                 }}
               >
@@ -741,7 +763,7 @@ const ReservationPage: React.FC<ReservationListProps> = ({
                   {/* Badge de statut */}
                   <View style={styles.statusContainer}>
                     <View style={[styles.statusBadge, { backgroundColor: getStatusBgColor(item.status) }]}>
-                      <StatusIconComponent name={statusIcon.name} size={14} color={statusIcon.color} />
+                      <StatusIconComponent name={statusIcon.name as any} size={14} color={statusIcon.color} />
                       <Text style={[styles.statusText, { color: statusIcon.color }]}>
                         {translateStatus(item.status)}
                       </Text>
@@ -756,7 +778,7 @@ const ReservationPage: React.FC<ReservationListProps> = ({
                   {/* Badge type */}
                   <View style={styles.typeBadgeContainer}>
                     <View style={[styles.typeBadge, { backgroundColor: `${typeIcon.color}20` }]}>
-                      <TypeIconComponent name={typeIcon.name} size={12} color={typeIcon.color} />
+                      <TypeIconComponent name={typeIcon.name as any} size={12} color={typeIcon.color} />
                       <Text style={[styles.typeText, { color: typeIcon.color }]}>
                         {item.type === "ACHAT" ? "Achat" : "Location"}
                       </Text>
