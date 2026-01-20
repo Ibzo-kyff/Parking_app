@@ -49,6 +49,8 @@ interface Vehicule {
   assurance?: boolean;
   status?: string;
   year?: number;
+  forSale?: boolean;
+  forRent?: boolean;
 }
 
 const { width } = Dimensions.get('window');
@@ -185,11 +187,11 @@ const ListVoiture = () => {
     }
     
     if (advancedFilters.forSale) {
-      filtered = filtered.filter(v => v.status === 'DISPONIBLE' || v.status === 'EN_VENTE');
+      filtered = filtered.filter(v => v.forSale);
     }
     
     if (advancedFilters.forRent) {
-      filtered = filtered.filter(v => v.status === 'EN_LOCATION');
+      filtered = filtered.filter(v => v.forRent);
     }
     
     return filtered;
@@ -233,10 +235,10 @@ const ListVoiture = () => {
         filtered = filtered.filter(v => v.prix > 30000000);
         break;
       case 'vente':
-        filtered = filtered.filter(v => v.status === 'DISPONIBLE' || v.status === 'EN_VENTE');
+        filtered = filtered.filter(v => v.forSale);
         break;
       case 'location':
-        filtered = filtered.filter(v => v.status === 'EN_LOCATION');
+        filtered = filtered.filter(v => v.forRent);
         break;
       default:
         if (filterType !== 'all') {
@@ -290,6 +292,20 @@ const ListVoiture = () => {
         : `${BASE_URL}${item.parking.logo}`
       : null;
 
+    let badgeText = '';
+    let badgeStyle: any = styles.statusBadge;
+
+    if (item.forSale && item.forRent) {
+      badgeText = 'Vente/Location';
+      badgeStyle = [styles.statusBadge, styles.statusAvailable];
+    } else if (item.forRent) {
+      badgeText = 'À louer';
+      badgeStyle = [styles.statusBadge, styles.statusRent];
+    } else if (item.forSale) {
+      badgeText = 'À vendre';
+      badgeStyle = [styles.statusBadge, styles.statusSale];
+    }
+
     return (
       <TouchableOpacity 
         style={styles.card}
@@ -322,16 +338,10 @@ const ListVoiture = () => {
           )}
           
           {/* Badge de statut */}
-          {item.status && (
-            <View style={[
-              styles.statusBadge,
-              item.status === 'EN_LOCATION' && styles.statusRent,
-              item.status === 'EN_VENTE' && styles.statusSale,
-              item.status === 'DISPONIBLE' && styles.statusAvailable
-            ]}>
+          {(item.forSale || item.forRent) && (
+            <View style={badgeStyle}>
               <Text style={styles.statusText}>
-                {item.status === 'EN_LOCATION' ? 'Location' : 
-                 item.status === 'EN_VENTE' ? 'Vente' : 'Disponible'}
+                {badgeText}
               </Text>
             </View>
           )}
@@ -945,18 +955,18 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   statusRent: {
-    backgroundColor: 'rgba(52, 199, 89, 0.15)',
+    backgroundColor: '#34c759',
   },
   statusSale: {
-    backgroundColor: 'rgba(255, 59, 48, 0.15)',
+    backgroundColor: '#ff3b30',
   },
   statusAvailable: {
-    backgroundColor: 'rgba(0, 122, 255, 0.15)',
+    backgroundColor: '#ff7b00c8',
   },
   statusText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#1d1d1f',
+    color: '#fff',
   },
   cardContent: {
     padding: 12,

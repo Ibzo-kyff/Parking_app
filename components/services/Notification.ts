@@ -78,12 +78,9 @@ export const getNotifications = async (
     if (params.toString()) {
       url += `?${params.toString()}`;
     }
-
-    console.log(`📋 Fetch notifications URL: ${url}`);
-    console.log(`📋 Headers:`, headers);
     
     const response = await api.get(url, { headers });
-    console.log(`✅ ${response.data.data?.length || 0} notifications récupérées`);
+    console.log(` ${response.data.data?.length || 0} notifications récupérées`);
     
     const notifications = response.data.data || response.data || [];
     
@@ -116,7 +113,7 @@ export const getNotifications = async (
     }
 
     if (axiosError.response?.status === 401) {
-      console.log("🔄 Token expiré ou invalide - déconnexion recommandée");
+      console.log(" Token expiré ou invalide - déconnexion recommandée");
     }
     
     return [];
@@ -172,7 +169,7 @@ export const createReservationNotification = async (notificationData: {
   type?: string;
 }): Promise<boolean> => {
   try {
-    console.log("🚀 Création notification réservation pour parking:", notificationData.parkingId);
+    console.log(" Création notification réservation pour parking:", notificationData.parkingId);
 
     if (!notificationData.parkingId) {
       console.error("❌ Notification réservation sans parkingId");
@@ -321,7 +318,7 @@ export const checkNotificationPermissions = async (): Promise<boolean> => {
     
     return finalStatus === 'granted';
   } catch (error) {
-    console.error("❌ Erreur vérification permissions notifications:", error);
+    console.error(" Erreur vérification permissions notifications:", error);
     return false;
   }
 };

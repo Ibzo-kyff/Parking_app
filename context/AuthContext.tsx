@@ -109,7 +109,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     try {
-      const response = await axios.post(`${BASE_URL}auth/refresh`, { refreshToken: authState.refreshToken }, {
+      const response = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken: authState.refreshToken }, {
         withCredentials: true
       });
       const { accessToken, refreshToken: newRefreshToken } = response.data; // ← AJOUT : Gère rotation

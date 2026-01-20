@@ -9,7 +9,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { FontAwesome } from '@expo/vector-icons';
+import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import Header from '../Header';
 import { getVehicules, getParkings } from "../../components/services/accueil";
@@ -29,13 +29,14 @@ const Accueil: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute<AccueilRouteProp>();
 
-  // ✅ states
+  //  states
   const [vehicules, setVehicules] = useState<any[]>([]);
   const [parkings, setParkings] = useState<any[]>([]);
   const [marques, setMarques] = useState<any[]>([]);
   const [loadingVehicules, setLoadingVehicules] = useState(true);
   const [loadingParkings, setLoadingParkings] = useState(true);
   const [loadingMarques, setLoadingMarques] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL;
   useEffect(() => {
     const fetchVehicules = async () => {
@@ -50,7 +51,19 @@ const Accueil: React.FC = () => {
     };
     fetchVehicules();
   }, []);
+  const handleSearch = () => {
+    if (searchQuery.trim().length > 0) {
+      router.push({
+        pathname: '/(Clients)/listVoiture',
+        params: { selectedMarque: searchQuery.trim() } 
+      });
+    }
+  };
 
+
+  const handleSubmit = () => {
+    handleSearch();
+  };
   useEffect(() => {
     const fetchParkings = async () => {
       try {
@@ -136,58 +149,85 @@ const Accueil: React.FC = () => {
     <View style={styles.container}>
       <Header />
       <ScrollView style={styles.mainScrollView}> {/* Nouveau ScrollView pour rendre la page scrollable */}
-        <View style={styles.searchBarContainer}>
-          <FontAwesome name="search" size={24} color="#999" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchBar}
-            placeholder="Recherche..."
-            placeholderTextColor="#999"
-          />
-        </View>
-        <View style={styles.carouselContainer}>
-          {loadingParkings ? (
-            <ActivityIndicator size="large" color="#FD6A00" />
-          ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              ref={scrollViewRef}
-              style={styles.carouselScrollView}
-              scrollEventThrottle={16}
-              pagingEnabled
-              snapToInterval={340} // Augmenté pour mieux s'adapter aux écrans
-              snapToAlignment="center"
-              decelerationRate="fast"
-              contentContainerStyle={{
-                paddingHorizontal: 10,
-              }}
-            >
-              {parkings.map((item, index) => (
-                <TouchableOpacity
-                  key={item.id || index}
-                  style={styles.carouselItem}
-                  onPress={() => handleParkingPress(index)} // Navigation vers le parking sélectionné
-                >
-                  <Image
-                    source={{
-                      uri: item.logo
-                        ? item.logo.startsWith('http')
-                          ? item.logo
-                          : `${BASE_URL}${item.logo}`
-                        : 'https://via.placeholder.com/150'
-                    }}
-                    style={styles.carouselImage}
-                  />
-                  {/* Exemple d'overlay pour promo ou nom, si disponible dans item */}
-                  <View style={styles.carouselOverlay}>
-                    <Text style={styles.carouselLabel}>{item.name || 'Nouveau Parking'}</Text>
-                    {item.promotion && <Text style={styles.carouselPromo}>{item.promotion}</Text>}
-                  </View>
+        <View style={styles.searchSection}>
+          <View style={styles.searchContainer}>
+            <View style={styles.searchBar}>
+              <FontAwesome name="search" size={20} color="#888" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Rechercher un modèle..."
+                placeholderTextColor="#999"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onSubmitEditing={handleSubmit} // Valide avec Entrée
+                returnKeyType="search"
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                  <FontAwesome name="times-circle" size={20} color="#888" />
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
+              )}
+            </View>
+
+            {/* Bouton filtre (ouvre les filtres avancés dans ListVoiture) */}
+            <TouchableOpacity
+              style={styles.filterButton}
+              onPress={() => router.push('/(Clients)/listVoiture')} // On va directement à la liste pour utiliser les filtres
+            >
+              <MaterialIcons name="filter-list" size={28} color="#ff7d00" />
+            </TouchableOpacity>
+          </View>
         </View>
+      <View style={styles.carouselContainer}>
+  {loadingParkings ? (
+    <ActivityIndicator size="large" color="#FD6A00" />
+  ) : (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      ref={scrollViewRef}
+      style={styles.carouselScrollView}
+      scrollEventThrottle={16}
+      pagingEnabled
+      snapToInterval={340}
+      snapToAlignment="center"
+      decelerationRate="fast"
+      contentContainerStyle={{
+        paddingHorizontal: 10,
+      }}
+    >
+      {parkings.map((item, index) => (
+        <View
+          key={item.id || index}
+          style={styles.carouselItem}
+        >
+          <Image
+            source={{
+              uri: item.logo
+                ? item.logo.startsWith('http')
+                  ? item.logo
+                  : `${BASE_URL}${item.logo}`
+                : 'https://via.placeholder.com/150'
+            }}
+            style={styles.carouselImage}
+          />
+
+          <View style={styles.carouselOverlay}>
+            <Text style={styles.carouselLabel}>
+              {item.name || 'Nouveau Parking'}
+            </Text>
+            {item.promotion && (
+              <Text style={styles.carouselPromo}>
+                {item.promotion}
+              </Text>
+            )}
+          </View>
+        </View>
+      ))}
+    </ScrollView>
+  )}
+</View>
+
         <View style={styles.scrollContainer}>
           <View style={styles.scrollSection}>
             <View style={styles.scrollTitleContainer}>
@@ -272,24 +312,49 @@ const Accueil: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f4f3f3', padding: 20 },
-  mainScrollView: { flex: 1 }, // Nouveau style pour le ScrollView principal
+  mainScrollView: { flex: 1 }, 
   scrollViewContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
-  searchBarContainer: {
+  searchSection: {
+    marginTop: 20,
+    marginBottom: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    // borderBottomWidth: 1,
+    // borderTopWidth: 1,
+    // borderBottomColor: '#e0e0e0',
+    // borderTopColor: '#e0e0e0',
+  },
+  searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#ffffff',
-    borderWidth: 1,
-    borderRadius: 30,
-    paddingHorizontal: 10,
-    marginVertical: 10,
-    marginBottom: 20,
-    marginTop: 25,
   },
-  searchIcon: { marginRight: 10 },
-  searchBar: { flex: 1 },
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f2f2f7',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 45,
+    marginRight: 12,
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1d1d1f',
+  },
+  clearButton: {
+    padding: 4,
+  },
+  filterButton: {
+    padding: 8,
+  },
   carouselContainer: {
-    height: 200, // Augmenté pour plus de visibilité
+    height: 200, 
     marginBottom: 20,
     flexDirection: 'row',
     alignItems: 'center',
@@ -301,22 +366,22 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   carouselItem: {
-    width: 340, // Augmenté pour mieux remplir l'écran
+    width: 340, 
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: 5, // Un peu plus d'espace entre les items
+    marginHorizontal: 5,
     borderRadius: 10,
     overflow: 'hidden',
-    backgroundColor: '#f9f9f9', // Fond léger pour mieux contraster
+    backgroundColor: '#f9f9f9', 
   },
   carouselImage: {
     width: '100%',
-    height: 180, // Augmenté pour rendre plus visible
+    height: 180, 
     resizeMode: 'cover',
     borderRadius: 10,
   },
-  carouselOverlay: { // Nouvel overlay pour texte promo
+  carouselOverlay: { 
     position: 'absolute',
     bottom: 10,
     left: 0,
