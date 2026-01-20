@@ -660,7 +660,6 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
   return (
     <View style={styles.mainContainer}>
       {renderActionModal()}
-
       {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
