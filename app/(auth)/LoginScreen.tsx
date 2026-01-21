@@ -9,14 +9,17 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator
+  ActivityIndicator,
 } from 'react-native';
 import { login } from '../../components/services/api';
 import { router, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import { useAuth } from '../../context/AuthContext';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // Ajout pour stockage persistant
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
@@ -25,7 +28,7 @@ const LoginScreen = () => {
   const [showPassword, setShowPassword] = useState(false);
   const { authState, setAuthState, isLoading } = useAuth();
 
-  const getRedirectPath = (role: string | null) => {
+  const getRedirectPath = (role: string | null | undefined) => {
     switch (role) {
       case 'CLIENT':
         return '/tabs/accueil';
@@ -36,18 +39,17 @@ const LoginScreen = () => {
     }
   };
 
-  const redirectBasedOnRole = (role: string | null) => {
+  const redirectBasedOnRole = (role: string | null | undefined) => {
     const path = getRedirectPath(role);
     router.replace(path);
   };
 
-  // Rediriger automatiquement si l'utilisateur est déjà connecté
+  // Redirection automatique si déjà connecté
   useEffect(() => {
     if (!isLoading && authState.accessToken) {
       redirectBasedOnRole(authState.role);
     }
   }, [authState, isLoading]);
-
 
   if (isLoading) {
     return (
@@ -66,6 +68,59 @@ const LoginScreen = () => {
     router.push('/(auth)/ForgotPasswordScreen');
   };
 
+  // Fonction d'enregistrement du token Expo Push
+  const registerForPushNotificationsAsync = async (accessToken: string) => {
+    if (!Device.isDevice) {
+      console.log('Push notifications non supportées sur simulateur/émulateur');
+      return;
+    }
+
+    let { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') {
+      ({ status } = await Notifications.requestPermissionsAsync());
+    }
+    if (status !== 'granted') {
+      console.log('Permission pour les notifications refusée par l’utilisateur');
+      return;
+    }
+
+    const projectId = Constants?.expoConfig?.extra?.eas?.projectId;
+    if (!projectId) {
+      console.error('projectId manquant dans app.config.js (extra.eas.projectId)');
+      return;
+    }
+
+    try {
+      const pushTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+      const token = pushTokenData.data;
+      console.log('Expo Push Token obtenu :', token);
+
+      const BASE_URL = Constants.expoConfig?.extra?.BASE_URL;
+      if (!BASE_URL) {
+        console.error('BASE_URL manquant dans les constantes Expo');
+        return;
+      }
+
+      const response = await fetch(`${BASE_URL}/auth/users/push-token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ token }),
+      });
+
+      if (response.ok) {
+        console.log('Token push enregistré avec succès sur le serveur');
+      } else {
+        const errorText = await response.text();
+        console.warn('Échec enregistrement token push :', response.status, errorText);
+      }
+    } catch (error) {
+      console.error('Erreur lors de la récupération ou envoi du token push :', error);
+    }
+  };
+
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Erreur', 'Veuillez remplir tous les champs');
@@ -74,7 +129,16 @@ const LoginScreen = () => {
 
     setLoading(true);
     try {
-      const { accessToken, refreshToken, role, emailVerified, nom, prenom, id, parkingId } = await login({ email, password });
+      const {
+        accessToken,
+        refreshToken,
+        role,
+        emailVerified,
+        nom,
+        prenom,
+        id,
+        parkingId,
+      } = await login({ email, password });
 
       if (!emailVerified) {
         Alert.alert('Vérification requise', 'Veuillez vérifier votre email avant de continuer.');
@@ -82,10 +146,10 @@ const LoginScreen = () => {
         return;
       }
 
-      // Mettre à jour le contexte avec les données de connexion, incluant refreshToken
+      // Mise à jour du contexte d'authentification
       setAuthState({
         accessToken,
-        refreshToken, // ← AJOUT : Stockez refreshToken dans authState
+        refreshToken,
         role,
         userId: String(id),
         parkingId: parkingId ? String(parkingId) : null,
@@ -94,22 +158,33 @@ const LoginScreen = () => {
         prenom,
       });
 
-      // Stockage persistant supplémentaire pour refreshToken (robustesse après restart app)
+      // Stockage persistant du refreshToken
       if (refreshToken) {
         await AsyncStorage.setItem('refreshToken', refreshToken);
       }
-      console.log('Login successful, refreshToken:', refreshToken);
-    } catch (error) {
-      const err = error as Error;
-      console.error('❌ Erreur connexion:', err);
-      Alert.alert('Erreur', err.message || 'Échec de la connexion');
+
+      console.log('Connexion réussie');
+
+      // Enregistrement du token push avec le nouveau accessToken
+      if (accessToken) {
+        await registerForPushNotificationsAsync(accessToken);
+      }
+
+      // Redirection finale selon le rôle
+      redirectBasedOnRole(role);
+    } catch (error: any) {
+      console.error('❌ Erreur connexion:', error);
+      Alert.alert('Erreur', error.message || 'Échec de la connexion');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView style={styles.mainContainer} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView
+      style={styles.mainContainer}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <View style={styles.headerBackground}>
         <ExpoImage
           source={require('../../assets/images/login.gif')}
@@ -146,11 +221,15 @@ const LoginScreen = () => {
               placeholderTextColor="#999"
             />
             <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowPassword(!showPassword)}>
-              <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#777" />
+              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#777" />
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleLogin} disabled={loading}>
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleLogin}
+            disabled={loading}
+          >
             <Text style={styles.buttonText}>{loading ? 'Connexion...' : 'Se connecter'}</Text>
           </TouchableOpacity>
 
@@ -162,7 +241,9 @@ const LoginScreen = () => {
           </View>
 
           <TouchableOpacity onPress={handleForgotPassword}>
-            <Text style={[styles.footerLink, { textAlign: 'center', marginTop: 10 }]}>Mot de passe oublié ?</Text>
+            <Text style={[styles.footerLink, { textAlign: 'center', marginTop: 10 }]}>
+              Mot de passe oublié ?
+            </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -175,16 +256,16 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff'
+    backgroundColor: '#fff',
   },
   loadingText: {
     marginTop: 10,
     color: '#FD6A00',
-    fontSize: 16
+    fontSize: 16,
   },
   mainContainer: {
     flex: 1,
-    backgroundColor: '#fff'
+    backgroundColor: '#fff',
   },
   headerBackground: {
     position: 'absolute',
@@ -197,10 +278,10 @@ const styles = StyleSheet.create({
   },
   headerImage: {
     width: '100%',
-    height: '100%'
+    height: '100%',
   },
   scrollContainer: {
-    flexGrow: 1 
+    flexGrow: 1,
   },
   formContainer: {
     marginTop: 390,
@@ -214,7 +295,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FD6A00',
     textAlign: 'center',
-    marginBottom: 20
+    marginBottom: 20,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -222,19 +303,19 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     borderBottomWidth: 1,
     borderColor: '#ddd',
-    paddingHorizontal: 5
+    paddingHorizontal: 5,
   },
   inputIcon: {
-    marginRight: 10 
+    marginRight: 10,
   },
   input: {
     flex: 1,
     height: 50,
     color: '#333',
-    fontSize: 16
+    fontSize: 16,
   },
   eyeIcon: {
-    padding: 10 
+    padding: 10,
   },
   button: {
     backgroundColor: '#FD6A00',
@@ -242,30 +323,30 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 20,
-    marginBottom: 15
+    marginBottom: 15,
   },
   buttonDisabled: {
-    opacity: 0.7
+    opacity: 0.7,
   },
   buttonText: {
     color: '#fff',
     fontWeight: '600',
-    fontSize: 16
+    fontSize: 16,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 10
+    marginTop: 10,
   },
   footerText: {
     color: '#666',
-    fontSize: 14
+    fontSize: 14,
   },
   footerLink: {
     color: '#FD6A00',
     fontWeight: '600',
     fontSize: 14,
-    marginBottom: 10
+    marginBottom: 10,
   },
 });
 

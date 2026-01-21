@@ -65,7 +65,10 @@ const translateStatus = (status: ReservationStatus): string => {
   return map[status] || status;
 };
 
-const getStatusIcon = (status: ReservationStatus) => {
+type AnyIcon = typeof Ionicons | typeof MaterialIcons | typeof FontAwesome5 | typeof MaterialCommunityIcons;
+type IconDesc = { name: any; color: string; icon: AnyIcon };
+
+const getStatusIcon = (status: ReservationStatus): IconDesc => {
   switch (status) {
     case "PENDING": return { name: "clock", color: "#FF9800", icon: MaterialCommunityIcons };
     case "ACCEPTED": return { name: "check-circle", color: "#4CAF50", icon: MaterialCommunityIcons };
@@ -75,10 +78,10 @@ const getStatusIcon = (status: ReservationStatus) => {
   }
 };
 
-const getTypeIcon = (type: ReservationType) => {
+const getTypeIcon = (type: ReservationType): IconDesc => {
   switch (type) {
-    case "ACHAT": return { name: "shopping", color: "#9C27B0", icon: MaterialIcons };
-    case "LOCATION": return { name: "car-rental", color: "#FF6200", icon: MaterialIcons };
+    case "ACHAT": return { name: "shopping-cart", color: "#9C27B0", icon: MaterialIcons };
+    case "LOCATION": return { name: "shopping-cart", color: "#FF6200", icon: MaterialIcons };
     default: return { name: "help", color: "#757575", icon: MaterialIcons };
   }
 };
@@ -161,7 +164,7 @@ const ReservationPage: React.FC<ReservationListProps> = ({
   declineReservation,
   isParking = false,
 }) => {
-  const { authState } = useAuth();
+  const { authState, refreshAuth } = useAuth();  
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [activeTab, setActiveTab] = useState<"À venir" | "Terminée" | "Annulée">("À venir");
   const [loading, setLoading] = useState(true);
@@ -170,19 +173,10 @@ const ReservationPage: React.FC<ReservationListProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [showActionModal, setShowActionModal] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
-
-
-
-  // ... (existing imports)
-
-  // ... (inside component)
-
-  // ------------------------ PUSHER EVENTS ----------------
   const handleReservationUpdate = async (data: any) => {
-    // 1. Rafraîchir les données
+
     loadReservations();
 
-    // 2. Notification Locale
     try {
       await Notifications.scheduleNotificationAsync({
         content: {
@@ -190,7 +184,7 @@ const ReservationPage: React.FC<ReservationListProps> = ({
           body: "Le statut de votre réservation a changé.",
           sound: 'default',
         },
-        trigger: null, // Immédiat
+        trigger: null,
       });
     } catch (e) {
       console.log('Erreur notification locale', e);
@@ -204,20 +198,39 @@ const ReservationPage: React.FC<ReservationListProps> = ({
 
   usePusherChannel(pusherEvents);
 
-  // ------------------------ API CALL ---------------------
-  const loadReservations = async () => {
-    try {
-      setError(null);
-      const data = await fetchReservations();
-      setReservations(data);
-    } catch (err: any) {
-      console.error("Erreur chargement réservations:", err);
+const loadReservations = async () => {
+  try {
+    setError(null);
+    const data = await fetchReservations();
+    setReservations(data);
+  } catch (err: any) {
+    console.error("Erreur chargement réservations:", err);
+
+    // AJOUT : Si 403 (token expiré), refresh et retry
+    if (err.response && err.response.status === 403) {
+      const refreshed = await refreshAuth();
+      if (refreshed) {
+        // Retry après refresh réussi
+        try {
+          const data = await fetchReservations();
+          setReservations(data);
+          return;  // Succès, pas d'erreur
+        } catch (retryErr: any) {
+          setError(retryErr.message || "Impossible de charger après refresh");
+        }
+      } else {
+        setError("Session expirée, veuillez vous reconnecter");
+        // Optionnel : Rediriger vers login
+        router.push("/(auth)/LoginScreen");
+      }
+    } else {
       setError(err.message || "Impossible de charger les réservations");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
     }
-  };
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
 
   useEffect(() => {
     if (!authState?.accessToken) {
@@ -233,7 +246,6 @@ const ReservationPage: React.FC<ReservationListProps> = ({
     loadReservations();
   };
 
-  // ------------------------ ACTIONS ----------------------
   const handleAccept = async (id: number) => {
     if (!acceptReservation) return;
     try {
@@ -297,17 +309,30 @@ const ReservationPage: React.FC<ReservationListProps> = ({
   };
 
   // Filtrer les réservations par onglet
-  const filtered = reservations.filter((r) => mapStatusToTab(r) === activeTab);
+// Tri du plus récent au plus ancien (l'ID le plus élevé = la plus récente)
+const filtered = useMemo(() => {
+  return reservations
+    .filter((r) => mapStatusToTab(r) === activeTab)
+    .sort((a, b) => b.id - a.id); // ← plus récent en haut
+}, [reservations, activeTab]);
 
-  // ------------------ LOGIQUE BOUTONS ------------------
+//  le badge type prend la couleur du statut actuel
+const getTypeBadgeStyle = (status: ReservationStatus) => {
+  switch (status) {
+    case "PENDING":   return { bg: "#FFF3E0", color: "#FF9800" };
+    case "ACCEPTED":  return { bg: "#E8F5E9", color: "#4CAF50" };
+    case "COMPLETED": return { bg: "#E3F2FD", color: "#2196F3" };
+    case "CANCELED":  return { bg: "#FFEBEE", color: "#F44336" };
+    default:          return { bg: "#F5F5F5", color: "#757575" };
+  }
+};
+
   const getButtonText = (status: ReservationStatus, isDatePassed: boolean): string => {
     if (isParking) {
       if (status === "PENDING") return "GÉRER LA RÉSERVATION";
-      // Seulement si la date n'est pas passée, on peut annuler
       if (status === "ACCEPTED" && !isDatePassed) return "ANNULER LA RÉSERVATION";
       return "VOIR LES DÉTAILS";
     } else {
-      // Priorité aux états terminés
       if (status === "COMPLETED" || isDatePassed) return "LOUER À NOUVEAU";
 
       if (status === "PENDING" || status === "ACCEPTED") return "ANNULER LA RÉSERVATION";
@@ -352,7 +377,7 @@ const ReservationPage: React.FC<ReservationListProps> = ({
     }
   };
 
-  // ------------------------ MODAL ----------------------
+
   const renderActionModal = () => {
     if (!selectedReservation) return null;
 
@@ -413,9 +438,12 @@ const ReservationPage: React.FC<ReservationListProps> = ({
                     {translateStatus(selectedReservation.status)}
                   </Text>
                 </View>
-                <View style={[styles.modalTypeBadge, { backgroundColor: `${typeIcon.color}15` }]}>
-                  <TypeIconComponent name={typeIcon.name as any} size={16} color={typeIcon.color} />
-                  <Text style={[styles.modalTypeText, { color: typeIcon.color }]}>
+                <View style={[
+                  styles.modalTypeBadge,
+                  { backgroundColor: getTypeBadgeStyle(selectedReservation.status).bg }
+                ]}>
+                  <TypeIconComponent name={typeIcon.name} size={16} color={getTypeBadgeStyle(selectedReservation.status).color} />
+                  <Text style={[styles.modalTypeText, { color: getTypeBadgeStyle(selectedReservation.status).color }]}>
                     {selectedReservation.type === "ACHAT" ? "Achat" : "Location"}
                   </Text>
                 </View>
@@ -607,7 +635,6 @@ const ReservationPage: React.FC<ReservationListProps> = ({
     );
   };
 
-  // ------------------------ RENDER ----------------------
   if (loading) {
     return (
       <View style={styles.center}>
@@ -633,7 +660,6 @@ const ReservationPage: React.FC<ReservationListProps> = ({
   return (
     <View style={styles.mainContainer}>
       {renderActionModal()}
-
       {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -761,14 +787,18 @@ const ReservationPage: React.FC<ReservationListProps> = ({
                   </View>
 
                   {/* Badge type */}
-                  <View style={styles.typeBadgeContainer}>
-                    <View style={[styles.typeBadge, { backgroundColor: `${typeIcon.color}20` }]}>
-                      <TypeIconComponent name={typeIcon.name as any} size={12} color={typeIcon.color} />
-                      <Text style={[styles.typeText, { color: typeIcon.color }]}>
-                        {item.type === "ACHAT" ? "Achat" : "Location"}
-                      </Text>
-                    </View>
-                  </View>
+                {/* Badge type → même couleur que le statut */}
+<View style={styles.typeBadgeContainer}>
+  <View style={[
+    styles.typeBadge,
+    { backgroundColor: getTypeBadgeStyle(item.status).bg }
+  ]}>
+    <TypeIconComponent name={typeIcon.name} size={12} color={getTypeBadgeStyle(item.status).color} />
+    <Text style={[styles.typeText, { color: getTypeBadgeStyle(item.status).color }]}>
+      {item.type === "ACHAT" ? "Achat" : "Location"}
+    </Text>
+  </View>
+</View>
                 </View>
 
                 <View style={styles.cardContent}>
@@ -872,7 +902,7 @@ const ReservationPage: React.FC<ReservationListProps> = ({
   );
 };
 
-// -------------------- STYLES --------------------
+
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,

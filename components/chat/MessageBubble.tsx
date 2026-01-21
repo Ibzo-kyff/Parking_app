@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Message } from '../../app/type/chat';
 
 // Helper pour formater la date
@@ -23,9 +24,10 @@ const formatRelativeTime = (date: Date) => {
 interface Props {
   message: Message;
   isOwn: boolean;
+  onRetry?: (message: Message) => void;
 }
 
-export const MessageBubble: React.FC<Props> = ({ message, isOwn }) => {
+export const MessageBubble: React.FC<Props> = ({ message, isOwn, onRetry }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current; // Animation d'apparition
   const scaleAnim = useRef(new Animated.Value(0.95)).current; // Animation de scale
 
@@ -82,12 +84,22 @@ export const MessageBubble: React.FC<Props> = ({ message, isOwn }) => {
 
         <View style={styles.metaContainer}>
           <Text style={[styles.time, isOwn ? styles.ownTime : styles.otherTime]}>
-            {formatRelativeTime(new Date(message.createdAt))}
+            {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </Text>
           {isOwn && (
-            <Text style={styles.readStatus}>
-              {message.read ? '✓✓' : '✓'}
-            </Text>
+            <View style={styles.statusRow}>
+              {message.status === 'failed' ? (
+                <TouchableOpacity onPress={() => onRetry?.(message)}>
+                  <Ionicons name="alert-circle" size={14} color="#FF3B30" />
+                </TouchableOpacity>
+              ) : (
+                <Ionicons
+                  name={message.status === 'sending' ? "time-outline" : (message.read ? "checkmark-done" : "checkmark")}
+                  size={14}
+                  color={message.read ? "#4FC3F7" : "rgba(255,255,255,0.7)"}
+                />
+              )}
+            </View>
           )}
         </View>
       </View>
@@ -111,7 +123,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    minWidth: 80,
+    minWidth: 70,
     // Shadow for depth
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -121,11 +133,11 @@ const styles = StyleSheet.create({
   },
 
   ownBubble: {
-    backgroundColor: '#007AFF', // iOS Blue
+    backgroundColor: '#FF8A3D', // iOS Blue
     borderBottomRightRadius: 4, // Tail effect
   },
   otherBubble: {
-    backgroundColor: '#F0F0F0', // Light Gray
+    backgroundColor: '#F3F4F6', // Light Gray
     borderBottomLeftRadius: 4, // Tail effect
   },
 
@@ -176,8 +188,19 @@ const styles = StyleSheet.create({
   readStatus: {
     fontSize: 12,
     marginLeft: 4,
-    color: '#FFFFFF', // White checks on blue bg
+    color: '#FFFFFF',
     fontWeight: 'bold',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 4,
+  },
+  retryText: {
+    color: '#FF3B30',
+    fontSize: 11,
+    fontWeight: 'bold',
+    textDecorationLine: 'underline',
   },
   unread: {
     fontSize: 14,

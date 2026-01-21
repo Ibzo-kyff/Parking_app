@@ -242,7 +242,7 @@ export default function FavorisScreen() {
           </Text>
           <TouchableOpacity 
             style={styles.browseButton}
-            onPress={() => router.push('/Clients/listVoiture')}
+            onPress={() => router.push('/(Clients)/listVoiture')}
             activeOpacity={0.8}
           >
             <Text style={styles.browseButtonText}>Découvrir les véhicules</Text>
