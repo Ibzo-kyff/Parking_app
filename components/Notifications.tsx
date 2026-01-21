@@ -74,8 +74,8 @@ const Notifications = () => {
         return;
       }
 
-      // S'assurer que data est un tableau
-      const notificationsData = Array.isArray(data) ? data : [];
+      // S'assurer que data est un tableau et filtrer les messages de chat pour qu'ils n'apparaissent pas ici
+      const notificationsData = (Array.isArray(data) ? data : []).filter((n: any) => n.type !== "MESSAGE");
 
       // Déduplication supplémentaire côté frontend
       const uniqueNotifications = notificationsData.filter((notification, index, self) => {
@@ -85,21 +85,32 @@ const Notifications = () => {
         );
       });
 
-      const formatted = uniqueNotifications.map((n: any) => ({
-        id: n.id,
-        title: n.title || "Sans titre",
-        message: n.message || "Aucun message",
-        createdAt: n.createdAt ? new Date(n.createdAt).toLocaleDateString('fr-FR', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        }) : "Date inconnue",
-        read: Boolean(n.read),
-        type: n.type,
-        louee: n.louee,
-      }));
+      // Formater les notifications
+      const formatted = uniqueNotifications.map((n: any) => {
+        let displayTitle = n.title || "Sans titre";
+        let displayMessage = n.message || "Aucun message";
+
+        // Limiter la longueur pour l'aperçu dans la liste
+        if (displayMessage.length > 100) {
+          displayMessage = `${displayMessage.substring(0, 100)}...`;
+        }
+
+        return {
+          id: n.id,
+          title: displayTitle,
+          message: displayMessage,
+          createdAt: n.createdAt ? new Date(n.createdAt).toLocaleDateString('fr-FR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }) : "Date inconnue",
+          read: Boolean(n.read),
+          type: n.type,
+          louee: n.louee,
+        };
+      });
 
       setNotifications(formatted);
       console.log(`✅ ${formatted.length} notifications uniques chargées pour ${userRole}`);
@@ -216,12 +227,18 @@ const Notifications = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={{ flex: 1 }}>
-        <View style={{ marginTop: 40, marginBottom: 20 }}>
-          <Text style={styles.header}>Notifications</Text>
-          <Text style={styles.subHeader}>
-            {userRole === 'PARKING' ? `Parking ID: ${parkingId}` :
-              (userRole === 'CLIENT' || userRole === 'USER') ? `Utilisateur ID: ${userId}` : ''}
-          </Text>
+        {/* HEADER AMÉLIORÉ avec Bouton Retour */}
+        <View style={styles.headerContainer}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#333" />
+          </TouchableOpacity>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitleText}>Notifications</Text>
+          </View>
+          <View style={{ width: 40 }} />
         </View>
 
         <View style={styles.tabs}>
@@ -263,7 +280,9 @@ const Notifications = () => {
           onRefresh={handleRefresh}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>Aucune notification</Text>
+              <Text style={styles.emptyText}>
+                Aucune notification
+              </Text>
               <Text style={styles.emptySubText}>
                 {userRole === 'PARKING'
                   ? "Les nouvelles réservations apparaîtront ici"
@@ -400,8 +419,6 @@ const styles = StyleSheet.create({
   titre: { fontSize: 16, fontWeight: "bold", marginBottom: 4 },
   date: { fontSize: 12, color: "gray", marginBottom: 6 },
   message: { fontSize: 14, color: "#555", marginRight: 60 },
-  unreadMessage: { fontWeight: '700', color: '#000' },
-  chatHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   unreadBadge: {
     position: "absolute",
     top: 10,
