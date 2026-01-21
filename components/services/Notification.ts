@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 
-const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL ;
+const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL;
 const api = axios.create({
   baseURL: BASE_URL,
 });
@@ -51,13 +51,13 @@ const getAuthToken = async (): Promise<string | null> => {
 // 🔐 Configuration des headers avec token
 const getAuthHeaders = async () => {
   const token = await getAuthToken();
-  return token ? { 
+  return token ? {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json'
   } : {};
 };
 
-// ✅ Récupérer les notifications (comme dans l'ancien code qui fonctionnait)
+// ✅ Récupérer les notifications
 export const getNotifications = async (
   userId?: number,
   parkingId?: number
@@ -70,7 +70,7 @@ export const getNotifications = async (
 
     if (userId) {
       params.append("userId", userId.toString());
-    } 
+    }
     if (parkingId) {
       params.append("parkingId", parkingId.toString());
     }
@@ -83,22 +83,22 @@ export const getNotifications = async (
     console.log(` ${response.data.data?.length || 0} notifications récupérées`);
     
     const notifications = response.data.data || response.data || [];
-    
-    // Déduplication comme dans l'ancien code qui fonctionnait
+
+    // Déduplication
     const uniqueNotifications = notifications.filter((notification: NotificationData, index: number, self: NotificationData[]) => {
       const key = `${notification.title}_${notification.message}_${notification.type}`;
-      const firstIndex = self.findIndex(n => 
+      const firstIndex = self.findIndex(n =>
         `${n.title}_${n.message}_${n.type}` === key
       );
       return firstIndex === index;
     });
 
     console.log(`✅ ${uniqueNotifications.length} notifications uniques sur ${notifications.length} totales`);
-    
+
     return uniqueNotifications;
   } catch (error) {
     const axiosError = error as AxiosError;
-    
+
     // Log détaillé de l'erreur
     if (axiosError.response) {
       console.error(
@@ -115,12 +115,12 @@ export const getNotifications = async (
     if (axiosError.response?.status === 401) {
       console.log(" Token expiré ou invalide - déconnexion recommandée");
     }
-    
+
     return [];
   }
 };
 
-// ✅ Créer une notification (comme dans l'ancien code)
+// ✅ Créer une notification
 export const createNotification = async (notificationData: {
   title: string;
   message: string;
@@ -130,22 +130,22 @@ export const createNotification = async (notificationData: {
 }): Promise<NotificationData | null> => {
   try {
     console.log("📤 Création notification:", notificationData);
-    
-    // Validation comme dans l'ancien code
+
+    // Validation
     if (!notificationData.userId && !notificationData.parkingId) {
       console.error("❌ Notification sans destinataire spécifique");
       return null;
     }
-    
+
     const headers = await getAuthHeaders();
-    
+
     if (!headers.Authorization) {
       console.error("❌ Pas de token pour créer la notification");
       return null;
     }
-    
+
     const response = await api.post("/notifications", notificationData, { headers });
-    
+
     console.log("✅ Notification créée avec succès:", response.data);
     return response.data.data || response.data;
   } catch (error) {
@@ -188,6 +188,50 @@ export const createReservationNotification = async (notificationData: {
 
   } catch (error) {
     console.error("❌ Erreur création notification réservation:", error);
+    return false;
+  }
+};
+
+// ✅ Fonction pour envoyer une notification de message chat - MODIFIÉE
+export const sendChatNotification = async (
+  senderName: string,
+  messageContent: string,
+  receiverId?: number,
+  parkingId?: number,
+  options?: {
+    hideMessageContent?: boolean;
+    maxPreviewLength?: number;
+  }
+): Promise<boolean> => {
+  try {
+    // Options par défaut : cacher le contenu du message
+    const hideContent = options?.hideMessageContent ?? true;
+    const maxLength = options?.maxPreviewLength ?? 30;
+    
+    let notificationMessage: string;
+    
+    if (hideContent) {
+      // Version sécurisée : ne pas afficher le contenu du message
+      notificationMessage = `Vous avez reçu un nouveau message`;
+    } else {
+      // Version avec aperçu limité (optionnel)
+      const preview = messageContent.length > maxLength 
+        ? `${messageContent.substring(0, maxLength)}...` 
+        : messageContent;
+      notificationMessage = `${senderName}: ${preview}`;
+    }
+    
+    const notification = await createNotification({
+      title: `💬 ${senderName}`,
+      message: notificationMessage,
+      type: "MESSAGE",
+      userId: receiverId,
+      parkingId: parkingId
+    });
+
+    return !!notification;
+  } catch (error) {
+    console.error("❌ Erreur sendChatNotification:", error);
     return false;
   }
 };
@@ -279,14 +323,14 @@ export const debugAuth = async (): Promise<void> => {
     const userId = await AsyncStorage.getItem("userId");
     const parkingId = await AsyncStorage.getItem("parkingId");
     const userRole = await AsyncStorage.getItem("userRole");
-    
+
     console.log("🔍 DEBUG AUTH:");
     console.log("authState:", authState);
     console.log("userToken:", userToken);
     console.log("userId:", userId);
     console.log("parkingId:", parkingId);
     console.log("userRole:", userRole);
-    
+
     if (authState) {
       try {
         const parsed = JSON.parse(authState);
@@ -310,12 +354,12 @@ export const checkNotificationPermissions = async (): Promise<boolean> => {
   try {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
-    
+
     if (existingStatus !== 'granted') {
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
-    
+
     return finalStatus === 'granted';
   } catch (error) {
     console.error(" Erreur vérification permissions notifications:", error);

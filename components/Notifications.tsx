@@ -10,7 +10,11 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
+  StatusBar,
+  Platform,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { useAuth } from '../context/AuthContext';
 import {
   getNotifications,
@@ -24,7 +28,7 @@ interface Notification {
   message: string;
   createdAt: string;
   read: boolean;
-  type?: "reservation" | "paiement" | "update";
+  type?: "réservation" | "paiement" | "mise à jour" | "RESERVATION" | "RESERVATION_CONFIRMATION" | "MESSAGE";
   louee?: boolean;
 }
 
@@ -210,6 +214,7 @@ const Notifications = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
       <View style={{ flex: 1 }}>
         <View style={{ marginTop: 40, marginBottom: 20 }}>
           <Text style={styles.header}>Notifications</Text>
@@ -274,9 +279,7 @@ const Notifications = () => {
           <View style={styles.modalBox}>
             {selectedNotification && (
               <>
-                <Text style={styles.modalTitle}>
-                  {selectedNotification.title}
-                </Text>
+                <Text style={styles.modalTitle}>{selectedNotification.title}</Text>
                 <Text style={styles.modalMessage}>
                   {selectedNotification.message}
                 </Text>
@@ -335,10 +338,45 @@ const Notifications = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8f9fa", paddingHorizontal: 12 },
-  header: { fontSize: 22, fontWeight: "bold", textAlign: "center", color: "#333" },
-  subHeader: { fontSize: 14, textAlign: "center", color: "#666", marginTop: 5 },
-  tabs: { flexDirection: "row", justifyContent: "center", marginBottom: 12 },
+  container: { flex: 1, backgroundColor: "#f8f9fa" },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 10 : 20,
+    // paddingBottom: 15,
+    // // backgroundColor: '#fff',
+    // borderBottomWidth: 1,
+    // borderBottomColor: '#eee',
+    // elevation: 2,
+    // shadowColor: '#000',
+    // shadowOffset: { width: 0, height: 1 },
+    // shadowOpacity: 0.1,
+    // shadowRadius: 2,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  headerTextContainer: {
+    alignItems: 'center',
+  },
+  headerTitleText: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  headerSubtitleText: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 2,
+  },
+  tabs: { flexDirection: "row", justifyContent: "center", marginVertical: 15 },
   tab: {
     paddingVertical: 6,
     paddingHorizontal: 16,
