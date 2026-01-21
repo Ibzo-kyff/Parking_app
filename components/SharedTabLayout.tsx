@@ -41,7 +41,6 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
     case 'CLIENT':
       return (
         <Tabs screenOptions={commonOptions}>
-          {/* Accueil */}
           <Tabs.Screen
             name="accueil"
             options={{
@@ -50,7 +49,6 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
                 getIcon('home', color, focused),
             }}
           />
-          {/* Réservations */}
           <Tabs.Screen
             name="reservation"
             options={{
@@ -59,7 +57,6 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
                 getIcon('calendar', color, focused),
             }}
           />
-          {/* Parkings */}
           <Tabs.Screen
             name="parking"
             options={{
@@ -68,7 +65,6 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
                 getIcon('car', color, focused),
             }}
           />
-          {/* Messages */}
           <Tabs.Screen
             name="messages"
             options={{
@@ -77,7 +73,6 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
                 getIcon('chatbubbles', color, focused),
             }}
           />
-          {/* Profil */}
           <Tabs.Screen
             name="profile"
             options={{
@@ -91,7 +86,6 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
     case 'PARKING':
       return (
         <Tabs screenOptions={commonOptions}>
-          {/* Accueil */}
           <Tabs.Screen
             name="accueil"
             options={{
@@ -100,7 +94,6 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
                 getIcon('home', color, focused),
             }}
           />
-          {/* Réservations */}
           <Tabs.Screen
             name="Reservation"
             options={{
@@ -109,7 +102,6 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
                 getIcon('clipboard', color, focused),
             }}
           />
-          {/* Gestion */}
           <Tabs.Screen
             name="gestion"
             options={{
@@ -118,7 +110,6 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
                 getIcon('settings', color, focused),
             }}
           />
-          {/* Messages */}
           <Tabs.Screen
             name="messages"
             options={{
@@ -127,7 +118,6 @@ export default function SharedTabLayout({ role }: SharedTabLayoutProps) {
                 getIcon('chatbubbles', color, focused),
             }}
           />
-          {/* Profil */}
           <Tabs.Screen
             name="profile"
             options={{
@@ -148,10 +138,10 @@ const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: '#fff',
     borderRadius: 25,
-    height: 60, 
+    height: 60,
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
- 
+
     shadowColor: '#000',
     shadowOpacity: 0.2,
     shadowOffset: { width: 0, height: -8 },

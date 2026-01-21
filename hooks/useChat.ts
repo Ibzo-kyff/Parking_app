@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { usePusherChannel } from './usePusherChannel';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { sendChatNotification } from '../components/services/Notification';
 
 export const useChat = (parkingId?: number) => {
   const { user } = useAuth();
@@ -122,6 +123,7 @@ export const useChat = (parkingId?: number) => {
         if (prev.some(m => m.id === data.id)) return prev;
         return [...prev, data];
       });
+
     } catch (error) {
       console.error('Erreur envoi message:', error);
     }

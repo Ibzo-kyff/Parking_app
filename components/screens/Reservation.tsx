@@ -408,13 +408,13 @@ const ReservationPage: React.FC<ReservationListProps> = ({
               {/* Statut et type */}
               <View style={styles.modalStatusContainer}>
                 <View style={[styles.modalStatusBadge, { backgroundColor: getStatusBgColor(selectedReservation.status) }]}>
-                  <StatusIconComponent name={statusIcon.name} size={16} color={statusIcon.color} />
+                  <StatusIconComponent name={statusIcon.name as any} size={16} color={statusIcon.color} />
                   <Text style={[styles.modalStatusText, { color: statusIcon.color }]}>
                     {translateStatus(selectedReservation.status)}
                   </Text>
                 </View>
                 <View style={[styles.modalTypeBadge, { backgroundColor: `${typeIcon.color}15` }]}>
-                  <TypeIconComponent name={typeIcon.name} size={16} color={typeIcon.color} />
+                  <TypeIconComponent name={typeIcon.name as any} size={16} color={typeIcon.color} />
                   <Text style={[styles.modalTypeText, { color: typeIcon.color }]}>
                     {selectedReservation.type === "ACHAT" ? "Achat" : "Location"}
                   </Text>
@@ -748,7 +748,7 @@ const ReservationPage: React.FC<ReservationListProps> = ({
                   {/* Badge de statut */}
                   <View style={styles.statusContainer}>
                     <View style={[styles.statusBadge, { backgroundColor: getStatusBgColor(item.status) }]}>
-                      <StatusIconComponent name={statusIcon.name} size={14} color={statusIcon.color} />
+                      <StatusIconComponent name={statusIcon.name as any} size={14} color={statusIcon.color} />
                       <Text style={[styles.statusText, { color: statusIcon.color }]}>
                         {translateStatus(item.status)}
                       </Text>
@@ -763,7 +763,7 @@ const ReservationPage: React.FC<ReservationListProps> = ({
                   {/* Badge type */}
                   <View style={styles.typeBadgeContainer}>
                     <View style={[styles.typeBadge, { backgroundColor: `${typeIcon.color}20` }]}>
-                      <TypeIconComponent name={typeIcon.name} size={12} color={typeIcon.color} />
+                      <TypeIconComponent name={typeIcon.name as any} size={12} color={typeIcon.color} />
                       <Text style={[styles.typeText, { color: typeIcon.color }]}>
                         {item.type === "ACHAT" ? "Achat" : "Location"}
                       </Text>
