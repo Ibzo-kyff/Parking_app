@@ -21,9 +21,6 @@ const BASE_URL =
 export const initializePusher = async (userId: number): Promise<Pusher> => {
   if (pusherInstance) return pusherInstance;
 
-  console.log('📡 [Pusher] Initialisation pour utilisateur:', userId);
-  console.log('📡 [Pusher] Auth endpoint:', `${BASE_URL}/auth/pusher`);
-
   pusherInstance = new Pusher('4ae0add35ba25c29e453', {
     cluster: 'mt1',
     authorizer: (channel: any) => {
