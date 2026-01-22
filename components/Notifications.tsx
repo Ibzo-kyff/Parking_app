@@ -10,7 +10,11 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
+  StatusBar,
+  Platform,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { useAuth } from '../context/AuthContext';
 import {
   getNotifications,
@@ -24,7 +28,7 @@ interface Notification {
   message: string;
   createdAt: string;
   read: boolean;
-  type?: "reservation" | "paiement" | "update";
+  type?: "réservation" | "paiement" | "mise à jour" | "RESERVATION" | "RESERVATION_CONFIRMATION" | "MESSAGE";
   louee?: boolean;
 }
 
@@ -70,8 +74,8 @@ const Notifications = () => {
         return;
       }
 
-      // S'assurer que data est un tableau
-      const notificationsData = Array.isArray(data) ? data : [];
+      // S'assurer que data est un tableau et filtrer les messages de chat pour qu'ils n'apparaissent pas ici
+      const notificationsData = (Array.isArray(data) ? data : []).filter((n: any) => n.type !== "MESSAGE");
 
       // Déduplication supplémentaire côté frontend
       const uniqueNotifications = notificationsData.filter((notification, index, self) => {
@@ -81,21 +85,32 @@ const Notifications = () => {
         );
       });
 
-      const formatted = uniqueNotifications.map((n: any) => ({
-        id: n.id,
-        title: n.title || "Sans titre",
-        message: n.message || "Aucun message",
-        createdAt: n.createdAt ? new Date(n.createdAt).toLocaleDateString('fr-FR', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        }) : "Date inconnue",
-        read: Boolean(n.read),
-        type: n.type,
-        louee: n.louee,
-      }));
+      // Formater les notifications
+      const formatted = uniqueNotifications.map((n: any) => {
+        let displayTitle = n.title || "Sans titre";
+        let displayMessage = n.message || "Aucun message";
+
+        // Limiter la longueur pour l'aperçu dans la liste
+        if (displayMessage.length > 100) {
+          displayMessage = `${displayMessage.substring(0, 100)}...`;
+        }
+
+        return {
+          id: n.id,
+          title: displayTitle,
+          message: displayMessage,
+          createdAt: n.createdAt ? new Date(n.createdAt).toLocaleDateString('fr-FR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }) : "Date inconnue",
+          read: Boolean(n.read),
+          type: n.type,
+          louee: n.louee,
+        };
+      });
 
       setNotifications(formatted);
       console.log(`✅ ${formatted.length} notifications uniques chargées pour ${userRole}`);
@@ -210,13 +225,20 @@ const Notifications = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
       <View style={{ flex: 1 }}>
-        <View style={{ marginTop: 40, marginBottom: 20 }}>
-          <Text style={styles.header}>Notifications</Text>
-          <Text style={styles.subHeader}>
-            {userRole === 'PARKING' ? `Parking ID: ${parkingId}` :
-              (userRole === 'CLIENT' || userRole === 'USER') ? `Utilisateur ID: ${userId}` : ''}
-          </Text>
+        {/* HEADER AMÉLIORÉ avec Bouton Retour */}
+        <View style={styles.headerContainer}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#333" />
+          </TouchableOpacity>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitleText}>Notifications</Text>
+          </View>
+          <View style={{ width: 40 }} />
         </View>
 
         <View style={styles.tabs}>
@@ -258,7 +280,9 @@ const Notifications = () => {
           onRefresh={handleRefresh}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>Aucune notification</Text>
+              <Text style={styles.emptyText}>
+                Aucune notification
+              </Text>
               <Text style={styles.emptySubText}>
                 {userRole === 'PARKING'
                   ? "Les nouvelles réservations apparaîtront ici"
@@ -274,9 +298,7 @@ const Notifications = () => {
           <View style={styles.modalBox}>
             {selectedNotification && (
               <>
-                <Text style={styles.modalTitle}>
-                  {selectedNotification.title}
-                </Text>
+                <Text style={styles.modalTitle}>{selectedNotification.title}</Text>
                 <Text style={styles.modalMessage}>
                   {selectedNotification.message}
                 </Text>
@@ -335,10 +357,45 @@ const Notifications = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8f9fa", paddingHorizontal: 12 },
-  header: { fontSize: 22, fontWeight: "bold", textAlign: "center", color: "#333" },
-  subHeader: { fontSize: 14, textAlign: "center", color: "#666", marginTop: 5 },
-  tabs: { flexDirection: "row", justifyContent: "center", marginBottom: 12 },
+  container: { flex: 1, backgroundColor: "#f8f9fa" },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 10 : 20,
+    // paddingBottom: 15,
+    // // backgroundColor: '#fff',
+    // borderBottomWidth: 1,
+    // borderBottomColor: '#eee',
+    // elevation: 2,
+    // shadowColor: '#000',
+    // shadowOffset: { width: 0, height: 1 },
+    // shadowOpacity: 0.1,
+    // shadowRadius: 2,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  headerTextContainer: {
+    alignItems: 'center',
+  },
+  headerTitleText: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  headerSubtitleText: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 2,
+  },
+  tabs: { flexDirection: "row", justifyContent: "center", marginVertical: 15 },
   tab: {
     paddingVertical: 6,
     paddingHorizontal: 16,
@@ -362,8 +419,6 @@ const styles = StyleSheet.create({
   titre: { fontSize: 16, fontWeight: "bold", marginBottom: 4 },
   date: { fontSize: 12, color: "gray", marginBottom: 6 },
   message: { fontSize: 14, color: "#555", marginRight: 60 },
-  unreadMessage: { fontWeight: '700', color: '#000' },
-  chatHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   unreadBadge: {
     position: "absolute",
     top: 10,
