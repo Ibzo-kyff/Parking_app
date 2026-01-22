@@ -36,11 +36,9 @@ const getAuthToken = async (): Promise<string | null> => {
     // Fallback sur userToken (ancien système)
     const userToken = await AsyncStorage.getItem("userToken");
     if (userToken) {
-      console.log(`🔐 Token récupéré depuis userToken`);
       return userToken;
     }
 
-    console.log("🔐 Aucun token trouvé");
     return null;
   } catch (error) {
     console.error("❌ Erreur récupération token :", error);
@@ -80,7 +78,6 @@ export const getNotifications = async (
     }
     
     const response = await api.get(url, { headers });
-    console.log(` ${response.data.data?.length || 0} notifications récupérées`);
     
     const notifications = response.data.data || response.data || [];
 
@@ -93,8 +90,7 @@ export const getNotifications = async (
       return firstIndex === index;
     });
 
-    console.log(`✅ ${uniqueNotifications.length} notifications uniques sur ${notifications.length} totales`);
-
+    
     return uniqueNotifications;
   } catch (error) {
     const axiosError = error as AxiosError;
