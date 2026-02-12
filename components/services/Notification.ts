@@ -20,7 +20,6 @@ export interface NotificationData {
   parkingId?: number;
 }
 
-// 🔐 Récupérer le token depuis AsyncStorage
 const getAuthToken = async (): Promise<string | null> => {
   try {
     // Essayer d'abord avec authState (pour compatibilité avec useAuth)
@@ -28,7 +27,6 @@ const getAuthToken = async (): Promise<string | null> => {
     if (authState) {
       const parsedAuth = JSON.parse(authState);
       if (parsedAuth.accessToken) {
-        console.log(`🔐 Token récupéré depuis authState`);
         return parsedAuth.accessToken;
       }
     }
@@ -41,12 +39,10 @@ const getAuthToken = async (): Promise<string | null> => {
 
     return null;
   } catch (error) {
-    console.error("❌ Erreur récupération token :", error);
     return null;
   }
 };
 
-// 🔐 Configuration des headers avec token
 const getAuthHeaders = async () => {
   const token = await getAuthToken();
   return token ? {
@@ -55,7 +51,7 @@ const getAuthHeaders = async () => {
   } : {};
 };
 
-// ✅ Récupérer les notifications
+// Récupérer les notifications
 export const getNotifications = async (
   userId?: number,
   parkingId?: number
@@ -98,25 +94,25 @@ export const getNotifications = async (
     // Log détaillé de l'erreur
     if (axiosError.response) {
       console.error(
-        "❌ Erreur API GET notifications :",
+        " Erreur API GET notifications :",
         `Status: ${axiosError.response.status}`,
         `Data: ${JSON.stringify(axiosError.response.data)}`
       );
     } else if (axiosError.request) {
-      console.error("❌ Pas de réponse du serveur:", axiosError.request);
+      console.error(" Pas de réponse du serveur:", axiosError.request);
     } else {
-      console.error("❌ Erreur configuration requête:", axiosError.message);
+      console.error(" Erreur configuration requête:", axiosError.message);
     }
 
-    if (axiosError.response?.status === 401) {
+    if (axiosError.response?.status === 401 || axiosError.response?.status === 403) {
       console.log(" Token expiré ou invalide - déconnexion recommandée");
+      throw new Error('INVALID_TOKEN');
     }
 
     return [];
   }
 };
 
-// ✅ Créer une notification
 export const createNotification = async (notificationData: {
   title: string;
   message: string;
@@ -125,29 +121,29 @@ export const createNotification = async (notificationData: {
   parkingId?: number;
 }): Promise<NotificationData | null> => {
   try {
-    console.log("📤 Création notification:", notificationData);
+    console.log(" Création notification:", notificationData);
 
     // Validation
     if (!notificationData.userId && !notificationData.parkingId) {
-      console.error("❌ Notification sans destinataire spécifique");
+      console.error(" Notification sans destinataire spécifique");
       return null;
     }
 
     const headers = await getAuthHeaders();
 
     if (!headers.Authorization) {
-      console.error("❌ Pas de token pour créer la notification");
+      console.error(" Pas de token pour créer la notification");
       return null;
     }
 
     const response = await api.post("/notifications", notificationData, { headers });
 
-    console.log("✅ Notification créée avec succès:", response.data);
+    console.log(" Notification créée avec succès:", response.data);
     return response.data.data || response.data;
   } catch (error) {
     const axiosError = error as AxiosError;
     console.error(
-      "❌ Erreur API POST notification :",
+      " Erreur API POST notification :",
       axiosError.response ? {
         status: axiosError.response.status,
         data: axiosError.response.data
@@ -157,7 +153,7 @@ export const createNotification = async (notificationData: {
   }
 };
 
-// ✅ Fonction spéciale pour les réservations
+//  Fonction spéciale pour les réservations
 export const createReservationNotification = async (notificationData: {
   title: string;
   message: string;
@@ -168,7 +164,7 @@ export const createReservationNotification = async (notificationData: {
     console.log(" Création notification réservation pour parking:", notificationData.parkingId);
 
     if (!notificationData.parkingId) {
-      console.error("❌ Notification réservation sans parkingId");
+      console.error(" Notification réservation sans parkingId");
       return false;
     }
 
@@ -179,16 +175,16 @@ export const createReservationNotification = async (notificationData: {
       parkingId: notificationData.parkingId
     });
 
-    console.log("✅ Notification réservation créée:", !!notification);
+    console.log(" Notification réservation créée:", !!notification);
     return !!notification;
 
   } catch (error) {
-    console.error("❌ Erreur création notification réservation:", error);
+    console.error(" Erreur création notification réservation:", error);
     return false;
   }
 };
 
-// ✅ Fonction pour envoyer une notification de message chat - MODIFIÉE
+//  Fonction pour envoyer une notification de message chat - MODIFIÉE
 export const sendChatNotification = async (
   senderName: string,
   messageContent: string,
@@ -227,12 +223,12 @@ export const sendChatNotification = async (
 
     return !!notification;
   } catch (error) {
-    console.error("❌ Erreur sendChatNotification:", error);
+    console.error(" Erreur sendChatNotification:", error);
     return false;
   }
 };
 
-// ✅ Fonction pour envoyer une notification de réservation au parking
+//  Fonction pour envoyer une notification de réservation au parking
 export const sendParkingReservationNotification = async (
   userInfo: any,
   vehicleInfo: any,
@@ -249,12 +245,12 @@ export const sendParkingReservationNotification = async (
       type: "RESERVATION"
     });
   } catch (error) {
-    console.error("❌ Erreur sendParkingReservationNotification:", error);
+    console.error(" Erreur sendParkingReservationNotification:", error);
     return false;
   }
 };
 
-// ✅ Marquer une notification comme lue
+//  Marquer une notification comme lue
 export const markNotificationAsRead = async (
   id: number
 ): Promise<NotificationData | null> => {
@@ -265,14 +261,14 @@ export const markNotificationAsRead = async (
   } catch (error) {
     const axiosError = error as AxiosError;
     console.error(
-      "❌ Erreur API PATCH notification :",
+      " Erreur API PATCH notification :",
       axiosError.response ? axiosError.response.data : axiosError.message
     );
     return null;
   }
 };
 
-// ✅ Supprimer une notification
+//  Supprimer une notification
 export const deleteNotification = async (
   id: number
 ): Promise<{ success: boolean }> => {
@@ -283,14 +279,14 @@ export const deleteNotification = async (
   } catch (error) {
     const axiosError = error as AxiosError;
     console.error(
-      "❌ Erreur API DELETE notification :",
+      " Erreur API DELETE notification :",
       axiosError.response ? axiosError.response.data : axiosError.message
     );
     return { success: false };
   }
 };
 
-// ✅ Fonction pour les notifications locales (Expo Notifications)
+//  Fonction pour les notifications locales (Expo Notifications)
 export const showLocalNotification = async (
   title: string,
   body: string,
@@ -305,13 +301,13 @@ export const showLocalNotification = async (
       },
       trigger: null,
     });
-    console.log("✅ Notification locale envoyée");
+    console.log(" Notification locale envoyée");
   } catch (error) {
-    console.error("❌ Erreur envoi notification locale:", error);
+    console.error(" Erreur envoi notification locale:", error);
   }
 };
 
-// ✅ Fonction de debug pour l'authentification
+//  Fonction de debug pour l'authentification
 export const debugAuth = async (): Promise<void> => {
   try {
     const authState = await AsyncStorage.getItem("authState");
@@ -341,11 +337,11 @@ export const debugAuth = async (): Promise<void> => {
       }
     }
   } catch (error) {
-    console.error("❌ Debug auth error:", error);
+    console.error(" Debug auth error:", error);
   }
 };
 
-// ✅ Vérifier les permissions de notification
+//  Vérifier les permissions de notification
 export const checkNotificationPermissions = async (): Promise<boolean> => {
   try {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();

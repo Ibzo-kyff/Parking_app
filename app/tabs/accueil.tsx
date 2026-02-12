@@ -261,11 +261,11 @@ const Accueil: React.FC = () => {
                 ))}
               </ScrollView>
             )}
-            <View style={styles.scrollTitleContainer}>
-              <Text style={styles.scrollTitle}>Pour vous</Text>
-              <TouchableOpacity onPress={() => router.push('/(Clients)/listVoiture')}>
-                <Text style={styles.seeAllButton}>Voir tout</Text>
-              </TouchableOpacity>
+           <View style={styles.scrollTitleContainer}>
+            <Text style={styles.scrollTitle}>Pour vous</Text>
+            <TouchableOpacity onPress={() => router.push('/(Clients)/listVoiture')}>
+              <Text style={styles.seeAllButton}>Voir tout</Text>
+            </TouchableOpacity>
             </View>
             {loadingVehicules ? (
               <ActivityIndicator size="large" color="#FD6A00" />
@@ -277,7 +277,7 @@ const Accueil: React.FC = () => {
                 style={styles.imageScrollView}
                 contentContainerStyle={styles.scrollViewContent}
               >
-                {vehicules.map((item, index) => (
+                {vehicules.slice(0, 5).map((item, index) => ( // MODIFICATION ICI: .slice(0, 5)
                   <TouchableOpacity
                     key={item.id || index}
                     style={styles.imageContainerLarge}
@@ -294,9 +294,23 @@ const Accueil: React.FC = () => {
                         }}
                         style={styles.scrollImageLarge}
                       />
+                      {/* Badge pour vendre/louer */}
+                      {(item.forSale || item.forRent) && (
+                        <View style={[
+                          styles.badgeContainer,
+                          item.forSale && item.forRent ? styles.badgeSaleRent :
+                          item.forRent ? styles.badgeRent :
+                          styles.badgeSale
+                        ]}>
+                          <Text style={styles.badgeText}>
+                            {item.forSale && item.forRent ? 'Vente/Location' : 
+                            item.forRent ? 'À louer' : 'À vendre'}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                     <View style={styles.imageOverlay}>
-                      <Text style={styles.imageLabel}>{item.marque}</Text>
+                      <Text style={styles.imageLabel}>{item.marque || item.marqueRef?.name || 'Marque'} {item.model}</Text>
                       <Text style={styles.imagePrix}>{item.prix} FCFA</Text>
                     </View>
                   </TouchableOpacity>
@@ -476,7 +490,41 @@ const styles = StyleSheet.create({
     color: '#000',
     fontSize: 12,
     marginTop: 2
-  }
+  },
+    badgeContainer: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    zIndex: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  badgeSale: {
+    backgroundColor: '#ff3b30', // Rouge pour vente
+  },
+  badgeRent: {
+    backgroundColor: '#34c759', // Vert pour location
+  },
+  badgeSaleRent: {
+    backgroundColor: '#ff9500', // Orange pour vente/location
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1,
+  },
 });
 
 export default Accueil;

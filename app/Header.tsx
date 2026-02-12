@@ -17,7 +17,7 @@ interface Notification {
 
 const Header: React.FC = () => {
   const router = useRouter();
-  const { authState, clearAuthState } = useAuth();
+  const { authState, clearAuthState, refreshAuth } = useAuth();
 
   const [prenom, setPrenom] = useState('User');
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -43,45 +43,75 @@ const Header: React.FC = () => {
     if (authState.prenom) setPrenom(authState.prenom);
   }, [authState.prenom]);
 
+  // Fonction pour traiter les notifications récupérées
+  const processNotifications = async (allNotifications: Notification[]) => {
+    const storageKey = getLastSeenKey();
+    const lastSeen = await AsyncStorage.getItem(storageKey);
+    const lastSeenDate = lastSeen ? new Date(lastSeen) : null;
+
+    // Filtrer les notifications non lues et nouvelles
+    const newNotifications = allNotifications.filter((n) => {
+      if (!n.createdAt) return false;
+      const notifDate = new Date(n.createdAt);
+      return n.read === false && (!lastSeenDate || notifDate > lastSeenDate);
+    });
+
+    setNotifications(newNotifications);
+    setBadgeCount(newNotifications.length);
+  };
+
   // 🔔 Récupérer toutes les notifications non lues
   const fetchNotificationsData = async () => {
     if (!token) return;
 
-    try {
-      let allNotifications: Notification[] = [];
+    let allNotifications: Notification[] = [];
+    let retryAfterRefresh = false;
 
+    try {
       if (role === 'PARKING' && parkingId) {
         allNotifications = await getNotifications(undefined, parkingId);
       } else if ((role === 'CLIENT' || role === 'USER') && userId) {
         allNotifications = await getNotifications(userId, undefined);
       }
 
-      const storageKey = getLastSeenKey();
-      const lastSeen = await AsyncStorage.getItem(storageKey);
-      const lastSeenDate = lastSeen ? new Date(lastSeen) : null;
-
-      // Filtrer les notifications non lues et nouvelles
-      const newNotifications = allNotifications.filter((n) => {
-        if (!n.createdAt) return false;
-        const notifDate = new Date(n.createdAt);
-        return n.read === false && (!lastSeenDate || notifDate > lastSeenDate);
-      });
-
-      setNotifications(newNotifications);
-      setBadgeCount(newNotifications.length);
-    } catch (error) {
-      console.log('Erreur badge notification:', error);
+      await processNotifications(allNotifications);
+    } catch (error: any) {
+      if (error.message === 'INVALID_TOKEN' && !retryAfterRefresh) {
+        const refreshed = await refreshAuth();
+        if (refreshed) {
+          retryAfterRefresh = true;
+          // Réessayer la récupération après refresh
+          try {
+            if (role === 'PARKING' && parkingId) {
+              allNotifications = await getNotifications(undefined, parkingId);
+            } else if ((role === 'CLIENT' || role === 'USER') && userId) {
+              allNotifications = await getNotifications(userId, undefined);
+            }
+            await processNotifications(allNotifications);
+            return; // Succès après retry, on sort
+          } catch (retryError) {
+            console.error('Erreur après refresh du token:', retryError);
+          }
+        }
+        // Si refresh échoue ou retry échoue, déconnexion
+        clearAuthState();
+        router.replace('/(auth)/LoginScreen');
+      } else {
+        console.error('Erreur badge notification:', error);
+        setNotifications([]);
+        setBadgeCount(0);
+      }
     }
   };
 
   useEffect(() => {
     fetchNotificationsData();
 
-    const interval = setInterval(fetchNotificationsData, 15000); // ⏱️ 15s
+    const interval = setInterval(fetchNotificationsData, 15000); 
     return () => clearInterval(interval);
   }, [token, role, userId, parkingId]);
 
-  // 🔔 Quand on ouvre une notification individuelle
+  //  Quand on ouvre une notification individuelle
   const handleReadNotification = async (notifId: number) => {
     try {
       // Mettre à jour côté serveur
