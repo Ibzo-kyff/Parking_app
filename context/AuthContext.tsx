@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setAuthToken } from '../components/services/api'; // Import setAuthToken
-import axios from 'axios'; // Pour refresh direct
+import { setAuthToken } from '../components/services/api'; 
+import axios from 'axios'; 
 import Constants from 'expo-constants';
 
 interface AuthState {
@@ -101,22 +101,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // refreshAuth corrigée : Utilise axios direct, met à jour refreshToken
+  // refreshAuth corrigée : Charge depuis storage si absent dans state
   const refreshAuth = async (): Promise<boolean> => {
-    if (!authState.refreshToken) {
-      console.error('Pas de refreshToken disponible');
-      return false;
+    let currentRefreshToken = authState.refreshToken;
+
+    if (!currentRefreshToken) {
+      currentRefreshToken = await AsyncStorage.getItem('refreshToken');
+      if (!currentRefreshToken) {
+        console.error('Pas de refreshToken disponible dans state ou storage');
+        return false;
+      }
+      // Mettre à jour le state pour cohérence
+      await updateAuthState({ refreshToken: currentRefreshToken });
     }
 
     try {
-      const response = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken: authState.refreshToken }, {
+      const response = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken: currentRefreshToken }, {
         withCredentials: true
       });
-      const { accessToken, refreshToken: newRefreshToken } = response.data; // ← AJOUT : Gère rotation
+      const { accessToken, refreshToken: newRefreshToken } = response.data;
 
       await updateAuthState({
         accessToken,
-        refreshToken: newRefreshToken || authState.refreshToken, // Si pas de nouveau, garde ancien
+        refreshToken: newRefreshToken || currentRefreshToken,
       });
       setAuthToken(accessToken);
       console.log('Refresh réussi, new refreshToken:', newRefreshToken);

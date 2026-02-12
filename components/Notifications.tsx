@@ -32,60 +32,43 @@ interface Notification {
   louee?: boolean;
 }
 
-const Notifications = () => {
+  const Notifications = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [activeTab, setActiveTab] = useState<"all" | "unread">("all");
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [loading, setLoading] = useState(true);
-
-  const { authState, isLoading: authLoading } = useAuth();
-
+  const { authState, isLoading: authLoading, refreshAuth, clearAuthState } = useAuth();
   const token = authState.accessToken;
   const userId = authState.userId ? Number(authState.userId) : null;
   const parkingId = authState.parkingId ? Number(authState.parkingId) : null;
   const userRole = authState.role;
-
-  console.log(`📋 Notifications - Rôle: ${userRole}, UserId: ${userId}, ParkingId: ${parkingId}, Token: ${token ? "PRÉSENT" : "MANQUANT"}`);
-
   const fetchNotifications = async () => {
     try {
       if (authLoading || !token) {
-        console.log("⏳ En attente de l'authentification...");
         return;
       }
 
       setLoading(true);
-      console.log(`📋 Fetch notifications - Rôle: ${userRole}, UserId: ${userId}, ParkingId: ${parkingId}`);
-
       let data: any[] = [];
 
       if (userRole === 'PARKING' && parkingId) {
-        console.log(`🅿️ Récupération notifications pour parking: ${parkingId}`);
         data = await getNotifications(undefined, parkingId);
       } else if ((userRole === 'CLIENT' || userRole === 'USER') && userId) {
-        console.log(`👤 Récupération notifications pour utilisateur (CLIENT) ID: ${userId}`);
         data = await getNotifications(userId, undefined);
       } else {
-        console.warn("⚠️ Aucune entité identifiée pour récupérer les notifications");
-        console.log(`Détails - Rôle: ${userRole}, UserId: ${userId}, ParkingId: ${parkingId}`);
         setNotifications([]);
         setLoading(false);
         return;
       }
-
-      // S'assurer que data est un tableau et filtrer les messages de chat pour qu'ils n'apparaissent pas ici
       const notificationsData = (Array.isArray(data) ? data : []).filter((n: any) => n.type !== "MESSAGE");
-
-      // Déduplication supplémentaire côté frontend
       const uniqueNotifications = notificationsData.filter((notification, index, self) => {
-        const key = `${notification.title}_${notification.message}_${notification.type}`;
+      const key = `${notification.title}_${notification.message}_${notification.type}`;
         return index === self.findIndex(n =>
           `${n.title}_${n.message}_${n.type}` === key
         );
       });
 
-      // Formater les notifications
       const formatted = uniqueNotifications.map((n: any) => {
         let displayTitle = n.title || "Sans titre";
         let displayMessage = n.message || "Aucun message";
@@ -113,9 +96,24 @@ const Notifications = () => {
       });
 
       setNotifications(formatted);
-      console.log(`✅ ${formatted.length} notifications uniques chargées pour ${userRole}`);
-    } catch (err) {
-      console.log("❌ Erreur récupération notifications :", err);
+    } catch (err: any) {
+      if (err.message === 'INVALID_TOKEN') {
+        try {
+          const refreshed = await refreshAuth();
+          if (refreshed) {
+            console.log("✅ Token rafraîchi, relance fetch");
+            return fetchNotifications();
+          } else {
+            console.log("❌ Refresh échoué, déconnexion");
+            clearAuthState();
+          }
+        } catch (refreshErr) {
+          console.error("❌ Erreur lors du refresh:", refreshErr);
+          clearAuthState();
+        }
+      } else {
+        console.log("❌ Erreur récupération notifications :", err);
+      }
       setNotifications([]);
     } finally {
       setLoading(false);
@@ -194,7 +192,6 @@ const Notifications = () => {
   );
 
   const handleRefresh = () => {
-    console.log("🔄 Rafraîchissement manuel des notifications");
     fetchNotifications();
   };
 
@@ -364,15 +361,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'ios' ? 10 : 20,
-    // paddingBottom: 15,
-    // // backgroundColor: '#fff',
-    // borderBottomWidth: 1,
-    // borderBottomColor: '#eee',
-    // elevation: 2,
-    // shadowColor: '#000',
-    // shadowOffset: { width: 0, height: 1 },
-    // shadowOpacity: 0.1,
-    // shadowRadius: 2,
   },
   backButton: {
     width: 40,

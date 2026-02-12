@@ -44,6 +44,7 @@ interface Vehicule {
   photos: string[] | string;
   parking?: Parking;
   fuelType?: string;
+  transmission?: string; 
   mileage?: number;
   garantie?: boolean;
   assurance?: boolean;
@@ -54,18 +55,23 @@ interface Vehicule {
 }
 
 const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 36) / 2; // Deux colonnes avec espacement
+const CARD_WIDTH = (width - 36) / 2;
+
+type TabType = 'all' | 'sale' | 'rent';
 
 const ListVoiture = () => {
   const params = useLocalSearchParams();
   const selectedMarqueFromParams = params.selectedMarque as string;
   const marqueIdFromParams = params.marqueId as string;
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
+  
+  // États
   const [vehicules, setVehicules] = useState<Vehicule[]>([]);
   const [filteredVehicules, setFilteredVehicules] = useState<Vehicule[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabType>('all');
   const [activeFilter, setActiveFilter] = useState('all');
   const [availableFuelTypes, setAvailableFuelTypes] = useState<string[]>([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -76,29 +82,31 @@ const ListVoiture = () => {
     withInsurance: false,
     minMileage: '',
     maxMileage: '',
-    forSale: false,
-    forRent: false,
     minYear: '',
     maxYear: '',
+    transmission: '', // Changé de gearbox à transmission
   });
   const filterAnim = useState(new Animated.Value(0))[0];
 
   const commonFuelTypes = ['Essence', 'Diesel', 'Hybride', 'Électrique', 'GPL'];
+  const transmissionTypes = ['MANUELLE', 'AUTOMATIQUE']; // Types en majuscules pour correspondre à l'API
 
-  const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL ;
+  const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL;
   
   useEffect(() => {
     const fetchData = async () => {
       try {
         const vehiculesData = await getVehicules();
         setVehicules(vehiculesData);
-        setFilteredVehicules(vehiculesData);
         
         const fuelTypes = [...new Set(vehiculesData
           .map((v: { fuelType: any; }) => v.fuelType)
           .filter(Boolean))] as string[];
         
         setAvailableFuelTypes(fuelTypes);
+        
+        // Appliquer tous les filtres initiaux
+        applyAllFilters(vehiculesData);
       } catch (error) {
         console.error('Erreur lors du chargement:', error);
       } finally {
@@ -108,54 +116,72 @@ const ListVoiture = () => {
     fetchData();
   }, []);
 
-  useEffect(() => {
+  // Fonction pour normaliser la transmission (convertir en français et majuscules)
+  const normalizeTransmission = (transmission: string | undefined) => {
+    if (!transmission) return null;
+    
+    const trans = transmission.toUpperCase();
+    
+    // Convertir les valeurs anglaises en français
+    if (trans.includes('MANUAL') || trans.includes('MANUELLE')) {
+      return 'MANUELLE';
+    } else if (trans.includes('AUTOMATIC') || trans.includes('AUTOMATIQUE')) {
+      return 'AUTOMATIQUE';
+    } else if (trans.includes('SEMI')) {
+      return 'SEMI-AUTOMATIQUE';
+    }
+    
+    return trans;
+  };
+
+  // Fonction principale qui applique TOUS les filtres
+  const applyAllFilters = (vehiclesToFilter: Vehicule[]) => {
+    let filtered = [...vehiclesToFilter];
+    
+    // 1. Filtre par recherche
     if (searchQuery) {
-      const filtered = applyAdvancedFilters(vehicules.filter(vehicule =>
+      filtered = filtered.filter(vehicule =>
         (vehicule.marqueRef?.name?.toLowerCase().includes(searchQuery.toLowerCase()) || '') ||
         vehicule.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (vehicule.parking?.name && vehicule.parking.name.toLowerCase().includes(searchQuery.toLowerCase()))
-      ));
-      setFilteredVehicules(filtered);
-      
-      if (!showFilters) {
-        Animated.timing(filterAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: false,
-        }).start();
-        setShowFilters(true);
-      }
-    } else {
-      const filtered = applyAdvancedFilters(vehicules);
-      setFilteredVehicules(filtered);
-      
-      if (showFilters) {
-        Animated.timing(filterAnim, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: false,
-        }).start(() => setShowFilters(false));
-      }
+      );
     }
-  }, [searchQuery, vehicules, advancedFilters]);
-
-  useEffect(() => {
-    if (selectedMarqueFromParams) {
-      setSearchQuery(selectedMarqueFromParams);
-    }
-  }, [selectedMarqueFromParams]);
-
-  const applyAdvancedFilters = (vehicles: Vehicule[]) => {
-    let filtered = [...vehicles];
     
+    // 2. Filtre par onglet (vente/location)
+    if (activeTab === 'sale') {
+      filtered = filtered.filter(v => v.forSale);
+    } else if (activeTab === 'rent') {
+      filtered = filtered.filter(v => v.forRent);
+    }
+    
+    // 3. Filtre rapide (carburant, économique, luxe)
+    if (activeFilter !== 'all') {
+      switch(activeFilter) {
+        case 'economique':
+          filtered = filtered.filter(v => v.prix < 10000000);
+          break;
+        case 'luxe':
+          filtered = filtered.filter(v => v.prix > 30000000);
+          break;
+        default:
+          filtered = filtered.filter(v => v.fuelType === activeFilter);
+          break;
+      }
+    }
+    
+    // 4. Filtres avancés
     if (advancedFilters.minPrice) {
       const minPrice = parseFloat(advancedFilters.minPrice);
-      filtered = filtered.filter(v => v.prix >= minPrice);
+      if (!isNaN(minPrice)) {
+        filtered = filtered.filter(v => v.prix >= minPrice);
+      }
     }
     
     if (advancedFilters.maxPrice) {
       const maxPrice = parseFloat(advancedFilters.maxPrice);
-      filtered = filtered.filter(v => v.prix <= maxPrice);
+      if (!isNaN(maxPrice)) {
+        filtered = filtered.filter(v => v.prix <= maxPrice);
+      }
     }
     
     if (advancedFilters.withWarranty) {
@@ -168,34 +194,114 @@ const ListVoiture = () => {
     
     if (advancedFilters.minMileage && advancedFilters.minMileage !== '') {
       const minMileage = parseInt(advancedFilters.minMileage);
-      filtered = filtered.filter(v => v.mileage && v.mileage >= minMileage);
+      if (!isNaN(minMileage)) {
+        filtered = filtered.filter(v => v.mileage && v.mileage >= minMileage);
+      }
     }
     
     if (advancedFilters.maxMileage && advancedFilters.maxMileage !== '') {
       const maxMileage = parseInt(advancedFilters.maxMileage);
-      filtered = filtered.filter(v => v.mileage && v.mileage <= maxMileage);
+      if (!isNaN(maxMileage)) {
+        filtered = filtered.filter(v => v.mileage && v.mileage <= maxMileage);
+      }
     }
     
     if (advancedFilters.minYear && advancedFilters.minYear !== '') {
       const minYear = parseInt(advancedFilters.minYear);
-      filtered = filtered.filter(v => v.year && v.year >= minYear);
+      if (!isNaN(minYear)) {
+        filtered = filtered.filter(v => v.year && v.year >= minYear);
+      }
     }
     
     if (advancedFilters.maxYear && advancedFilters.maxYear !== '') {
       const maxYear = parseInt(advancedFilters.maxYear);
-      filtered = filtered.filter(v => v.year && v.year <= maxYear);
+      if (!isNaN(maxYear)) {
+        filtered = filtered.filter(v => v.year && v.year <= maxYear);
+      }
     }
     
-    if (advancedFilters.forSale) {
-      filtered = filtered.filter(v => v.forSale);
+    // Filtre par transmission (boîte de vitesse)
+    if (advancedFilters.transmission) {
+      filtered = filtered.filter(v => {
+        const normalizedTransmission = normalizeTransmission(v.transmission);
+        return normalizedTransmission === advancedFilters.transmission;
+      });
     }
     
-    if (advancedFilters.forRent) {
-      filtered = filtered.filter(v => v.forRent);
-    }
-    
-    return filtered;
+    setFilteredVehicules(filtered);
   };
+
+  // Changer d'onglet
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    setActiveFilter('all');
+    applyAllFilters(vehicules);
+  };
+
+  // Appliquer un filtre rapide
+  const applyFilter = (filterType: string) => {
+    setActiveFilter(filterType);
+    applyAllFilters(vehicules);
+  };
+
+  // Réinitialiser tous les filtres
+  const resetFilters = () => {
+    setActiveTab('all');
+    setActiveFilter('all');
+    setAdvancedFilters({
+      minPrice: '',
+      maxPrice: '',
+      withWarranty: false,
+      withInsurance: false,
+      minMileage: '',
+      maxMileage: '',
+      minYear: '',
+      maxYear: '',
+      transmission: '',
+    });
+    applyAllFilters(vehicules);
+  };
+
+  // Appliquer les filtres avancés
+  const applyAdvancedFilters = () => {
+    setShowAdvancedFilters(false);
+    applyAllFilters(vehicules);
+  };
+
+  // Effet pour gérer la recherche
+  useEffect(() => {
+    if (searchQuery) {
+      applyAllFilters(vehicules);
+      if (!showFilters) {
+        Animated.timing(filterAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: false,
+        }).start();
+        setShowFilters(true);
+      }
+    } else {
+      applyAllFilters(vehicules);
+      if (showFilters) {
+        Animated.timing(filterAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: false,
+        }).start(() => setShowFilters(false));
+      }
+    }
+  }, [searchQuery, vehicules]);
+
+  // Effet pour gérer les filtres avancés quand ils changent
+  useEffect(() => {
+    applyAllFilters(vehicules);
+  }, [advancedFilters, activeTab, activeFilter]);
+
+  useEffect(() => {
+    if (selectedMarqueFromParams) {
+      setSearchQuery(selectedMarqueFromParams);
+    }
+  }, [selectedMarqueFromParams]);
 
   const getPhotoUrl = (photos: string[] | string | undefined) => {
     if (!photos) return null;
@@ -214,67 +320,13 @@ const ListVoiture = () => {
     });
   };
 
-  const applyFilter = (filterType: string) => {
-    setActiveFilter(filterType);
-    
-    let filtered = [...vehicules];
-    
-    if (searchQuery) {
-      filtered = filtered.filter(vehicule =>
-        (vehicule.marqueRef?.name?.toLowerCase().includes(searchQuery.toLowerCase()) || '') ||
-        vehicule.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (vehicule.parking?.name && vehicule.parking.name.toLowerCase().includes(searchQuery.toLowerCase()))
-      );
-    }
-    
-    switch(filterType) {
-      case 'economique':
-        filtered = filtered.filter(v => v.prix < 10000000);
-        break;
-      case 'luxe':
-        filtered = filtered.filter(v => v.prix > 30000000);
-        break;
-      case 'vente':
-        filtered = filtered.filter(v => v.forSale);
-        break;
-      case 'location':
-        filtered = filtered.filter(v => v.forRent);
-        break;
-      default:
-        if (filterType !== 'all') {
-          filtered = filtered.filter(v => v.fuelType === filterType);
-        }
-        break;
-    }
-    
-    filtered = applyAdvancedFilters(filtered);
-    setFilteredVehicules(filtered);
-  };
-
-  const resetFilters = () => {
-    setActiveFilter('all');
-    setAdvancedFilters({
-      minPrice: '',
-      maxPrice: '',
-      withWarranty: false,
-      withInsurance: false,
-      minMileage: '',
-      maxMileage: '',
-      forSale: false,
-      forRent: false,
-      minYear: '',
-      maxYear: '',
-    });
-    setFilteredVehicules(vehicules);
-  };
-
   const formatPrice = (price: number) => {
     if (price >= 1000000) {
       return `${(price / 1000000).toFixed(1)}M CFA`;
     } else if (price >= 1000) {
       return `${(price / 1000).toFixed(1)}K CFA`;
     }
-    return `$${price}`;
+    return `${price} CFA`;
   };
 
   const formatMileage = (mileage: number) => {
@@ -306,13 +358,17 @@ const ListVoiture = () => {
       badgeStyle = [styles.statusBadge, styles.statusSale];
     }
 
+    // Afficher la transmission formatée
+    const displayTransmission = item.transmission 
+      ? item.transmission.charAt(0).toUpperCase() + item.transmission.slice(1).toLowerCase()
+      : null;
+
     return (
       <TouchableOpacity 
         style={styles.card}
         onPress={() => navigateToDetails(item)}
         activeOpacity={0.9}
       >
-        {/* Image du véhicule */}
         <View style={styles.imageContainer}>
           {photoUrl ? (
             <Image 
@@ -326,7 +382,6 @@ const ListVoiture = () => {
             </View>
           )}
           
-          {/* Badge du parking */}
           {parkingLogoUrl && (
             <View style={styles.parkingBadge}>
               <Image 
@@ -337,7 +392,6 @@ const ListVoiture = () => {
             </View>
           )}
           
-          {/* Badge de statut */}
           {(item.forSale || item.forRent) && (
             <View style={badgeStyle}>
               <Text style={styles.statusText}>
@@ -347,7 +401,6 @@ const ListVoiture = () => {
           )}
         </View>
 
-        {/* Informations du véhicule */}
         <View style={styles.cardContent}>
           <Text style={styles.carName} numberOfLines={1}>
             {item.marqueRef?.name || 'Marque'} {item.model}
@@ -367,6 +420,16 @@ const ListVoiture = () => {
                 {item.fuelType || 'Non spécifié'}
               </Text>
             </View>
+            
+            {/* Affichage de la transmission (boîte de vitesse) si disponible */}
+            {displayTransmission && (
+              <View style={styles.detailRow}>
+                <Ionicons name="settings-outline" size={14} color="#666" />
+                <Text style={styles.detailText}>
+                  {displayTransmission}
+                </Text>
+              </View>
+            )}
           </View>
 
           <Text style={styles.carPrice}>{formatPrice(item.prix)}</Text>
@@ -378,7 +441,6 @@ const ListVoiture = () => {
             </Text>
           </View>
           
-          {/* Badges d'options */}
           <View style={styles.optionBadges}>
             {item.garantie && (
               <View style={styles.optionBadge}>
@@ -419,13 +481,15 @@ const ListVoiture = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Header avec titre */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Voitures disponibles</Text>
-          <Text style={styles.headerSubtitle}>{filteredVehicules.length} véhicules trouvés</Text>
+          <Text style={styles.headerSubtitle}>
+            {activeTab === 'all' ? 'Tous les véhicules' :
+             activeTab === 'sale' ? 'Véhicules à vendre' :
+             'Véhicules à louer'}
+          </Text>
         </View>
 
-        {/* Barre de recherche */}
         <View style={styles.searchContainer}>
           <View style={styles.searchBar}>
             <FontAwesome name="search" size={20} color="#888" style={styles.searchIcon} />
@@ -451,7 +515,35 @@ const ListVoiture = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Filtres contextuels */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'all' && styles.tabActive]}
+            onPress={() => handleTabChange('all')}
+          >
+            <Text style={[styles.tabText, activeTab === 'all' && styles.tabTextActive]}>
+              Tous
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'sale' && styles.tabActive]}
+            onPress={() => handleTabChange('sale')}
+          >
+            <Text style={[styles.tabText, activeTab === 'sale' && styles.tabTextActive]}>
+              À vendre
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'rent' && styles.tabActive]}
+            onPress={() => handleTabChange('rent')}
+          >
+            <Text style={[styles.tabText, activeTab === 'rent' && styles.tabTextActive]}>
+              À louer
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {showFilters && (
           <Animated.View 
             style={[
@@ -495,24 +587,6 @@ const ListVoiture = () => {
                 </Text>
               </TouchableOpacity>
               
-              <TouchableOpacity 
-                style={[styles.filterButton, activeFilter === 'vente' && styles.filterButtonActive]}
-                onPress={() => applyFilter('vente')}
-              >
-                <Text style={[styles.filterButtonText, activeFilter === 'vente' && styles.filterButtonTextActive]}>
-                  En vente
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.filterButton, activeFilter === 'location' && styles.filterButtonActive]}
-                onPress={() => applyFilter('location')}
-              >
-                <Text style={[styles.filterButtonText, activeFilter === 'location' && styles.filterButtonTextActive]}>
-                  En location
-                </Text>
-              </TouchableOpacity>
-              
               {commonFuelTypes.filter(fuel => 
                 availableFuelTypes.includes(fuel)
               ).map((fuel) => (
@@ -530,13 +604,14 @@ const ListVoiture = () => {
           </Animated.View>
         )}
 
-        {/* Liste des véhicules en grille 2 colonnes */}
         {filteredVehicules.length === 0 ? (
           <View style={styles.noResults}>
             <FontAwesome name="car" size={60} color="#ddd" />
             <Text style={styles.noResultsText}>Aucun véhicule trouvé</Text>
             <Text style={styles.noResultsSubText}>
-              Essayez d'autres termes de recherche ou modifiez vos filtres
+              {activeTab === 'sale' ? 'Aucun véhicule à vendre' : 
+               activeTab === 'rent' ? 'Aucun véhicule à louer' : 
+               'Essayez d\'autres termes de recherche ou modifiez vos filtres'}
             </Text>
             <TouchableOpacity style={styles.resetFilterButton} onPress={resetFilters}>
               <Text style={styles.resetFilterButtonText}>Réinitialiser les filtres</Text>
@@ -562,7 +637,6 @@ const ListVoiture = () => {
           />
         )}
 
-        {/* Modal de filtres avancés */}
         <Modal
           visible={showAdvancedFilters}
           animationType="slide"
@@ -579,7 +653,6 @@ const ListVoiture = () => {
               </View>
 
               <ScrollView style={styles.modalBody}>
-                {/* Filtre par prix */}
                 <View style={styles.filterGroup}>
                   <Text style={styles.filterGroupTitle}>Prix (FCFA)</Text>
                   <View style={styles.priceInputs}>
@@ -606,7 +679,6 @@ const ListVoiture = () => {
                   </View>
                 </View>
 
-                {/* Filtre par année */}
                 <View style={styles.filterGroup}>
                   <Text style={styles.filterGroupTitle}>Année</Text>
                   <View style={styles.priceInputs}>
@@ -633,7 +705,6 @@ const ListVoiture = () => {
                   </View>
                 </View>
 
-                {/* Filtre par kilométrage */}
                 <View style={styles.filterGroup}>
                   <Text style={styles.filterGroupTitle}>Kilométrage</Text>
                   <View style={styles.priceInputs}>
@@ -660,7 +731,33 @@ const ListVoiture = () => {
                   </View>
                 </View>
 
-                {/* Filtres par options */}
+                {/* Filtre par transmission (boîte de vitesse) */}
+                <View style={styles.filterGroup}>
+                  <Text style={styles.filterGroupTitle}>Boîte de vitesse</Text>
+                  <View style={styles.transmissionContainer}>
+                    {transmissionTypes.map((transmission) => (
+                      <TouchableOpacity
+                        key={transmission}
+                        style={[
+                          styles.transmissionButton,
+                          advancedFilters.transmission === transmission && styles.transmissionButtonActive
+                        ]}
+                        onPress={() => setAdvancedFilters({
+                          ...advancedFilters,
+                          transmission: advancedFilters.transmission === transmission ? '' : transmission
+                        })}
+                      >
+                        <Text style={[
+                          styles.transmissionButtonText,
+                          advancedFilters.transmission === transmission && styles.transmissionButtonTextActive
+                        ]}>
+                          {transmission.charAt(0) + transmission.slice(1).toLowerCase()}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
                 <View style={styles.filterGroup}>
                   <Text style={styles.filterGroupTitle}>Options</Text>
                   <View style={styles.optionRow}>
@@ -686,45 +783,30 @@ const ListVoiture = () => {
                     />
                   </View>
                 </View>
-
-                {/* Filtres par type */}
-                <View style={styles.filterGroup}>
-                  <Text style={styles.filterGroupTitle}>Type</Text>
-                  <View style={styles.optionRow}>
-                    <View style={styles.optionLabelContainer}>
-                      <Ionicons name="cash" size={18} color="#ff7d00" />
-                      <Text style={styles.optionLabel}>En vente</Text>
-                    </View>
-                    <Switch
-                      value={advancedFilters.forSale}
-                      onValueChange={(value) => setAdvancedFilters({...advancedFilters, forSale: value})}
-                      trackColor={{ false: '#ddd', true: '#FF3B30' }}
-                    />
-                  </View>
-                  <View style={styles.optionRow}>
-                    <View style={styles.optionLabelContainer}>
-                      <MaterialIcons name="directions-car" size={18} color="#ff7d00" />
-                      <Text style={styles.optionLabel}>En location</Text>
-                    </View>
-                    <Switch
-                      value={advancedFilters.forRent}
-                      onValueChange={(value) => setAdvancedFilters({...advancedFilters, forRent: value})}
-                      trackColor={{ false: '#ddd', true: '#ff7d00' }}
-                    />
-                  </View>
-                </View>
               </ScrollView>
 
               <View style={styles.modalFooter}>
                 <TouchableOpacity 
                   style={styles.resetButton}
-                  onPress={resetFilters}
+                  onPress={() => {
+                    setAdvancedFilters({
+                      minPrice: '',
+                      maxPrice: '',
+                      withWarranty: false,
+                      withInsurance: false,
+                      minMileage: '',
+                      maxMileage: '',
+                      minYear: '',
+                      maxYear: '',
+                      transmission: '',
+                    });
+                  }}
                 >
                   <Text style={styles.resetButtonText}>Réinitialiser</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
                   style={styles.applyButton}
-                  onPress={() => setShowAdvancedFilters(false)}
+                  onPress={applyAdvancedFilters}
                 >
                   <Text style={styles.applyButtonText}>Appliquer</Text>
                 </TouchableOpacity>
@@ -796,6 +878,35 @@ const styles = StyleSheet.create({
   },
   filterToggleButton: {
     padding: 8,
+  },
+  // Styles pour les onglets
+  tabContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+    marginHorizontal: 4,
+    backgroundColor: '#f2f2f7',
+  },
+  tabActive: {
+    backgroundColor: '#ff7d00',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+  },
+  tabTextActive: {
+    color: '#fff',
+    fontWeight: '600',
   },
   filterContainer: {
     position: 'absolute',
@@ -1085,6 +1196,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#f5f5f7',
     color: '#1d1d1f',
+  },
+  // Styles pour la transmission (boîte de vitesse)
+  transmissionContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+  },
+  transmissionButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: '#f2f2f7',
+    marginRight: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  transmissionButtonActive: {
+    backgroundColor: '#ff7d00',
+    borderColor: '#ff7d00',
+  },
+  transmissionButtonText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
+  },
+  transmissionButtonTextActive: {
+    color: '#fff',
+    fontWeight: '600',
   },
   optionRow: {
     flexDirection: 'row',

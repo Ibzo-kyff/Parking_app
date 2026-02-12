@@ -25,7 +25,7 @@ const SplashScreen = () => {
 
       <Animatable.View animation="fadeInUp" duration={3000} style={styles.centerContent}>
         <Image 
-          source={require('../assets/images/park.png')} 
+          source={require('../assets/images/icon.png')} 
           style={styles.logo}
         />
       </Animatable.View>
@@ -50,7 +50,7 @@ const styles = StyleSheet.create({
     right: -width * 0.2,
     width: width * 0.6,
     height: width * 0.6,
-    backgroundColor: '#FDB913',
+    backgroundColor: '#FD6A00',
     borderBottomLeftRadius: width * 0.3,
   },
   bottomCircle: {
@@ -59,15 +59,15 @@ const styles = StyleSheet.create({
     left: -width * 0.2,
     width: width * 0.6,
     height: width * 0.6,
-    backgroundColor: '#FDB913',
+    backgroundColor: '#FD6A00',
     borderTopRightRadius: width * 0.3,
   },
   centerContent: {
     alignItems: 'center',
   },
   logo: {
-    width: 700,
-    height: 700,
+    width: 300,
+    height: 300,
     marginBottom: 20,
     resizeMode: 'contain',
   },
