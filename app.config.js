@@ -5,8 +5,8 @@ module.exports = ({ config }) => {
     ...config,
     expo: {
       ...config.expo,
-      name: "parking-app",
-      scheme: "parking-app",
+      name: "MOBILITY",
+      scheme: "MOBILITY",
       slug: "mobilitymali",
       version: "1.0.0",
       orientation: "portrait",

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import * as Notifications from 'expo-notifications';
 import {
   View,
@@ -14,9 +14,10 @@ import {
   TouchableWithoutFeedback,
   Platform,
   ToastAndroid,
+  TextInput,
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5, MaterialCommunityIcons } from "@expo/vector-icons";
 import { usePusherChannel } from "../../hooks/usePusherChannel";
 
@@ -65,24 +66,36 @@ const translateStatus = (status: ReservationStatus): string => {
   return map[status] || status;
 };
 
+// Composant helper pour les icônes dynamiques
 type AnyIcon = typeof Ionicons | typeof MaterialIcons | typeof FontAwesome5 | typeof MaterialCommunityIcons;
-type IconDesc = { name: any; color: string; icon: AnyIcon };
+type IconDesc = { name: string; color: string; icon: AnyIcon };
+
+interface DynamicIconProps {
+  iconDesc: IconDesc;
+  size?: number;
+  style?: any;
+}
+
+const DynamicIcon: React.FC<DynamicIconProps> = ({ iconDesc, size = 14, style }) => {
+  const { icon: IconComponent, name, color } = iconDesc;
+  return <IconComponent name={name as any} size={size} color={color} style={style} />;
+};
 
 const getStatusIcon = (status: ReservationStatus): IconDesc => {
   switch (status) {
-    case "PENDING": return { name: "clock", color: "#FF9800", icon: MaterialCommunityIcons };
-    case "ACCEPTED": return { name: "check-circle", color: "#4CAF50", icon: MaterialCommunityIcons };
+    case "PENDING": return { name: "clock-outline", color: "#FF9800", icon: MaterialCommunityIcons };
+    case "ACCEPTED": return { name: "check-circle-outline", color: "#4CAF50", icon: MaterialCommunityIcons };
     case "COMPLETED": return { name: "flag-checkered", color: "#2196F3", icon: MaterialCommunityIcons };
-    case "CANCELED": return { name: "close-circle", color: "#F44336", icon: MaterialCommunityIcons };
-    default: return { name: "help-circle", color: "#757575", icon: MaterialCommunityIcons };
+    case "CANCELED": return { name: "close-circle-outline", color: "#F44336", icon: MaterialCommunityIcons };
+    default: return { name: "help-circle-outline", color: "#757575", icon: MaterialCommunityIcons };
   }
 };
 
 const getTypeIcon = (type: ReservationType): IconDesc => {
   switch (type) {
     case "ACHAT": return { name: "shopping-cart", color: "#9C27B0", icon: MaterialIcons };
-    case "LOCATION": return { name: "shopping-cart", color: "#FF6200", icon: MaterialIcons };
-    default: return { name: "help", color: "#757575", icon: MaterialIcons };
+    case "LOCATION": return { name: "calendar-clock", color: "#FF6200", icon: MaterialCommunityIcons };
+    default: return { name: "help-outline", color: "#757575", icon: MaterialIcons };
   }
 };
 
@@ -131,18 +144,18 @@ const isDatePassed = (dateString: string | null): boolean => {
   return date < now;
 };
 
-// Déterminer l'onglet basé sur le statut ET la date
+// Déterminer l'onglet basé sur le statut ET la date (logique backend)
 const mapStatusToTab = (reservation: Reservation): "À venir" | "Terminée" | "Annulée" => {
+  // Priorité 1: Annulée
   if (reservation.status === "CANCELED") return "Annulée";
 
-  // Si la date de fin est dépassée, c'est terminé
+  // Priorité 2: Terminée (date de fin dépassée OU statut COMPLETED)
   if (reservation.dateFin && isDatePassed(reservation.dateFin)) {
     return "Terminée";
   }
-
   if (reservation.status === "COMPLETED") return "Terminée";
-  if (reservation.status === "PENDING" || reservation.status === "ACCEPTED") return "À venir";
 
+  // Priorité 3: À venir (PENDING ou ACCEPTED avec date de fin non dépassée)
   return "À venir";
 };
 
@@ -151,9 +164,9 @@ const mapStatusToTab = (reservation: Reservation): "À venir" | "Terminée" | "A
 // ------------------------------------------------------
 type ReservationListProps = {
   fetchReservations: () => Promise<Reservation[]>;
-  cancelReservation: (id: number) => Promise<void>;
+  cancelReservation: (id: number, reason?: string) => Promise<void>;
   acceptReservation?: (id: number) => Promise<void>;
-  declineReservation?: (id: number) => Promise<void>;
+  declineReservation?: (id: number, reason?: string) => Promise<void>;
   isParking?: boolean;
 };
 
@@ -164,7 +177,7 @@ const ReservationPage: React.FC<ReservationListProps> = ({
   declineReservation,
   isParking = false,
 }) => {
-  const { authState, refreshAuth } = useAuth();  
+  const { authState, refreshAuth } = useAuth();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [activeTab, setActiveTab] = useState<"À venir" | "Terminée" | "Annulée">("À venir");
   const [loading, setLoading] = useState(true);
@@ -172,10 +185,64 @@ const ReservationPage: React.FC<ReservationListProps> = ({
   const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [showActionModal, setShowActionModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [modalTitle, setModalTitle] = useState("");
+  const [modalMessage, setModalMessage] = useState("");
+  const [modalType, setModalType] = useState<"success" | "error" | "info">("info");
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
-  const handleReservationUpdate = async (data: any) => {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
 
-    loadReservations();
+  // Fonction pour afficher une modal de succès
+  const showSuccess = (title: string, message: string) => {
+    setModalTitle(title);
+    setModalMessage(message);
+    setModalType("success");
+    setShowSuccessModal(true);
+  };
+
+  // Fonction pour afficher une modal d'erreur
+  const showError = (title: string, message: string) => {
+    setModalTitle(title);
+    setModalMessage(message);
+    setModalType("error");
+    setShowErrorModal(true);
+  };
+
+  // Fonction pour afficher une modal d'information
+  const showInfo = (title: string, message: string) => {
+    setModalTitle(title);
+    setModalMessage(message);
+    setModalType("info");
+    setShowErrorModal(true);
+  };
+
+  // ✅ Gestion des mises à jour en temps réel via Pusher
+  const handleReservationUpdate = useCallback(async (data: any) => {
+    console.log("Mise à jour réservation reçue:", data);
+    
+    // Mise à jour immédiate de l'état local
+    if (data.reservation) {
+      setReservations(prevReservations => {
+        // Vérifier si la réservation existe déjà
+        const exists = prevReservations.some(r => r.id === data.reservation.id);
+        
+        if (exists) {
+          // Mise à jour
+          return prevReservations.map(r => 
+            r.id === data.reservation.id ? { ...r, ...data.reservation } : r
+          );
+        } else {
+          // Nouvelle réservation
+          return [data.reservation, ...prevReservations];
+        }
+      });
+    } else {
+      // Rechargement complet si pas de données spécifiques
+      loadReservations();
+    }
 
     try {
       await Notifications.scheduleNotificationAsync({
@@ -189,57 +256,68 @@ const ReservationPage: React.FC<ReservationListProps> = ({
     } catch (e) {
       console.log('Erreur notification locale', e);
     }
-  };
+  }, []);
 
+  // ✅ Événements Pusher
   const pusherEvents = useMemo(() => [
+    { eventName: 'reservationCreated', handler: handleReservationUpdate },
     { eventName: 'reservationAccepted', handler: handleReservationUpdate },
     { eventName: 'reservationDeclined', handler: handleReservationUpdate },
-  ], []);
+    { eventName: 'reservationCanceled', handler: handleReservationUpdate },
+    { eventName: 'reservationCompleted', handler: handleReservationUpdate },
+  ], [handleReservationUpdate]);
 
   usePusherChannel(pusherEvents);
 
-const loadReservations = async () => {
-  try {
-    setError(null);
-    const data = await fetchReservations();
-    setReservations(data);
-  } catch (err: any) {
-    console.error("Erreur chargement réservations:", err);
+  // ✅ Rechargement quand l'écran reçoit le focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log("Écran réservations focus - rechargement");
+      loadReservations();
+    }, [])
+  );
 
-    // AJOUT : Si 403 (token expiré), refresh et retry
-    if (err.response && err.response.status === 403) {
-      const refreshed = await refreshAuth();
-      if (refreshed) {
-        // Retry après refresh réussi
-        try {
-          const data = await fetchReservations();
-          setReservations(data);
-          return;  // Succès, pas d'erreur
-        } catch (retryErr: any) {
-          setError(retryErr.message || "Impossible de charger après refresh");
+  const loadReservations = useCallback(async () => {
+    try {
+      setError(null);
+      const data = await fetchReservations();
+      setReservations(data);
+    } catch (err: any) {
+      console.error("Erreur chargement réservations:", err);
+
+      if (err.response && err.response.status === 403) {
+        const refreshed = await refreshAuth();
+        if (refreshed) {
+          try {
+            const data = await fetchReservations();
+            setReservations(data);
+            return;
+          } catch (retryErr: any) {
+            setError(retryErr.message || "Impossible de charger après refresh");
+          }
+        } else {
+          setError("Session expirée, veuillez vous reconnecter");
+          showError("Session expirée", "Votre session a expiré. Veuillez vous reconnecter.");
         }
       } else {
-        setError("Session expirée, veuillez vous reconnecter");
-        // Optionnel : Rediriger vers login
-        router.push("/(auth)/LoginScreen");
+        setError(err.message || "Impossible de charger les réservations");
+        showError("Erreur", "Impossible de charger les réservations");
       }
-    } else {
-      setError(err.message || "Impossible de charger les réservations");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-  } finally {
-    setLoading(false);
-    setRefreshing(false);
-  }
-};
+  }, [fetchReservations, refreshAuth]);
 
+  // Auto-refresh lors du chargement initial
   useEffect(() => {
     if (!authState?.accessToken) {
-      Alert.alert("Erreur", "Vous devez vous connecter.");
+      showError("Erreur", "Vous devez vous connecter.");
       router.push("/(auth)/LoginScreen");
       return;
     }
     loadReservations();
-  }, [authState]);
+  }, [authState, loadReservations]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -248,53 +326,212 @@ const loadReservations = async () => {
 
   const handleAccept = async (id: number) => {
     if (!acceptReservation) return;
+    setIsProcessing(true);
     try {
       await acceptReservation(id);
-      await loadReservations();
-      Alert.alert("Succès", "Réservation acceptée avec succès");
+      // MISE À JOUR OPTIMISTE
+      setReservations(prevReservations => 
+        prevReservations.map(res => 
+          res.id === id 
+            ? { ...res, status: "ACCEPTED" as ReservationStatus } 
+            : res
+        )
+      );
+      showSuccess("Succès", "Réservation acceptée avec succès");
       setShowActionModal(false);
       setSelectedReservation(null);
     } catch (err: any) {
-      Alert.alert("Erreur", err.message || "Impossible d'accepter");
+      showError("Erreur", err.message || "Impossible d'accepter");
+      loadReservations();
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  const handleDecline = async (id: number) => {
+  const handleDecline = async (id: number, reason?: string) => {
     if (!declineReservation) return;
+    setIsProcessing(true);
     try {
-      await declineReservation(id);
-      await loadReservations();
-      Alert.alert("Succès", "Réservation déclinée");
+      await declineReservation(id, reason);
+      // MISE À JOUR OPTIMISTE
+      setReservations(prevReservations => 
+        prevReservations.map(res => 
+          res.id === id 
+            ? { ...res, status: "CANCELED" as ReservationStatus } 
+            : res
+        )
+      );
+      showSuccess("Succès", "Réservation déclinée");
       setShowActionModal(false);
       setSelectedReservation(null);
     } catch (err: any) {
-      Alert.alert("Erreur", err.message || "Impossible de décliner");
+      showError("Erreur", err.message || "Impossible de décliner");
+      loadReservations();
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  const handleCancel = async (id: number) => {
-    Alert.alert(
-      "Annuler la réservation",
-      "Êtes-vous sûr de vouloir annuler cette réservation ?",
-      [
-        { text: "Non", style: "cancel" },
-        {
-          text: "Oui, annuler",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await cancelReservation(id);
-              await loadReservations();
-              Alert.alert("Succès", "Réservation annulée");
-              setShowActionModal(false);
-              setSelectedReservation(null);
-            } catch (err: any) {
-              Alert.alert("Erreur", err.message || "Impossible d'annuler");
-            }
-          },
-        },
-      ]
+  const handleCancel = async (id: number, reason?: string) => {
+    setIsProcessing(true);
+    try {
+      await cancelReservation(id, reason);
+      
+      // MISE À JOUR OPTIMISTE
+      setReservations(prevReservations => {
+        const updatedReservations = prevReservations.map(res => 
+          res.id === id 
+            ? { ...res, status: "CANCELED" as ReservationStatus } 
+            : res
+        );
+        return updatedReservations;
+      });
+
+      if (Platform.OS === 'android') {
+        ToastAndroid.show("Réservation annulée avec succès", ToastAndroid.SHORT);
+      }
+
+      showSuccess("Succès", "Réservation annulée avec succès");
+      setShowCancelModal(false);
+      setSelectedReservation(null);
+      setCancelReason("");
+      
+      // Rechargement en arrière-plan pour synchronisation
+      setTimeout(() => {
+        loadReservations();
+      }, 500);
+      
+    } catch (err: any) {
+      console.error("Erreur lors de l'annulation:", err);
+
+      let errorMessage = "Impossible d'annuler la réservation";
+
+      if (err.response) {
+        const serverMessage = err.response.data?.message;
+
+        if (err.response.status === 403) {
+          errorMessage = serverMessage || "Vous n'avez pas la permission d'annuler cette réservation";
+        } else if (err.response.status === 400) {
+          errorMessage = serverMessage || "Annulation impossible";
+
+          // Messages spécifiques du backend
+          if (errorMessage.includes("12h") || errorMessage.includes("délai")) {
+            errorMessage = "Annulation impossible : vous devez annuler au moins 12h avant le début de la location";
+          } else if (errorMessage.includes("déjà annulée")) {
+            errorMessage = "Cette réservation est déjà annulée";
+          }
+        } else if (err.response.status === 404) {
+          errorMessage = "Réservation introuvable";
+        } else {
+          errorMessage = serverMessage || errorMessage;
+        }
+      }
+
+      showError("Erreur d'annulation", errorMessage);
+      loadReservations();
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // ✅ CORRECTION : Règle des 12h AVANT le début de la location (strictement comme backend)
+  const confirmCancel = (item: Reservation) => {
+    // CLIENT UNIQUEMENT - Vérifier la règle des 12h AVANT LE DÉBUT de la location
+    if (!isParking && item.type === "LOCATION" && item.dateDebut) {
+      const startDate = new Date(item.dateDebut);
+      const now = new Date();
+      
+      // Délai de 12h AVANT le début (EXACTEMENT comme backend)
+      const minCancelTime = new Date(startDate);
+      minCancelTime.setHours(minCancelTime.getHours() - 12);
+
+      // ⚠️ MÊME LOGIQUE QUE BACKEND : now > minCancelTime
+      if (now > minCancelTime) {
+        if (now < startDate) {
+          // Cas 1: Dans les 12h avant le début (annulation impossible)
+          const timeUntilStart = startDate.getTime() - now.getTime();
+          const hoursUntilStart = Math.floor(timeUntilStart / (1000 * 60 * 60));
+          const minutesUntilStart = Math.floor((timeUntilStart % (1000 * 60 * 60)) / (1000 * 60));
+          
+          // Calculer depuis quand l'annulation est bloquée
+          const timeSinceLimit = now.getTime() - minCancelTime.getTime();
+          const hoursSinceLimit = Math.floor(timeSinceLimit / (1000 * 60 * 60));
+          const minutesSinceLimit = Math.floor((timeSinceLimit % (1000 * 60 * 60)) / (1000 * 60));
+          
+          showError(
+            "Annulation impossible",
+            `❌ Période d'annulation dépassée depuis ${hoursSinceLimit}h ${minutesSinceLimit}min\n\n` +
+            `⏰ La location commence dans ${hoursUntilStart}h ${minutesUntilStart}min\n` +
+            `📅 Début : ${formatDate(item.dateDebut)}\n` +
+            `⛔ Dernière annulation : ${formatDate(minCancelTime.toISOString())}`
+          );
+        } else {
+          // Cas 2: La location a déjà commencé
+          const timeSinceStart = now.getTime() - startDate.getTime();
+          const hoursSinceStart = Math.floor(timeSinceStart / (1000 * 60 * 60));
+          
+          showError(
+            "Annulation impossible",
+            `❌ Location déjà commencée depuis ${hoursSinceStart}h\n\n` +
+            `📅 Début : ${formatDate(item.dateDebut)}\n` +
+            `📍 Contactez le parking pour toute assistance.`
+          );
+        }
+        return;
+      }
+      
+      // Cas où l'annulation est possible (now <= minCancelTime)
+      // Calcul du temps restant pour informer l'utilisateur
+      const timeUntilLimit = minCancelTime.getTime() - now.getTime();
+      const hoursRemaining = Math.floor(timeUntilLimit / (1000 * 60 * 60));
+      const minutesRemaining = Math.floor((timeUntilLimit % (1000 * 60 * 60)) / (1000 * 60));
+      
+      // Message personnalisé selon le temps restant
+      let warningMessage = "";
+      if (hoursRemaining < 1) {
+        warningMessage = `⚠️ URGENT : Il ne reste que ${minutesRemaining}min pour annuler !\n\n`;
+      } else if (hoursRemaining < 3) {
+        warningMessage = `⚠️ Attention : Il ne reste que ${hoursRemaining}h ${minutesRemaining}min pour annuler.\n\n`;
+      }
+      
+      setCancelReason("");
+      setSelectedReservation(item);
+      setModalTitle("Confirmer l'annulation");
+      setModalMessage(
+        `${warningMessage}Êtes-vous sûr de vouloir annuler votre location ?\n\n` +
+        `✅ Délai restant pour annuler : ${hoursRemaining}h ${minutesRemaining}min\n` +
+        `📅 Début de location : ${formatDate(item.dateDebut)}\n` +
+        `⏰ Dernière annulation possible : ${formatDate(minCancelTime.toISOString())}\n\n` +
+        `Cette action est irréversible.`
+      );
+      setModalType("info");
+      setShowCancelModal(true);
+      return;
+    }
+
+    // Pour les achats
+    if (!isParking && item.type === "ACHAT") {
+      setCancelReason("");
+      setSelectedReservation(item);
+      setModalTitle("Confirmer l'annulation");
+      setModalMessage(
+        `Êtes-vous sûr de vouloir annuler votre demande d'achat ?\n\n` +
+        `Cette action est irréversible.`
+      );
+      setModalType("info");
+      setShowCancelModal(true);
+      return;
+    }
+
+    // Pour le parking
+    setCancelReason("");
+    setSelectedReservation(item);
+    setModalTitle("Confirmer l'annulation");
+    setModalMessage(
+      "Êtes-vous sûr de vouloir annuler cette réservation ? Cette action est irréversible."
     );
+    setModalType("info");
+    setShowCancelModal(true);
   };
 
   const handleImageError = (id: number) => {
@@ -309,36 +546,43 @@ const loadReservations = async () => {
   };
 
   // Filtrer les réservations par onglet
-// Tri du plus récent au plus ancien (l'ID le plus élevé = la plus récente)
-const filtered = useMemo(() => {
-  return reservations
-    .filter((r) => mapStatusToTab(r) === activeTab)
-    .sort((a, b) => b.id - a.id); // ← plus récent en haut
-}, [reservations, activeTab]);
+  const filtered = useMemo(() => {
+    return reservations
+      .filter((r) => mapStatusToTab(r) === activeTab)
+      .sort((a, b) => b.id - a.id);
+  }, [reservations, activeTab]);
 
-//  le badge type prend la couleur du statut actuel
-const getTypeBadgeStyle = (status: ReservationStatus) => {
-  switch (status) {
-    case "PENDING":   return { bg: "#FFF3E0", color: "#FF9800" };
-    case "ACCEPTED":  return { bg: "#E8F5E9", color: "#4CAF50" };
-    case "COMPLETED": return { bg: "#E3F2FD", color: "#2196F3" };
-    case "CANCELED":  return { bg: "#FFEBEE", color: "#F44336" };
-    default:          return { bg: "#F5F5F5", color: "#757575" };
-  }
-};
+  const getTypeBadgeStyle = (status: ReservationStatus) => {
+    switch (status) {
+      case "PENDING": return { bg: "#FFF3E0", color: "#FF9800" };
+      case "ACCEPTED": return { bg: "#E8F5E9", color: "#4CAF50" };
+      case "COMPLETED": return { bg: "#E3F2FD", color: "#2196F3" };
+      case "CANCELED": return { bg: "#FFEBEE", color: "#F44336" };
+      default: return { bg: "#F5F5F5", color: "#757575" };
+    }
+  };
 
-  const getButtonText = (status: ReservationStatus, isDatePassed: boolean): string => {
+  // ============= LOGIQUE METIER POUR LES BOUTONS =============
+  const getButtonText = (item: Reservation): string => {
+    const isPast = item.dateFin ? isDatePassed(item.dateFin) : false;
+    
+    // ----- PARKING -----
     if (isParking) {
-      if (status === "PENDING") return "GÉRER LA RÉSERVATION";
-      if (status === "ACCEPTED" && !isDatePassed) return "ANNULER LA RÉSERVATION";
+      if (item.status === "PENDING") return "GÉRER LA RÉSERVATION";
+      if (item.status === "ACCEPTED" && !isPast) return "ANNULER LA RÉSERVATION";
       return "VOIR LES DÉTAILS";
-    } else {
-      if (status === "COMPLETED" || isDatePassed) return "LOUER À NOUVEAU";
-
-      if (status === "PENDING" || status === "ACCEPTED") return "ANNULER LA RÉSERVATION";
-
-      if (status === "CANCELED") return "RÉSERVER À NOUVEAU";
-      return "VOIR LES DÉTAILS";
+    } 
+    
+    // ----- CLIENT -----
+    else {
+      // RÉSERVATIONS ANNULÉES → Réserver à nouveau
+      if (item.status === "CANCELED") return "RÉSERVER À NOUVEAU";
+      
+      // RÉSERVATIONS TERMINÉES (date passée OU statut COMPLETED) → Louer/Acheter à nouveau
+      if (item.status === "COMPLETED" || isPast) return "LOUER À NOUVEAU";
+      
+      // RÉSERVATIONS ACTIVES (PENDING ou ACCEPTED avec date non dépassée) → UNIQUEMENT ANNULER
+      return "ANNULER LA RÉSERVATION";
     }
   };
 
@@ -352,31 +596,177 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
   const handleButtonAction = (item: Reservation) => {
     const isPast = item.dateFin ? isDatePassed(item.dateFin) : false;
 
+    // ----- PARKING -----
     if (isParking) {
       if (item.status === "PENDING") {
         openActionModal(item);
       } else if (item.status === "ACCEPTED" && !isPast) {
-        handleCancel(item.id);
+        confirmCancel(item);
       } else {
-        // Pour les autres statuts (y compris ACCEPTED passé), navigation vers les détails
         router.push(`/reservations/${item.id}`);
       }
       return;
     }
 
-    // Client
-    // Si c'est Terminé (Completed ou date passée) -> Louer à nouveau (page véhicule)
-    if (item.status === "COMPLETED" || isPast) {
-      router.push(`/vehicles/${item.vehicle.id}`);
-    } else if (item.status === "PENDING" || item.status === "ACCEPTED") {
-      handleCancel(item.id);
-    } else if (item.status === "CANCELED") {
-      router.push(`/vehicles/${item.vehicle.id}`);
-    } else {
-      router.push(`/vehicles/${item.vehicle.id}`);
+    // ----- CLIENT -----
+    // CAS 1 : Réservation active (PENDING ou ACCEPTED avec date non dépassée) → ANNULATION
+    if ((item.status === "PENDING" || item.status === "ACCEPTED") && !isPast) {
+      confirmCancel(item);
+    }
+    // CAS 2 : Réservation terminée (COMPLETED ou date passée) → Relouer/Réacheter
+    else if (item.status === "COMPLETED" || isPast) {
+      router.push({
+        pathname: '/(Clients)/CreateListingScreen',
+        params: { vehicule: JSON.stringify(item.vehicle) }
+      });
+    }
+    // CAS 3 : Réservation annulée → Réserver à nouveau
+    else if (item.status === "CANCELED") {
+      router.push({
+        pathname: '/(Clients)/CreateListingScreen',
+        params: {
+          vehicule: JSON.stringify(item.vehicle),
+          prefillReservation: 'true',
+          reservationType: item.type,
+          dateDebut: item.dateDebut || '',
+          dateFin: item.dateFin || ''
+        }
+      });
+    }
+    // CAS 4 : Autres cas
+    else {
+      router.push({
+        pathname: '/(Clients)/CreateListingScreen',
+        params: { vehicule: JSON.stringify(item.vehicle) }
+      });
     }
   };
 
+  // Vérifier si le bouton doit être rouge (annulation)
+  const isCancelAction = (item: Reservation): boolean => {
+    if (isParking) {
+      return (item.status === "ACCEPTED" && !isDatePassed(item.dateFin));
+    } else {
+      // Client : bouton rouge pour PENDING et ACCEPTED non passés
+      return (item.status === "PENDING" || item.status === "ACCEPTED") && !isDatePassed(item.dateFin);
+    }
+  };
+
+  // Fonction pour rendre une modal générique
+  const renderGenericModal = (
+    visible: boolean,
+    title: string,
+    message: string,
+    type: "success" | "error" | "info",
+    onConfirm?: () => void,
+    onCancel?: () => void,
+    confirmText?: string,
+    cancelText?: string,
+    showInput: boolean = false,
+    inputValue: string = "",
+    onInputChange?: (text: string) => void,
+    inputPlaceholder: string = "Entrez un motif..."
+  ) => {
+    const getIcon = () => {
+      switch (type) {
+        case "success": return { icon: "check-circle", color: "#4CAF50", component: MaterialIcons };
+        case "error": return { icon: "error-outline", color: "#F44336", component: MaterialIcons };
+        case "info": return { icon: "info", color: "#2196F3", component: MaterialIcons };
+        default: return { icon: "info", color: "#2196F3", component: MaterialIcons };
+      }
+    };
+
+    const iconConfig = getIcon();
+    const IconComponent = iconConfig.component;
+
+    return (
+      <Modal
+        visible={visible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={onCancel}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={onCancel}>
+            <View style={styles.modalOverlayTouchable} />
+          </TouchableWithoutFeedback>
+
+          <View style={styles.genericModalContent}>
+            {/* Icon */}
+            <View style={[styles.modalIconContainer, { backgroundColor: `${iconConfig.color}15` }]}>
+              <IconComponent name={iconConfig.icon as any} size={40} color={iconConfig.color} />
+            </View>
+
+            {/* Title */}
+            <Text style={styles.genericModalTitle}>{title}</Text>
+
+            {/* Message */}
+            <Text style={styles.genericModalMessage}>{message}</Text>
+
+            {/* Input optionnel */}
+            {showInput && (
+              <View style={styles.cancelInputContainer}>
+                <Text style={styles.cancelInputLabel}>Motif (Optionnel)</Text>
+                <TextInput
+                  style={styles.cancelInput}
+                  placeholder={inputPlaceholder}
+                  value={inputValue}
+                  onChangeText={onInputChange}
+                  multiline={true}
+                  numberOfLines={3}
+                />
+              </View>
+            )}
+
+            {/* Actions */}
+            <View style={styles.genericModalActions}>
+              {onCancel && (
+                <TouchableOpacity
+                  style={[styles.genericModalButton, styles.genericModalButtonCancel]}
+                  onPress={onCancel}
+                  disabled={isProcessing}
+                >
+                  <Text style={styles.genericModalButtonCancelText}>
+                    {cancelText || "Annuler"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {onConfirm && (
+                <TouchableOpacity
+                  style={[
+                    styles.genericModalButton,
+                    type === "success" && styles.genericModalButtonSuccess,
+                    type === "error" && styles.genericModalButtonError,
+                    type === "info" && styles.genericModalButtonInfo,
+                  ]}
+                  onPress={onConfirm}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <Text style={styles.genericModalButtonConfirmText}>
+                      {confirmText || "Confirmer"}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {!onConfirm && !onCancel && (
+                <TouchableOpacity
+                  style={[styles.genericModalButton, styles.genericModalButtonClose]}
+                  onPress={onCancel || (() => { })}
+                >
+                  <Text style={styles.genericModalButtonCloseText}>Fermer</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
 
   const renderActionModal = () => {
     if (!selectedReservation) return null;
@@ -386,9 +776,7 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
       ? `${selectedReservation.vehicle.marqueRef.name} ${selectedReservation.vehicle.model}`
       : `${selectedReservation.vehicle.marque} ${selectedReservation.vehicle.model}`;
     const statusIcon = getStatusIcon(selectedReservation.status);
-    const StatusIconComponent = statusIcon.icon;
     const typeIcon = getTypeIcon(selectedReservation.type);
-    const TypeIconComponent = typeIcon.icon;
 
     return (
       <Modal
@@ -409,12 +797,14 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
           </TouchableWithoutFeedback>
 
           <View style={styles.modalContent}>
-            {/* Header avec gradient */}
+            {/* Header */}
             <View style={styles.modalHeader}>
               <View style={styles.modalHeaderContent}>
                 <View style={styles.modalTitleRow}>
                   <MaterialIcons name="receipt-long" size={24} color="#FFF" />
-                  <Text style={styles.modalTitle}>Gérer la réservation</Text>
+                  <Text style={styles.modalTitle}>
+                    {isParking ? "Gérer la réservation" : "Détails de la réservation"}
+                  </Text>
                 </View>
                 <Text style={styles.modalSubtitle}>#{selectedReservation.id}</Text>
               </View>
@@ -433,7 +823,7 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
               {/* Statut et type */}
               <View style={styles.modalStatusContainer}>
                 <View style={[styles.modalStatusBadge, { backgroundColor: getStatusBgColor(selectedReservation.status) }]}>
-                  <StatusIconComponent name={statusIcon.name as any} size={16} color={statusIcon.color} />
+                  <DynamicIcon iconDesc={statusIcon} size={16} />
                   <Text style={[styles.modalStatusText, { color: statusIcon.color }]}>
                     {translateStatus(selectedReservation.status)}
                   </Text>
@@ -442,7 +832,7 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
                   styles.modalTypeBadge,
                   { backgroundColor: getTypeBadgeStyle(selectedReservation.status).bg }
                 ]}>
-                  <TypeIconComponent name={typeIcon.name} size={16} color={getTypeBadgeStyle(selectedReservation.status).color} />
+                  <DynamicIcon iconDesc={typeIcon} size={16} />
                   <Text style={[styles.modalTypeText, { color: getTypeBadgeStyle(selectedReservation.status).color }]}>
                     {selectedReservation.type === "ACHAT" ? "Achat" : "Location"}
                   </Text>
@@ -594,46 +984,102 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
               </View>
             </ScrollView>
 
-            {/* Actions */}
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCancel]}
-                onPress={() => {
-                  setShowActionModal(false);
-                  handleCancel(selectedReservation.id);
-                }}
-              >
-                <Ionicons name="close-circle-outline" size={22} color="#F44336" />
-                <Text style={styles.modalButtonCancelText}>Annuler</Text>
-              </TouchableOpacity>
+            {/* Actions - UNIQUEMENT POUR PARKING */}
+            {isParking && (
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCancel]}
+                  onPress={() => {
+                    setShowActionModal(false);
+                    setSelectedReservation(selectedReservation);
+                    setShowCancelModal(true);
+                  }}
+                >
+                  <Ionicons name="close-circle-outline" size={22} color="#F44336" />
+                  <Text style={styles.modalButtonCancelText}>Annuler</Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonDecline]}
-                onPress={() => {
-                  setShowActionModal(false);
-                  handleDecline(selectedReservation.id);
-                }}
-              >
-                <MaterialIcons name="thumb-down" size={22} color="#FFF" />
-                <Text style={styles.modalButtonDeclineText}>Refuser</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonDecline]}
+                  onPress={() => {
+                    setShowActionModal(false);
+                    handleDecline(selectedReservation.id, "Refusée par le parking");
+                  }}
+                >
+                  <MaterialIcons name="thumb-down" size={22} color="#FFF" />
+                  <Text style={styles.modalButtonDeclineText}>Refuser</Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonAccept]}
-                onPress={() => {
-                  setShowActionModal(false);
-                  handleAccept(selectedReservation.id);
-                }}
-              >
-                <MaterialIcons name="check-circle" size={22} color="#FFF" />
-                <Text style={styles.modalButtonAcceptText}>Accepter</Text>
-              </TouchableOpacity>
-            </View>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonAccept]}
+                  onPress={() => {
+                    setShowActionModal(false);
+                    handleAccept(selectedReservation.id);
+                  }}
+                >
+                  <MaterialIcons name="check-circle" size={22} color="#FFF" />
+                  <Text style={styles.modalButtonAcceptText}>Accepter</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
     );
   };
+
+  // Modals génériques
+  const renderSuccessModal = renderGenericModal(
+    showSuccessModal,
+    modalTitle,
+    modalMessage,
+    "success",
+    () => setShowSuccessModal(false),
+    () => setShowSuccessModal(false),
+    "OK"
+  );
+
+  const renderErrorModal = renderGenericModal(
+    showErrorModal,
+    modalTitle,
+    modalMessage,
+    modalType,
+    () => setShowErrorModal(false),
+    () => setShowErrorModal(false),
+    "OK"
+  );
+
+  const renderCancelModal = renderGenericModal(
+    showCancelModal,
+    modalTitle,
+    modalMessage,
+    "info",
+    () => {
+      if (selectedReservation) {
+        const defaultReason = isParking 
+          ? "Annulée par le parking" 
+          : selectedReservation?.type === "LOCATION"
+            ? "Annulation de location par le client"
+            : "Annulation d'achat par le client";
+        
+        const finalReason = cancelReason.trim() || defaultReason;
+        handleCancel(selectedReservation.id, finalReason);
+      }
+    },
+    () => {
+      setShowCancelModal(false);
+      setSelectedReservation(null);
+      setCancelReason("");
+    },
+    "Oui, annuler",
+    "Non",
+    true,
+    cancelReason,
+    (text) => setCancelReason(text),
+    isParking 
+      ? "Précisez la raison de l'annulation..." 
+      : "Pourquoi annulez-vous ? (optionnel)"
+  );
 
   if (loading) {
     return (
@@ -644,7 +1090,7 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
     );
   }
 
-  if (error) {
+  if (error && reservations.length === 0) {
     return (
       <View style={styles.center}>
         <MaterialIcons name="error-outline" size={60} color="#FF3B30" />
@@ -660,6 +1106,10 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
   return (
     <View style={styles.mainContainer}>
       {renderActionModal()}
+      {renderSuccessModal}
+      {renderErrorModal}
+      {renderCancelModal}
+
       {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -680,7 +1130,7 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
         </TouchableOpacity>
       </View>
 
-      {/* TABS - Icônes retirées */}
+      {/* TABS */}
       <View style={styles.tabContainer}>
         {["À venir", "Terminée", "Annulée"].map((tab) => {
           const tabReservations = reservations.filter(r => mapStatusToTab(r) === tab);
@@ -740,9 +1190,7 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
           filtered.map((item) => {
             const total = calculateTotal(item);
             const statusIcon = getStatusIcon(item.status);
-            const StatusIconComponent = statusIcon.icon;
             const typeIcon = getTypeIcon(item.type);
-            const TypeIconComponent = typeIcon.icon;
 
             const carName = item.vehicle.marqueRef
               ? `${item.vehicle.marqueRef.name} ${item.vehicle.model}`
@@ -751,8 +1199,8 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
             const isPast = item.dateFin ? isDatePassed(item.dateFin) : false;
             const showCompletedBadge = isPast && item.status !== "CANCELED";
 
-            // Calculer le nombre de jours pour cette réservation
             const reservationDays = calculateDays(item.dateDebut, item.dateFin);
+            const isCancel = isCancelAction(item);
 
             return (
               <View key={item.id} style={styles.card}>
@@ -774,7 +1222,7 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
                   {/* Badge de statut */}
                   <View style={styles.statusContainer}>
                     <View style={[styles.statusBadge, { backgroundColor: getStatusBgColor(item.status) }]}>
-                      <StatusIconComponent name={statusIcon.name as any} size={14} color={statusIcon.color} />
+                      <DynamicIcon iconDesc={statusIcon} size={14} />
                       <Text style={[styles.statusText, { color: statusIcon.color }]}>
                         {translateStatus(item.status)}
                       </Text>
@@ -787,18 +1235,17 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
                   </View>
 
                   {/* Badge type */}
-                {/* Badge type → même couleur que le statut */}
-<View style={styles.typeBadgeContainer}>
-  <View style={[
-    styles.typeBadge,
-    { backgroundColor: getTypeBadgeStyle(item.status).bg }
-  ]}>
-    <TypeIconComponent name={typeIcon.name} size={12} color={getTypeBadgeStyle(item.status).color} />
-    <Text style={[styles.typeText, { color: getTypeBadgeStyle(item.status).color }]}>
-      {item.type === "ACHAT" ? "Achat" : "Location"}
-    </Text>
-  </View>
-</View>
+                  <View style={styles.typeBadgeContainer}>
+                    <View style={[
+                      styles.typeBadge,
+                      { backgroundColor: getTypeBadgeStyle(item.status).bg }
+                    ]}>
+                      <DynamicIcon iconDesc={typeIcon} size={12} />
+                      <Text style={[styles.typeText, { color: getTypeBadgeStyle(item.status).color }]}>
+                        {item.type === "ACHAT" ? "Achat" : "Location"}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
 
                 <View style={styles.cardContent}>
@@ -821,7 +1268,7 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
                     </View>
                   </View>
 
-                  {/* Détails techniques - MODIFIÉ : Icône voiture remplacée par "Jours" */}
+                  {/* Détails techniques */}
                   <View style={styles.detailsContainer}>
                     <View style={styles.detailItem}>
                       <MaterialIcons name="speed" size={16} color="#666" />
@@ -884,13 +1331,19 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
                       item.status === "CANCELED" && styles.actionButtonCanceled,
                       (item.status === "COMPLETED" || isPast) && styles.actionButtonCompleted,
                       item.status === "PENDING" && isParking && styles.actionButtonPending,
+                      isCancel && styles.actionButtonCancel,
                     ]}
                     onPress={() => handleButtonAction(item)}
+                    disabled={isProcessing}
                   >
                     <Text style={styles.actionButtonText}>
-                      {getButtonText(item.status, isPast)}
+                      {getButtonText(item)}
                     </Text>
-                    <MaterialIcons name="arrow-forward" size={18} color="#FFF" />
+                    <MaterialIcons 
+                      name={isCancel ? "close" : "arrow-forward"} 
+                      size={18} 
+                      color="#FFF" 
+                    />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -902,7 +1355,7 @@ const getTypeBadgeStyle = (status: ReservationStatus) => {
   );
 };
 
-
+// Styles
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
@@ -1297,6 +1750,9 @@ const styles = StyleSheet.create({
   actionButtonPending: {
     backgroundColor: "#2196F3",
   },
+  actionButtonCancel: {
+    backgroundColor: "#F44336",
+  },
   actionButtonText: {
     color: "#FFF",
     fontSize: 14,
@@ -1304,8 +1760,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     fontFamily: "Inter_700Bold",
   },
-
-  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -1540,6 +1994,115 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
+  },
+  genericModalContent: {
+    backgroundColor: "#FFF",
+    borderRadius: 20,
+    width: "85%",
+    maxWidth: 400,
+    padding: 24,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  cancelInputContainer: {
+    width: "100%",
+    marginTop: 16,
+  },
+  cancelInputLabel: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 8,
+    fontFamily: "Inter_500Medium",
+  },
+  cancelInput: {
+    width: "100%",
+    backgroundColor: "#F5F5F5",
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 14,
+    color: "#333",
+    fontFamily: "Inter_400Regular",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+  modalIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  genericModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    textAlign: "center",
+    marginBottom: 12,
+    fontFamily: "Inter_700Bold",
+  },
+  genericModalMessage: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 24,
+    fontFamily: "Inter_400Regular",
+  },
+  genericModalActions: {
+    flexDirection: "row",
+    justifyContent: "center",
+    width: "100%",
+    gap: 12,
+  },
+  genericModalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    minHeight: 48,
+  },
+  genericModalButtonCancel: {
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  genericModalButtonCancelText: {
+    color: "#666",
+    fontWeight: "600",
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+  },
+  genericModalButtonSuccess: {
+    backgroundColor: "#4CAF50",
+  },
+  genericModalButtonError: {
+    backgroundColor: "#F44336",
+  },
+  genericModalButtonInfo: {
+    backgroundColor: "#2196F3",
+  },
+  genericModalButtonClose: {
+    backgroundColor: "#FF6200",
+  },
+  genericModalButtonConfirmText: {
+    color: "#FFF",
+    fontWeight: "600",
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+  },
+  genericModalButtonCloseText: {
+    color: "#FFF",
+    fontWeight: "600",
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
   },
 });
 

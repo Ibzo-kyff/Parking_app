@@ -6,12 +6,14 @@ interface Props {
   onSend: (content: string) => void;
   disabled?: boolean;
   autoFocus?: boolean;
+  userOnlineStatus?: boolean;
 }
 
 export const MessageInput: React.FC<Props> = ({
   onSend,
   disabled,
   autoFocus = false,
+  userOnlineStatus = false,
 }) => {
   const [content, setContent] = useState('');
   const inputRef = useRef<TextInput | null>(null);
@@ -31,20 +33,23 @@ export const MessageInput: React.FC<Props> = ({
 
   return (
     <View style={styles.container}>
-      <TextInput
-        ref={inputRef}
-        style={styles.input}
-        value={content}
-        onChangeText={setContent}
-        placeholder="Tapez votre message..."
-        multiline
-        blurOnSubmit={false}
-        onSubmitEditing={handleSend}
-        returnKeyType="send"
-        keyboardAppearance="default"
-        textAlignVertical="top"
-        editable={!disabled}
-      />
+      <View style={styles.inputWrapper}>
+        {userOnlineStatus && <View style={styles.inputStatusDot} />}
+        <TextInput
+          ref={inputRef}
+          style={[styles.input, userOnlineStatus ? { paddingLeft: 8 } : undefined]}
+          value={content}
+          onChangeText={setContent}
+          placeholder="Tapez votre message..."
+          multiline
+          blurOnSubmit={false}
+          onSubmitEditing={handleSend}
+          returnKeyType="send"
+          keyboardAppearance="default"
+          textAlignVertical="top"
+          editable={!disabled}
+        />
+      </View>
 
       <TouchableOpacity
         onPress={handleSend}
@@ -63,6 +68,19 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: 'white',
     alignItems: 'flex-end',
+  },
+  inputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  inputStatusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#4CD964',
+    marginRight: 8,
+    marginBottom: 8,
   },
   input: {
     flex: 1,

@@ -14,7 +14,6 @@ function AppContent() {
         }}
       >
         <Stack.Screen name="index" />
-        {/* On retire les noms explicites qui causent des warnings si Expo Router les gère déjà */}
         <Stack.Screen name="tabs" />
       </Stack>
     </SafeAreaView>

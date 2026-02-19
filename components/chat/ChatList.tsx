@@ -7,9 +7,10 @@ interface Props {
   onSelectConversation: (userId: number, displayName: string, logo?: string | null, parkingId?: number) => void;
   currentUserId: number;
   currentUserRole?: string;
+  userPresence?: (userId: number) => { isOnline: boolean; lastSeen: string | null };
 }
 
-export const ChatList: React.FC<Props> = ({ conversations, onSelectConversation, currentUserId, currentUserRole }) => {
+export const ChatList: React.FC<Props> = ({ conversations, onSelectConversation, currentUserId, currentUserRole, userPresence }) => {
   const dataArray = React.useMemo(() => {
     if (!conversations || !Array.isArray(conversations)) return [];
 
@@ -24,6 +25,7 @@ export const ChatList: React.FC<Props> = ({ conversations, onSelectConversation,
         user,
         lastMessage: lastMsg,
         parkingId,
+        unreadCount: item.unreadCount, // Ajout de la prop unreadCount
       };
     });
   }, [conversations]);
@@ -62,10 +64,18 @@ export const ChatList: React.FC<Props> = ({ conversations, onSelectConversation,
     const time = formatTime(lastMsg?.createdAt);
 
     // Statut de lecture
-    const isUnread = lastMsg && !lastMsg.isRead && lastMsg.senderId !== currentUserId;
-    const messageCount = isUnread ? 1 : 0; // Vous pouvez adapter cette logique selon vos besoins
+    const count = item.unreadCount !== undefined
+      ? item.unreadCount
+      : (lastMsg && !lastMsg.read && lastMsg.senderId !== currentUserId ? 1 : 0);
+
+    // Fallback pour compatibilité avec le code existant qui utilise ces variables
+    const isUnread = count > 0;
+    const messageCount = count;
 
     const logo = user?.avatar || lastMsg?.parking?.logo;
+
+    // Présence (optionnelle)
+    const presenceData = user?.id && userPresence ? userPresence(Number(user.id)) : { isOnline: false, lastSeen: null };
 
     return (
       <TouchableOpacity
@@ -76,6 +86,7 @@ export const ChatList: React.FC<Props> = ({ conversations, onSelectConversation,
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials}</Text>
           </View>
+          {presenceData?.isOnline && <View style={styles.onlineDotSmall} />}
         </View>
 
         <View style={styles.contentContainer}>
@@ -103,7 +114,7 @@ export const ChatList: React.FC<Props> = ({ conversations, onSelectConversation,
 
             {messageCount > 0 && (
               <View style={styles.unreadBadge}>
-                <Text style={styles.unreadBadgeText}>{messageCount}</Text>
+                <Text style={styles.unreadBadgeText}>{messageCount > 99 ? '99+' : messageCount}</Text>
               </View>
             )}
           </View>
@@ -132,7 +143,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#F0F0F0',
@@ -141,10 +152,10 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#d3a425ff', // Vert WhatsApp
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#ff7d00',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -194,7 +205,7 @@ const styles = StyleSheet.create({
     fontFamily: 'System',
   },
   unreadBadge: {
-    backgroundColor: '#25D366',
+    backgroundColor: '#ff7d00', // ORANGE PARKING APP
     width: 20,
     height: 20,
     borderRadius: 10,
@@ -207,5 +218,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     fontFamily: 'System',
+  },
+  onlineDotSmall: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#4CD964',
+    position: 'absolute',
+    right: 6,
+    bottom: 6,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
 });

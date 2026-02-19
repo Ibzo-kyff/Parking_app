@@ -5,6 +5,7 @@ export interface Parking {
   name: string;
   address: string;
   city: string;
+  zipCode?: string | null;
   email: string;
   phone: string | null;
   description: string | null;

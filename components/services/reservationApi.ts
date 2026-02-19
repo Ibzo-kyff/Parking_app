@@ -5,6 +5,7 @@ export type Reservation = {
   id: number;
   status: "PENDING" | "ACCEPTED" | "COMPLETED" | "CANCELED";
   user: {
+    id: number;
     nom: string;
     prenom: string;
     email: string;

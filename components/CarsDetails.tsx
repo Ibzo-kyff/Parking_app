@@ -702,6 +702,11 @@ function CarDetailScreen() {
         conditionsAcceptees: currentReservation.conditionsAcceptees,
       };
       console.log('📤 Envoi réservation:', reservationBody);
+      console.log('📅 Dates envoyées:', {
+        debut: currentReservation.dateDebut,
+        fin: currentReservation.dateFin,
+      });
+      
       const reservationResponse = await fetch(`${BASE_URL}/reservations`, {
         method: 'POST',
         headers: {
@@ -719,6 +724,54 @@ function CarDetailScreen() {
         } catch {
           errorData = { message: 'Erreur lors de la création de la réservation' };
         }
+        
+        // Gestion spéciale pour les conflits de réservation
+        if (errorData.message && errorData.message.includes('déjà réservé')) {
+          let conflictMessage = 'Ce véhicule est déjà réservé pour la période sélectionnée.';
+          
+          if (errorData.conflictDetails) {
+            const formatConflictDate = (dateStr: string) => {
+              const date = new Date(dateStr);
+              return date.toLocaleDateString('fr-FR', {
+                day: '2-digit',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              });
+            };
+            
+            conflictMessage += `\n\n📅 Période déjà réservée :\nDu ${formatConflictDate(errorData.conflictDetails.existingStart)}\nAu ${formatConflictDate(errorData.conflictDetails.existingEnd)}`;
+          }
+          
+          conflictMessage += '\n\nVeuillez choisir d\'autres dates.';
+          
+          Alert.alert(
+            '⚠️ Conflit de réservation',
+            conflictMessage,
+            [
+              {
+                text: 'Choisir d\'autres dates',
+                onPress: () => {
+                  setIsProcessingPayment(false);
+                  setModalPayVisible(false);
+                  setModalVisible(true); // Rouvrir le modal de réservation
+                }
+              },
+              {
+                text: 'Annuler',
+                style: 'cancel',
+                onPress: () => {
+                  setModalPayVisible(false);
+                  setCurrentReservation(null);
+                  setIsProcessingPayment(false);
+                }
+              }
+            ]
+          );
+          return; // Sortir sans lancer d'exception
+        }
+        
         throw new Error(errorData.message || `Erreur ${reservationResponse.status}`);
       }
       const newReservation = await reservationResponse.json();
