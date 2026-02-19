@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  Dimensions, 
-  TouchableOpacity, 
-  ScrollView, 
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Dimensions,
+  TouchableOpacity,
+  ScrollView,
   Image,
-  SafeAreaView
+  SafeAreaView,
+  ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,6 +27,7 @@ const isTablet = width > 768;
 
 const Messages: React.FC<Props> = ({ initialParkingId }) => {
   const { authState, isLoading: authLoading } = useAuth();
+
   // Déduire un objet user minimal depuis authState
   const user = authState && authState.userId ? {
     id: Number(authState.userId),
@@ -34,13 +36,26 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
     role: authState.role,
   } : null;
 
+  // Normaliser le rôle pour TypeScript
+  const currentUserRole: 'CLIENT' | 'PARKING' | 'USER' | undefined = (authState?.role as any) || undefined;
+
   const {
-    messages, conversations, loading, sendMessage, loadConversation,
-    deleteMessage, updateMessage, setCurrentParkingId, resetActivePartner,
+    messages,
+    conversations,
+    loading,
+    sendMessage,
+    loadConversation,
+    deleteMessage,
+    updateMessage,
+    setCurrentParkingId,
+    resetActivePartner,
+    retryMessage,
     pusherStatus,
+    userPresence
   } = useChat(initialParkingId);
 
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [selectedConversation, setSelectedConversation] = useState<any>(null);
   const [parkingName, setParkingName] = useState<string>('');
   const [parkingLogo, setParkingLogo] = useState<string | null>(null);
   const [parkings, setParkings] = useState<Parking[]>([]);
@@ -54,9 +69,16 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
     setSelectedUserId(userId);
     setParkingName(name);
     setParkingLogo(logo || null);
+
     if (parkingId) {
       setCurrentParkingId(parkingId);
     }
+
+    // Trouver la conversation pour récupérer plus d'informations
+    const conversation = conversations.find(conv => conv.user.id === userId);
+    setSelectedConversation(conversation || null);
+
+    // Charger la conversation avec l'utilisateur sélectionné
     loadConversation(userId);
   };
 
@@ -76,6 +98,64 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
 
     fetchParkings();
   }, []);
+
+  // Fonction pour gérer le retry des messages
+  const handleRetryMessage = (message: Message) => {
+    if (retryMessage && selectedUserId) {
+      retryMessage(message);
+    }
+  };
+
+  // Trier les parkings par date du dernier message (du plus récent au plus ancien)
+  const sortedParkings = useMemo(() => {
+    // Créer un Map pour un accès rapide à la conversation de chaque parking
+    const conversationMap = new Map(
+      conversations.map(conv => [conv.user.id, conv])
+    );
+
+    // Trier les parkings
+    return [...parkings].sort((a, b) => {
+      const convA = a.user?.id ? conversationMap.get(a.user.id) : null;
+      const convB = b.user?.id ? conversationMap.get(b.user.id) : null;
+
+      // Priorité 1 : Messages non lus
+      const unreadA = convA?.unreadCount || 0;
+      const unreadB = convB?.unreadCount || 0;
+      if (unreadA > 0 && unreadB === 0) return -1;
+      if (unreadB > 0 && unreadA === 0) return 1;
+
+      // Priorité 2 : Date du dernier message
+      const dateA = convA?.lastMessage?.createdAt
+        ? new Date(convA.lastMessage.createdAt).getTime()
+        : 0;
+      const dateB = convB?.lastMessage?.createdAt
+        ? new Date(convB.lastMessage.createdAt).getTime()
+        : 0;
+
+      return dateB - dateA;
+    });
+  }, [parkings, conversations]);
+
+  // Trier les conversations pour la sidebar tablette
+  const sortedConversations = useMemo(() => {
+    return [...conversations].sort((a, b) => {
+      // Priorité 1 : Messages non lus
+      const unreadA = a.unreadCount || 0;
+      const unreadB = b.unreadCount || 0;
+      if (unreadA > 0 && unreadB === 0) return -1;
+      if (unreadB > 0 && unreadA === 0) return 1;
+
+      // Priorité 2 : Date du dernier message
+      const dateA = a.lastMessage?.createdAt
+        ? new Date(a.lastMessage.createdAt).getTime()
+        : 0;
+      const dateB = b.lastMessage?.createdAt
+        ? new Date(b.lastMessage.createdAt).getTime()
+        : 0;
+
+      return dateB - dateA;
+    });
+  }, [conversations]);
 
   if (authLoading) {
     return (
@@ -109,29 +189,35 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
     );
   }
 
-  // 🟩 Layout Mobile
+  // Layout Mobile
   if (!isTablet) {
     if (selectedUserId) {
+      // Récupérer les données de présence de l'utilisateur sélectionné
+      const presenceData = userPresence(selectedUserId);
+
       return (
         <ChatWindow
           messages={messages}
           onSendMessage={sendMessage}
           onDeleteMessage={deleteMessage}
           onUpdateMessage={updateMessage}
+          onRetryMessage={handleRetryMessage}
           receiverId={selectedUserId}
           parkingName={parkingName}
           loading={loading}
           onBack={() => {
             setSelectedUserId(null);
+            setSelectedConversation(null);
             resetActivePartner();
           }}
           parkingLogo={parkingLogo}
-          pusherStatus={pusherStatus}
+          currentUserRole={currentUserRole}
+          userPresence={presenceData}
         />
       );
     }
 
-    // 🟦 Liste des parkings avec header
+    // Liste des parkings avec header (triée)
     return (
       <SafeAreaView style={styles.safeArea}>
         <LinearGradient
@@ -147,80 +233,131 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
           >
             <View style={styles.headerContent}>
               <Ionicons name="chatbubbles" size={24} color="#fff" />
-              <Text style={styles.headerTitle}>Contactez un parkings</Text>
+              <Text style={styles.headerTitle}>Contactez un parking</Text>
             </View>
           </LinearGradient>
 
-          {/* CONTENU SCROLLABLE */}
+          {/* CONTENU SCROLLABLE AVEC PARKINGS TRIÉS */}
           {loadingParkings ? (
             <View style={styles.loadingContainer}>
-              <Ionicons name="refresh-circle" size={40} color="#ff7d00" />
+              <ActivityIndicator size="large" color="#ff7d00" />
               <Text style={styles.loadingParkingsText}>Chargement des parkings...</Text>
             </View>
-          ) : parkings.length === 0 ? (
+          ) : sortedParkings.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="car-outline" size={64} color="#d1d5db" />
               <Text style={styles.emptyTitle}>Aucun parking disponible</Text>
               <Text style={styles.emptySubtext}>Revenez plus tard</Text>
             </View>
           ) : (
-            <ScrollView 
+            <ScrollView
               contentContainerStyle={styles.parkingListContainer}
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.parkingsGrid}>
-                {parkings.map((p) => (
-                  <TouchableOpacity
-                    key={p.id}
-                    onPress={() => {
-                      if (p.user && p.user.id) {
-                        handleSelectConversation(p.user.id, p.name, p.logo, p.id);
-                      } else {
-                        console.warn('Parking sans utilisateur associé', p.id);
-                      }
-                    }}
-                    style={styles.parkingCard}
-                  >
-                    <LinearGradient
-                      colors={['#f8f9ff', '#ffffff']}
-                      style={styles.cardGradient}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
+                {sortedParkings.map((p) => {
+                  // Trouver la conversation avec ce parking
+                  const conversation = conversations.find(
+                    (conv) => conv.user?.id === p.user?.id
+                  );
+
+                  // Récupérer les données de présence pour ce parking
+                  const parkingUserId = p.user?.id;
+                  const presenceData = parkingUserId ? userPresence(parkingUserId) : { isOnline: false, lastSeen: null };
+
+                  // Calculer le nombre de messages non lus
+                  let unreadCount = 0;
+                  if (conversation?.unreadCount !== undefined) {
+                    unreadCount = conversation.unreadCount;
+                  } else if (conversation?.lastMessage) {
+                    // Vérifier si le dernier message n'est pas lu et est reçu par l'utilisateur courant
+                    if (!conversation.lastMessage.read &&
+                      conversation.lastMessage.receiverId === user.id) {
+                      unreadCount = 1;
+                    }
+                  }
+
+                  return (
+                    <TouchableOpacity
+                      key={p.id}
+                      onPress={() => {
+                        if (p.user && p.user.id) {
+                          handleSelectConversation(p.user.id, p.name, p.logo, p.id);
+                        } else {
+                          console.warn('Parking sans utilisateur associé', p.id);
+                        }
+                      }}
+                      style={styles.parkingCard}
+                      activeOpacity={0.7}
                     >
-                      <View style={styles.cardContent}>
-                        <View style={styles.logoContainer}>
-                          <Image
-                            source={{
-                              uri: p.logo || 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
-                            }}
-                            style={styles.parkingLogo}
-                          />
-                        </View>
-                        <View style={styles.parkingInfo}>
-                          <Text style={styles.parkingName} numberOfLines={1}>
-                            {p.name}
-                          </Text>
-                          <View style={styles.parkingMeta}>
-                            <Ionicons name="location-outline" size={12} color="#666" />
-                            <Text style={styles.parkingCity} numberOfLines={1}>
-                              {p.city}
-                            </Text>
+                      <LinearGradient
+                        colors={['#f8f9ff', '#ffffff']}
+                        style={styles.cardGradient}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                      >
+                        <View style={styles.cardContent}>
+                          <View style={styles.logoContainer}>
+                            <Image
+                              source={{
+                                uri: p.logo || 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
+                              }}
+                              style={styles.parkingLogo}
+                              defaultSource={require('../../assets/images/favicon.png')}
+                            />
+                            {presenceData.isOnline && (
+                              <View style={styles.onlineIndicator} />
+                            )}
+                            {unreadCount > 0 && <View style={styles.unreadDotMini} />}
                           </View>
-                          {/* <View style={styles.capacityBadge}>
-                            <Ionicons name="car-sport-outline" size={12} color="#667eea" />
-                            <Text style={styles.capacityText}>{p.capacity} places</Text>
-                          </View> */}
+
+                          <View style={styles.parkingInfo}>
+                            <View style={styles.mainInfoRow}>
+                              <Text style={styles.parkingName} numberOfLines={1}>
+                                {p.name}
+                              </Text>
+                              {conversation?.lastMessage && (
+                                <Text style={styles.timeText}>
+                                  {formatMessageTime(conversation.lastMessage.createdAt)}
+                                </Text>
+                              )}
+                            </View>
+
+                            <View style={styles.metaRow}>
+                              <View style={styles.cityInfo}>
+                                <Ionicons name="location-sharp" size={12} color="#ff7d00" />
+                                <Text style={styles.parkingCity} numberOfLines={1}>
+                                  {p.city}
+                                </Text>
+                              </View>
+                              {!presenceData.isOnline && presenceData.lastSeen && (
+                                <Text style={styles.lastSeenTextMini}>
+                                  Vu {formatMessageTime(presenceData.lastSeen)}
+                                </Text>
+                              )}
+                            </View>
+
+                            <View style={styles.bottomRow}>
+                              {conversation?.lastMessage ? (
+                                <Text style={styles.lastMessageText} numberOfLines={1}>
+                                  {conversation.lastMessage.content}
+                                </Text>
+                              ) : (
+                                <Text style={styles.noMessageText}>Aucun message</Text>
+                              )}
+
+                              {unreadCount > 0 && (
+                                <View style={styles.unreadBadge}>
+                                  <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
+                                </View>
+                              )}
+                            </View>
+                          </View>
                         </View>
-                        <Ionicons 
-                          name="chatbubble-ellipses" 
-                          size={20} 
-                          color="#ff7d00" 
-                          style={styles.chatIcon}
-                        />
-                      </View>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                ))}
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </ScrollView>
           )}
@@ -229,7 +366,7 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
     );
   }
 
-  // 🟨 Layout Tablette / Desktop
+  // Layout Tablette / Desktop
   return (
     <SafeAreaView style={styles.safeArea}>
       <LinearGradient
@@ -239,7 +376,7 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
         {/* SIDEBAR */}
         <View style={styles.sidebar}>
           <LinearGradient
-            colors={['#667eea', '#764ba2']}
+            colors={['#ff7d00', '#ff7d00']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.sidebarHeader}
@@ -252,11 +389,12 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
           <View style={styles.sidebarContent}>
             <Text style={styles.sidebarTitle}>Conversations</Text>
             <ChatList
-              conversations={conversations}
+              conversations={sortedConversations}
               onSelectConversation={(userId, name, logo, parkingId) =>
                 handleSelectConversation(userId, name, logo, parkingId)
               }
               currentUserId={user.id}
+              userPresence={userPresence}
             />
           </View>
         </View>
@@ -264,25 +402,35 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
         {/* MAIN CONTENT */}
         <View style={styles.main}>
           {selectedUserId ? (
-            <ChatWindow
-              messages={messages}
-              onSendMessage={sendMessage}
-              onDeleteMessage={deleteMessage}
-              onUpdateMessage={updateMessage}
-              receiverId={selectedUserId}
-              parkingName={parkingName}
-              loading={loading}
-              onBack={() => {
-                setSelectedUserId(null);
-                resetActivePartner();
-              }}
-              parkingLogo={parkingLogo}
-              pusherStatus={pusherStatus}
-            />
+            <>
+              {(() => {
+                const presenceData = userPresence(selectedUserId);
+                return (
+                  <ChatWindow
+                    messages={messages}
+                    onSendMessage={sendMessage}
+                    onDeleteMessage={deleteMessage}
+                    onUpdateMessage={updateMessage}
+                    onRetryMessage={handleRetryMessage}
+                    receiverId={selectedUserId}
+                    parkingName={parkingName}
+                    loading={loading}
+                    onBack={() => {
+                      setSelectedUserId(null);
+                      setSelectedConversation(null);
+                      resetActivePartner();
+                    }}
+                    parkingLogo={parkingLogo}
+                    currentUserRole={currentUserRole}
+                    userPresence={presenceData}
+                  />
+                );
+              })()}
+            </>
           ) : (
             <View style={styles.emptyStateDesktop}>
               <LinearGradient
-                colors={['#667eea', '#764ba2']}
+                colors={['#ff7d00', '#ff7d00']}
                 style={styles.emptyGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
@@ -298,6 +446,7 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
                 <Text style={styles.tipText}>• Soyez poli et clair dans vos messages</Text>
                 <Text style={styles.tipText}>• Les parkings répondent généralement sous 24h</Text>
                 <Text style={styles.tipText}>• Vous pouvez envoyer des photos si besoin</Text>
+                <Text style={styles.tipText}>• Les indicateurs verts montrent qui est en ligne</Text>
               </View>
             </View>
           )}
@@ -305,6 +454,28 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
       </LinearGradient>
     </SafeAreaView>
   );
+};
+
+// Fonction utilitaire pour formater l'heure des messages
+const formatMessageTime = (dateString: string | null) => {
+  if (!dateString) return 'Jamais en ligne';
+
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'À l\'instant';
+  if (diffMins < 60) return `Il y a ${diffMins} min`;
+  if (diffHours < 24) return `Il y a ${diffHours} h`;
+  if (diffDays === 1) return 'Hier';
+
+  return date.toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+  });
 };
 
 export default Messages;
@@ -315,13 +486,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  container: { 
-    flex: 1, 
+  container: {
+    flex: 1,
     flexDirection: 'row',
     backgroundColor: '#f8f9ff',
   },
-  sidebar: { 
-    width: 320, 
+  sidebar: {
+    width: 320,
     backgroundColor: '#fff',
     shadowColor: '#667eea',
     shadowOffset: { width: 4, height: 0 },
@@ -330,13 +501,13 @@ const styles = StyleSheet.create({
     elevation: 10,
     zIndex: 10,
   },
-  main: { 
-    flex: 1, 
+  main: {
+    flex: 1,
     backgroundColor: '#f8f9ff',
   },
-  center: { 
-    flex: 1, 
-    justifyContent: 'center', 
+  center: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f8f9ff',
   },
@@ -376,7 +547,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
-    shadowColor: '#667eea',
+    shadowColor: '#ff7d00',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
@@ -434,7 +605,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-  headerIcon: { 
+  headerIcon: {
     padding: 4,
   },
 
@@ -445,7 +616,7 @@ const styles = StyleSheet.create({
   },
   parkingListContainer: {
     padding: 20,
-    paddingTop: 0,
+    paddingTop: 10,
   },
 
   // Welcome section
@@ -485,7 +656,6 @@ const styles = StyleSheet.create({
   // Parking cards (mobile)
   parkingsGrid: {
     gap: 16,
-    top: 10
   },
   parkingCard: {
     borderRadius: 16,
@@ -499,7 +669,8 @@ const styles = StyleSheet.create({
   cardContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderRadius: 16,
     backgroundColor: '#fff',
   },
@@ -508,30 +679,76 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   parkingLogo: {
-    width: 56,
-    height: 56,
+    width: 50,
+    height: 50,
     borderRadius: 12,
-    backgroundColor: '#f0f4ff',
+    backgroundColor: '#f3f4f6',
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#4CD964',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   parkingInfo: {
     flex: 1,
   },
-  parkingName: { 
-    fontSize: 16, 
-    fontWeight: '700', 
-    color: '#1F2A44',
-    marginBottom: 6,
+  parkingName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+    flex: 1,
   },
   parkingMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginBottom: 8,
+    gap: 8,
+    marginBottom: 6,
+    flexWrap: 'wrap',
   },
-  parkingCity: { 
-    color: '#666', 
+  parkingCity: {
+    color: '#666',
     fontSize: 13,
     fontWeight: '500',
+  },
+  onlineStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  onlineDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#4CD964',
+  },
+  onlineText: {
+    fontSize: 11,
+    color: '#4CD964',
+    fontWeight: '600',
+  },
+  lastSeenText: {
+    fontSize: 11,
+    color: '#FF9500',
+    fontStyle: 'italic',
+  },
+  lastMessageContainer: {
+    marginTop: 4,
+  },
+  lastMessage: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 2,
+  },
+  lastMessageTime: {
+    fontSize: 11,
+    color: '#999',
+    fontStyle: 'italic',
   },
   capacityBadge: {
     flexDirection: 'row',
@@ -543,13 +760,90 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: 4,
   },
-  capacityText: { 
-    fontSize: 12, 
+  capacityText: {
+    fontSize: 12,
     color: '#667eea',
     fontWeight: '600',
   },
-  chatIcon: {
-    marginLeft: 8,
+  messageCountBadge: {
+    backgroundColor: '#ff7d00',
+    minWidth: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    shadowColor: '#ff7d00',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  unreadBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  mainInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  timeText: {
+    fontSize: 11,
+    color: '#9CA3AF',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginVertical: 2,
+  },
+  cityInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
+  lastMessageText: {
+    fontSize: 13,
+    color: '#6B7280',
+    flex: 1,
+    marginRight: 10,
+  },
+  noMessageText: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    fontStyle: 'italic',
+  },
+  unreadBadge: {
+    backgroundColor: '#ff7d00',
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  unreadDotMini: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#ff7d00',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  lastSeenTextMini: {
+    fontSize: 10,
+    color: '#9CA3AF',
   },
 
   // Sidebar items (tablet)
@@ -596,14 +890,14 @@ const styles = StyleSheet.create({
   sidebarItemInfo: {
     flex: 1,
   },
-  sidebarItemText: { 
-    fontSize: 15, 
-    fontWeight: '700', 
+  sidebarItemText: {
+    fontSize: 15,
+    fontWeight: '700',
     color: '#1F2A44',
     marginBottom: 2,
   },
-  sidebarMeta: { 
-    fontSize: 13, 
+  sidebarMeta: {
+    fontSize: 13,
     color: '#666',
     fontWeight: '500',
   },
@@ -652,9 +946,9 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     lineHeight: 24,
   },
-  emptySidebarText: { 
-    textAlign: 'center', 
-    color: '#999', 
+  emptySidebarText: {
+    textAlign: 'center',
+    color: '#999',
     marginTop: 12,
     fontSize: 14,
   },
@@ -674,12 +968,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   loadingContainer: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
   },
   loadingParkingsText: {
-    color: '#667eea',
+    color: '#ff7d00',
     fontSize: 14,
     fontWeight: '600',
     marginTop: 12,

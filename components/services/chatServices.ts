@@ -6,11 +6,11 @@ export const chatService = {
     return api.post<Message>('/messages', { receiverId, content, parkingId, clientTempId });
   },
 
-  // Récupérer une conversation
-  getConversation: async (userId: number, parkingId?: number, page: number = 1, pageSize: number = 20) => {
-    let url = `/messages/conversation/${userId}?page=${page}&pageSize=${pageSize}`;
-    if (parkingId) url += `&parkingId=${parkingId}`;
-    return api.get(url);
+  // Récupérer la conversation (avec limite optionnelle)
+  getConversation: async (userId: number, parkingId?: number, limit?: number) => {
+    return api.get(`/messages/conversation/${userId}`, {
+      params: { parkingId, limit },
+    });
   },
 
   // Récupérer toutes les conversations

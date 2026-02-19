@@ -19,6 +19,13 @@ import { MessageBubble } from './MessageBubble';
 import { MessageInput } from './MessageInput';
 import { Message } from '../../app/type/chat';
 import { useAuth } from '../../context/AuthContext';
+import api from '../services/api';
+import {
+  subscribeToOtherUserPresence,
+  getPusherConnectionState,
+  subscribeToPusherConnection,
+} from '../../app/utils/pusher';
+import Constants from 'expo-constants';
 
 const { height } = Dimensions.get('window');
 
@@ -38,7 +45,7 @@ interface Props {
   currentUserRole?: 'CLIENT' | 'PARKING' | 'USER';
   headerBackgroundColor?: string;
   headerTextColor?: string;
-  pusherStatus?: 'connected' | 'connecting' | 'disconnected' | 'failed';
+  userPresence?: { isOnline: boolean; lastSeen: string | null }; // Changé ici
 }
 
 export const ChatWindow: React.FC<Props> = ({
@@ -57,11 +64,17 @@ export const ChatWindow: React.FC<Props> = ({
   currentUserRole,
   headerBackgroundColor = '#ff7d00',
   headerTextColor = '#ffffff',
-  pusherStatus = 'disconnected',
+  userPresence: propUserPresence, // Renommé pour éviter la confusion
 }) => {
-  const { user } = useAuth();
+  const { user, authState } = useAuth();
+  const token = authState?.accessToken || null;
   const flatListRef = useRef<FlatList<Message>>(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [userPresence, setUserPresence] = useState({
+    isOnline: false,
+    lastSeen: null as string | null,
+  });
+  const [pusherStatus, setPusherStatus] = useState(getPusherConnectionState());
   const slideAnim = useRef(new Animated.Value(100)).current;
 
   const displayedMessages = useMemo(() => {
@@ -72,7 +85,6 @@ export const ChatWindow: React.FC<Props> = ({
     );
   }, [messages]);
 
-
   // 🔹 Détermination du nom à afficher selon le rôle
   const displayName = useMemo(() => {
     if (currentUserRole === 'PARKING') {
@@ -81,7 +93,30 @@ export const ChatWindow: React.FC<Props> = ({
     return parkingName?.trim() || 'Parking inconnu';
   }, [currentUserRole, receiverName, parkingName]);
 
-  // 🔹 Fonction pour récupérer les initiales du nom et prénom
+  // 🔹 Fonction pour formater la date de dernière connexion
+  const formatLastSeen = useCallback((dateString: string | null) => {
+    if (!dateString) return 'jamais en ligne';
+
+    const lastSeenDate = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - lastSeenDate.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'à l\'instant';
+    if (diffMins < 60) return `il y a ${diffMins} min`;
+    if (diffHours < 24) return `il y a ${diffHours} h`;
+    if (diffDays === 1) return 'hier';
+    if (diffDays < 7) return `il y a ${diffDays} jours`;
+
+    return lastSeenDate.toLocaleDateString('fr-FR', {
+      day: 'numeric',
+      month: 'short',
+    });
+  }, []);
+
+  // 🔹 Fonction pour récupérer les initiales
   const getInitials = useCallback((name: string) => {
     const cleaned = name.trim();
     if (!cleaned) return '?';
@@ -92,8 +127,101 @@ export const ChatWindow: React.FC<Props> = ({
     return cleaned.slice(0, 2).toUpperCase();
   }, []);
 
-  // 🔹 Même si un avatar ou logo existe, on privilégie les initiales
   const displayInitials = getInitials(displayName);
+
+  // 🔹 Utiliser les props ou l'état local
+  const presenceData = propUserPresence || userPresence;
+
+  // 🔹 Statut de connexion dynamique
+  const getConnectionStatus = useMemo(() => {
+    // Si Pusher n'est pas connecté
+    if (pusherStatus !== 'connected') {
+      return {
+        text: pusherStatus === 'connecting' ? 'Connexion...' : 'Hors ligne',
+        color: '#FF6B6B',
+        isOnline: false
+      };
+    }
+
+    // Si l'utilisateur est en ligne
+    if (presenceData.isOnline) {
+      return {
+        text: 'En ligne',
+        color: '#4CD964',
+        isOnline: true
+      };
+    }
+
+    // Si hors ligne avec lastSeen
+    return {
+      text: presenceData.lastSeen ? `Vu ${formatLastSeen(presenceData.lastSeen)}` : 'Hors ligne',
+      color: '#FF9500',
+      isOnline: false
+    };
+  }, [pusherStatus, presenceData, formatLastSeen]);
+
+  // 🔹 Récupérer le statut initial de l'utilisateur depuis l'API
+  useEffect(() => {
+    const fetchUserPresence = async () => {
+      if (!receiverId) return;
+
+      try {
+        const response = await api.get(`/users/${receiverId}/presence`);
+
+        if (response.status === 200) {
+          setUserPresence({
+            isOnline: response.data.isOnline,
+            lastSeen: response.data.lastSeen,
+          });
+        }
+      } catch (error) {
+        console.error('Erreur récupération présence:', error);
+      }
+    };
+
+    fetchUserPresence();
+  }, [receiverId, token]);
+
+  // 🔹 Écouter les changements de statut Pusher
+  useEffect(() => {
+    const unsubscribe = subscribeToPusherConnection((status) => {
+      setPusherStatus(status);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  // 🔹 Suivre la présence de l'autre utilisateur via Pusher
+  useEffect(() => {
+    if (!receiverId || !user?.id) return;
+
+    let cleanupPresence: (() => void) | undefined;
+
+    const setupPresenceTracking = async () => {
+      try {
+        cleanupPresence = await subscribeToOtherUserPresence(
+          receiverId,
+          (isOnline) => {
+            setUserPresence(prev => ({
+              ...prev,
+              isOnline,
+              lastSeen: isOnline ? null : new Date().toISOString()
+            }));
+          }
+        );
+      } catch (error) {
+        console.error('Erreur abonnement présence:', error);
+      }
+    };
+
+    setupPresenceTracking();
+
+    return () => {
+      if (cleanupPresence) {
+        cleanupPresence();
+      }
+    };
+  }, [receiverId, user?.id]);
 
   // Animation du menu contextuel
   const openMenu = () => {
@@ -113,11 +241,6 @@ export const ChatWindow: React.FC<Props> = ({
       tension: 40,
       useNativeDriver: true,
     }).start(() => setShowMenu(false));
-  };
-
-  const handleMenuAction = (action: string) => {
-    closeMenu();
-    console.log('Menu action:', action);
   };
 
   const scrollToEnd = useCallback((animated = true) => {
@@ -151,6 +274,7 @@ export const ChatWindow: React.FC<Props> = ({
     []
   );
 
+  const status = getConnectionStatus;
 
   return (
     <KeyboardAvoidingView
@@ -160,34 +284,54 @@ export const ChatWindow: React.FC<Props> = ({
     >
       <SafeAreaView style={styles.safeArea}>
         {/* HEADER */}
-        <View style={[styles.header, { backgroundColor: headerBackgroundColor || '#ff7d00' }]}>
+        <View style={[styles.header, { backgroundColor: headerBackgroundColor }]}>
           <View style={styles.headerLeft}>
             {onBack && (
-              <TouchableOpacity onPress={onBack} style={styles.backButton} accessibilityLabel="Retour">
+              <TouchableOpacity
+                onPress={onBack}
+                style={styles.backButton}
+                accessibilityLabel="Retour"
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
                 <Ionicons name="arrow-back" size={24} color={headerTextColor} />
               </TouchableOpacity>
             )}
           </View>
 
-          {/* 🔹 Remplacement du logo/avatar par les initiales */}
           <View style={styles.headerCenter}>
             <View style={[styles.headerLogo, styles.fallbackAvatar]}>
-              <Text style={[styles.fallbackAvatarText, { color: headerTextColor }]}>{displayInitials}</Text>
+              <Text style={[styles.fallbackAvatarText, { color: headerTextColor }]}>
+                {displayInitials}
+              </Text>
+              {status.isOnline && (
+                <View style={styles.onlineIndicator} />
+              )}
             </View>
             <View style={styles.headerTextContainer}>
               <Text style={[styles.headerName, { color: headerTextColor }]} numberOfLines={1}>
                 {displayName}
               </Text>
-              <Text style={[styles.headerStatus, { color: `${headerTextColor}CC` }]}>
-                {pusherStatus === 'connected' ? 'En ligne' :
-                  pusherStatus === 'connecting' ? 'Connexion en cours...' :
-                    'Hors ligne'}
-              </Text>
+              <View style={styles.statusContainer}>
+                <View
+                  style={[
+                    styles.statusDot,
+                    { backgroundColor: status.color }
+                  ]}
+                />
+                <Text style={[styles.headerStatus, { color: status.color }]}>
+                  {status.text}
+                </Text>
+              </View>
             </View>
           </View>
 
           <View style={styles.headerRight}>
-            <TouchableOpacity onPress={openMenu} style={styles.menuButton} accessibilityLabel="Options">
+            <TouchableOpacity
+              onPress={openMenu}
+              style={styles.menuButton}
+              accessibilityLabel="Options"
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
               <Ionicons name="ellipsis-vertical" size={20} color={headerTextColor} />
             </TouchableOpacity>
           </View>
@@ -195,7 +339,11 @@ export const ChatWindow: React.FC<Props> = ({
 
         {/* MENU CONTEXTUEL */}
         <Modal visible={showMenu} transparent animationType="none" onRequestClose={closeMenu}>
-          <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={closeMenu}>
+          <TouchableOpacity
+            style={styles.menuOverlay}
+            activeOpacity={1}
+            onPress={closeMenu}
+          >
             <Animated.View
               style={[
                 styles.menuContainer,
@@ -211,7 +359,7 @@ export const ChatWindow: React.FC<Props> = ({
                 <TouchableOpacity
                   key={item.action}
                   style={styles.menuItem}
-                  onPress={() => handleMenuAction(item.action)}
+                  onPress={() => console.log(item.action)}
                   accessibilityLabel={item.label}
                 >
                   <Ionicons name={item.icon as any} size={18} color="#1F2A44" />
@@ -227,6 +375,7 @@ export const ChatWindow: React.FC<Props> = ({
           {displayedMessages.length === 0 && !loading ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>Aucun message dans cette conversation</Text>
+              <Text style={styles.emptySubText}>Envoyez le premier message !</Text>
             </View>
           ) : (
             <FlatList
@@ -257,7 +406,7 @@ export const ChatWindow: React.FC<Props> = ({
         <View style={styles.footer}>
           <MessageInput
             onSend={(content) => onSendMessage(content, receiverId)}
-            disabled={loading}
+            disabled={loading || pusherStatus !== 'connected'}
             autoFocus={false}
           />
         </View>
@@ -267,9 +416,13 @@ export const ChatWindow: React.FC<Props> = ({
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F7F9FC' },
-  safeArea: { flex: 1 },
-
+  container: {
+    flex: 1,
+    backgroundColor: '#F7F9FC'
+  },
+  safeArea: {
+    flex: 1
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -280,35 +433,91 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255, 255, 255, 0.3)',
     paddingTop: Platform.OS === 'ios' ? 50 : 40,
   },
-  headerLeft: { flex: 1, alignItems: 'flex-start' },
-  headerCenter: { flexDirection: 'row', alignItems: 'center', flex: 3, justifyContent: 'center' },
-  headerRight: { flex: 1, alignItems: 'flex-end' },
-  backButton: { padding: 8, borderRadius: 12 },
-  menuButton: { padding: 8, borderRadius: 12 },
-
+  headerLeft: {
+    flex: 1,
+    alignItems: 'flex-start'
+  },
+  headerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 3,
+    justifyContent: 'center'
+  },
+  headerRight: {
+    flex: 1,
+    alignItems: 'flex-end'
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 12
+  },
+  menuButton: {
+    padding: 8,
+    borderRadius: 12
+  },
   headerLogo: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: '#000000ff',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
   },
   fallbackAvatar: {
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   fallbackAvatarText: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#007AFF',
+    color: '#fff',
   },
-  headerTextContainer: { marginLeft: 12, flex: 1 },
-  headerName: { color: '#fff', fontSize: 18, fontWeight: '700', letterSpacing: 0.2 },
-  headerStatus: { color: 'rgba(255, 255, 255, 0.8)', fontSize: 12, marginTop: 4, fontWeight: '400' },
-
-  messagesWrapper: { flex: 1, backgroundColor: '#F7F9FC' },
-  messagesContent: { padding: 16, paddingBottom: 24 },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#4CD964',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  headerTextContainer: {
+    marginLeft: 12,
+    flex: 1
+  },
+  headerName: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 0.2
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  headerStatus: {
+    fontSize: 12,
+    fontWeight: '400',
+    letterSpacing: 0.2,
+  },
+  messagesWrapper: {
+    flex: 1,
+    backgroundColor: '#F7F9FC'
+  },
+  messagesContent: {
+    padding: 16,
+    paddingBottom: 24
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -316,8 +525,14 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   emptyText: {
-    color: '#ffffffff',
-    fontSize: 15,
+    color: '#8A8F9E',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  emptySubText: {
+    color: '#C7C7CC',
+    fontSize: 14,
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  Dimensions, 
-  TouchableOpacity, 
-  ScrollView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  Dimensions,
+  TouchableOpacity,
+  ScrollView,
   Image,
   SafeAreaView
 } from 'react-native';
@@ -49,6 +49,7 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
     setCurrentParkingId,
     retryMessage,
     resetActivePartner,
+    userPresence,
   } = useChat(initialParkingId);
 
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
@@ -92,7 +93,7 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
     setReceiverName(name);
     setReceiverAvatar(logo || null);
     if (parkingId) setCurrentParkingId(parkingId);
-    loadConversation(userId);
+    loadConversation(userId, parkingId);
   };
 
   // === CHARGEMENT / AUTH ===
@@ -182,7 +183,7 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
             </View>
           ) : (
             // POUR LE CLIENT : Liste des parkings
-            <ScrollView 
+            <ScrollView
               contentContainerStyle={styles.parkingListContainer}
               showsVerticalScrollIndicator={false}
             >
@@ -204,21 +205,25 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
                 </View>
               ) : (
                 <View style={styles.parkingsGrid}>
-                  {parkings.map((p) => (
-                    <TouchableOpacity
-                      key={p.id}
-                      onPress={() => {
-                        if (p.user?.id) {
-                          handleSelectConversation(p.user.id, p.name, p.logo, p.id);
-                        }
-                      }}
-                      style={styles.parkingCard}
-                    >
-                      <LinearGradient
-                        colors={['#f8f9ff', '#ffffff']}
-                        style={styles.cardGradient}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
+                  {parkings.map((p) => {
+                    const conversation = conversations.find(
+                      (conv) => conv.user.id === p.user?.id
+                    );
+
+                    const unreadCount = conversation?.unreadCount !== undefined
+                      ? conversation.unreadCount
+                      : (conversation?.lastMessage && conversation.lastMessage.receiverId === user?.id && !conversation.lastMessage.read ? 1 : 0);
+
+                    return (
+                      <TouchableOpacity
+                        key={p.id}
+                        onPress={() => {
+                          if (p.user?.id) {
+                            handleSelectConversation(p.user.id, p.name, p.logo, p.id);
+                          }
+                        }}
+                        style={styles.parkingCard}
+                        activeOpacity={0.8}
                       >
                         <View style={styles.cardContent}>
                           <View style={styles.logoContainer}>
@@ -228,32 +233,40 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
                               }}
                               style={styles.parkingLogo}
                             />
+                            {userPresence(p.user?.id || 0).isOnline && (
+                              <View style={styles.onlineDot} />
+                            )}
+                            {unreadCount > 0 && <View style={styles.unreadDot} />}
                           </View>
                           <View style={styles.parkingInfo}>
-                            <Text style={styles.parkingName} numberOfLines={1}>
-                              {p.name}
-                            </Text>
-                            <View style={styles.parkingMeta}>
-                              <Ionicons name="location-outline" size={12} color="#666" />
-                              <Text style={styles.parkingCity} numberOfLines={1}>
-                                {p.city}
+                            <View style={styles.nameRow}>
+                              <Text style={styles.parkingName} numberOfLines={1}>
+                                {p.name}
                               </Text>
+                              {unreadCount > 0 && (
+                                <View style={styles.miniBadge}>
+                                  <Text style={styles.miniBadgeText}>{unreadCount}</Text>
+                                </View>
+                              )}
                             </View>
-                            <View style={styles.capacityBadge}>
-                              <Ionicons name="car-sport-outline" size={12} color="#667eea" />
-                              <Text style={styles.capacityText}>{p.capacity} places</Text>
+                            <View style={styles.parkingMeta}>
+                              <View style={styles.metaItem}>
+                                <Ionicons name="location-sharp" size={12} color="#ff7d00" />
+                                <Text style={styles.parkingCity} numberOfLines={1}>
+                                  {p.city}
+                                </Text>
+                              </View>
+                              <View style={styles.metaItem}>
+                                <Ionicons name="car-sport" size={12} color="#667eea" />
+                                <Text style={styles.capacityTextSmall}>{p.capacity} pl.</Text>
+                              </View>
                             </View>
                           </View>
-                          <Ionicons 
-                            name="chatbubble-ellipses" 
-                            size={20} 
-                            color="#667eea" 
-                            style={styles.chatIcon}
-                          />
+                          <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
                         </View>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  ))}
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               )}
             </ScrollView>
@@ -296,7 +309,7 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
               />
             </View>
           ) : (
-            <ScrollView 
+            <ScrollView
               style={styles.sidebarContent}
               showsVerticalScrollIndicator={false}
             >
@@ -304,7 +317,7 @@ const Messages: React.FC<Props> = ({ initialParkingId }) => {
                 <Text style={styles.welcomeText}>Bonjour, {user.prenom}</Text>
                 <Text style={styles.welcomeSubtext}>Parkings disponibles</Text>
               </View>
-              
+
               {parkings.length === 0 ? (
                 <View style={styles.emptySidebar}>
                   <Ionicons name="car-outline" size={48} color="#d1d5db" />
@@ -414,13 +427,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  container: { 
-    flex: 1, 
+  container: {
+    flex: 1,
     flexDirection: 'row',
     backgroundColor: '#f8f9ff',
   },
-  sidebar: { 
-    width: 320, 
+  sidebar: {
+    width: 320,
     backgroundColor: '#fff',
     shadowColor: '#ff7d00',
     shadowOffset: { width: 4, height: 0 },
@@ -429,13 +442,13 @@ const styles = StyleSheet.create({
     elevation: 10,
     zIndex: 10,
   },
-  main: { 
-    flex: 1, 
+  main: {
+    flex: 1,
     backgroundColor: '#f8f9ff',
   },
-  center: { 
-    flex: 1, 
-    justifyContent: 'center', 
+  center: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f8f9ff',
   },
@@ -533,7 +546,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-  headerIcon: { 
+  headerIcon: {
     padding: 4,
   },
 
@@ -597,7 +610,7 @@ const styles = StyleSheet.create({
   cardContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: 12,
     borderRadius: 16,
     backgroundColor: '#fff',
   },
@@ -606,19 +619,20 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   parkingLogo: {
-    width: 56,
-    height: 56,
+    width: 50,
+    height: 50,
     borderRadius: 12,
-    backgroundColor: '#f0f4ff',
+    backgroundColor: '#f3f4f6',
   },
   parkingInfo: {
     flex: 1,
   },
-  parkingName: { 
-    fontSize: 16, 
-    fontWeight: '700', 
-    color: '#1F2A44',
-    marginBottom: 6,
+  parkingName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+    flex: 1,
+    marginRight: 8,
   },
   parkingMeta: {
     flexDirection: 'row',
@@ -626,10 +640,62 @@ const styles = StyleSheet.create({
     gap: 4,
     marginBottom: 8,
   },
-  parkingCity: { 
-    color: '#666', 
-    fontSize: 13,
+  parkingCity: {
+    color: '#6B7280',
+    fontSize: 12,
     fontWeight: '500',
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  capacityTextSmall: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  miniBadge: {
+    backgroundColor: '#ff7d00',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    minWidth: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#ff7d00',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  onlineDot: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#4CD964',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   capacityBadge: {
     flexDirection: 'row',
@@ -641,13 +707,30 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: 4,
   },
-  capacityText: { 
-    fontSize: 12, 
+  capacityText: {
+    fontSize: 12,
     color: '#667eea',
     fontWeight: '600',
   },
-  chatIcon: {
-    marginLeft: 8,
+  messageCountBadge: {
+    backgroundColor: '#ff7d00',
+    minWidth: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    shadowColor: '#ff7d00',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  messageCountText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 
   // Sidebar items (tablet)
@@ -694,14 +777,14 @@ const styles = StyleSheet.create({
   sidebarItemInfo: {
     flex: 1,
   },
-  sidebarItemText: { 
-    fontSize: 15, 
-    fontWeight: '700', 
+  sidebarItemText: {
+    fontSize: 15,
+    fontWeight: '700',
     color: '#1F2A44',
     marginBottom: 2,
   },
-  sidebarMeta: { 
-    fontSize: 13, 
+  sidebarMeta: {
+    fontSize: 13,
     color: '#666',
     fontWeight: '500',
   },
@@ -750,9 +833,9 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     lineHeight: 24,
   },
-  emptySidebarText: { 
-    textAlign: 'center', 
-    color: '#999', 
+  emptySidebarText: {
+    textAlign: 'center',
+    color: '#999',
     marginTop: 12,
     fontSize: 14,
   },

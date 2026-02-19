@@ -3,9 +3,18 @@ import { chatService } from '../components/services/chatServices';
 import { Message, ConversationList } from '../app/type/chat';
 import { useAuth } from '../context/AuthContext';
 import { usePusherChannel } from './usePusherChannel';
+import {
+  initializePusher,
+  subscribeToUserPresence,
+  subscribeToOtherUserPresence,
+  getPusherConnectionState,
+  subscribeToPusherConnection,
+  cleanupPusher
+} from '../app/utils/pusher';
 
 export const useChat = (parkingId?: number) => {
-  const { user } = useAuth();
+  const { user, authState } = useAuth();
+  const token = authState?.accessToken || null;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversations, setConversations] = useState<ConversationList>([]);
@@ -13,31 +22,65 @@ export const useChat = (parkingId?: number) => {
   const [currentParkingId, setCurrentParkingId] = useState<number | undefined>(parkingId);
   const [activePartnerId, setActivePartnerId] = useState<number | null>(null);
   const [pusherStatus, setPusherStatus] = useState<'connected' | 'connecting' | 'disconnected' | 'failed'>('disconnected');
-
-  useEffect(() => {
-    const { getPusherConnectionState, subscribeToPusherConnection } = require('../app/utils/pusher');
-
-    // État initial
-    const currentState = getPusherConnectionState();
-    setPusherStatus(currentState === 'connected' ? 'connected' : (currentState === 'unavailable' ? 'failed' : 'connecting'));
-
-    // Abonnement aux changements
-    const unsubscribe = subscribeToPusherConnection((state: string) => {
-      console.log('📡 [useChat] Nouveau statut Pusher:', state);
-      if (state === 'connected') setPusherStatus('connected');
-      else if (state === 'connecting') setPusherStatus('connecting');
-      else if (state === 'failed' || state === 'unavailable') setPusherStatus('failed');
-      else setPusherStatus('disconnected');
-    });
-
-    return () => unsubscribe();
-  }, []);
+  const [userPresence, setUserPresence] = useState<Record<number, { isOnline: boolean, lastSeen: string | null }>>({});
 
   const userRef = useRef(user);
+  const tokenRef = useRef(token);
+  // Ref pour suivre l'état de chargement et éviter les interruptions
+  const loadingRef = useRef(false);
 
   useEffect(() => {
     userRef.current = user;
-  }, [user]);
+    tokenRef.current = token;
+  }, [user, token]);
+
+  // Initialiser Pusher
+  useEffect(() => {
+    const initPusher = async () => {
+      if (!user?.id) return;
+
+      try {
+        await initializePusher(user.id);
+        await subscribeToUserPresence(user.id);
+      } catch (error) {
+        console.error('❌ [useChat] Erreur initialisation Pusher:', error);
+      }
+    };
+
+    initPusher();
+
+    return () => {
+      // Note: On ne fait plus cleanupPusher() ici car cela coupe la connexion 
+      // pour tous les autres composants. Le nettoyage global est géré au logout.
+    };
+  }, [user?.id]);
+
+  // Écouter les changements de statut Pusher
+  useEffect(() => {
+    const unsubscribe = subscribeToPusherConnection((state: string) => {
+      console.log('📡 [useChat] Nouveau statut Pusher:', state);
+
+      if (state === 'connected') {
+        setPusherStatus('connected');
+      } else if (state === 'connecting') {
+        setPusherStatus('connecting');
+      } else if (state === 'failed' || state === 'unavailable') {
+        setPusherStatus('failed');
+      } else {
+        setPusherStatus('disconnected');
+      }
+    });
+
+    // État initial
+    const currentState = getPusherConnectionState();
+    setPusherStatus(
+      currentState === 'connected' ? 'connected' :
+        currentState === 'failed' || currentState === 'unavailable' ? 'failed' :
+          currentState === 'connecting' ? 'connecting' : 'disconnected'
+    );
+
+    return unsubscribe;
+  }, []);
 
   // Tri des messages par date
   const sortMessages = (msgs: Message[]) => {
@@ -50,10 +93,26 @@ export const useChat = (parkingId?: number) => {
      LOAD CONVERSATIONS
   ====================== */
   const loadConversations = useCallback(async () => {
-    if (!userRef.current) return;
+    if (!userRef.current || !tokenRef.current) return;
+
     try {
       const res = await chatService.getConversations();
-      setConversations(Array.isArray(res.data) ? res.data : []);
+      const conversationsData = Array.isArray(res.data) ? res.data : [];
+
+      setConversations(conversationsData);
+
+      // Initialiser les statuts de présence
+      const presenceData: Record<number, { isOnline: boolean, lastSeen: string | null }> = {};
+      conversationsData.forEach((conv: any) => {
+        if (conv.user) {
+          presenceData[conv.user.id] = {
+            isOnline: conv.user.isOnline || false,
+            lastSeen: conv.user.lastSeen || null
+          };
+        }
+      });
+      setUserPresence(prev => ({ ...prev, ...presenceData }));
+
     } catch (e) {
       console.error('❌ Erreur chargement conversations:', e);
     }
@@ -66,32 +125,38 @@ export const useChat = (parkingId?: number) => {
     const currentUser = userRef.current;
     if (!currentUser?.id) return;
 
+    // 🔹 Filtrage par parking pour éviter de mélanger les contextes
+    if (currentParkingId !== undefined && data.parkingId && Number(data.parkingId) !== Number(currentParkingId)) {
+      // Si le message n'est pas pour le parking actif, on l'ignore de la vue courante
+      // Mais on recharge quand même les conversations pour mettre à jour les notifs
+      loadConversations();
+      return;
+    }
+
     const myId = Number(currentUser.id);
 
     setMessages(prev => {
-      // 1. Remplacement d'un message optimiste existant
+      // 1. Remplacement d'un message optimiste existant (via clientTempId)
       if (data.clientTempId) {
         const index = prev.findIndex(m => String(m.clientTempId) === String(data.clientTempId));
         if (index !== -1) {
           const copy = [...prev];
-          copy[index] = { ...data, status: 'sent' };
+          copy[index] = { ...data, status: 'sent' }; // Mise à jour avec les vraies données
           return sortMessages(copy);
         }
       }
 
-      // 2. Éviter les doublons par ID
+      // 2. Éviter les doublons par ID réel
       if (prev.some(m => m.id === data.id)) return prev;
 
       // 3. Ajouter si le message fait partie de cette conversation
-      if (Number(data.senderId) === myId || Number(data.receiverId) === myId) {
-        return sortMessages([...prev, { ...data, status: 'sent' }]);
-      }
-
-      return prev;
+      // Nous utilisons filteredMessages pour l'affichage, donc ici on ajoute simplement au pool
+      return sortMessages([...prev, { ...data, status: 'sent' }]);
     });
 
+    // On recharge la liste des conversations pour mettre à jour l'aperçu et le badge non lu
     loadConversations();
-  }, [loadConversations]);
+  }, [loadConversations, currentParkingId]);
 
   const onUpdateMessage = useCallback((data: Message) => {
     setMessages(prev => prev.map(m => (m.id === data.id ? data : m)));
@@ -107,6 +172,17 @@ export const useChat = (parkingId?: number) => {
     setMessages(prev =>
       prev.map(m => (m.id === data.id ? { ...m, read: true } : m))
     );
+    // Mettre à jour aussi le statut de lecture dans la liste des conversations
+    setConversations(prev => prev.map(conv => {
+      if (conv.lastMessage && conv.lastMessage.id === data.id) {
+        return {
+          ...conv,
+          unreadCount: Math.max(0, (conv.unreadCount || 0) - 1),
+          lastMessage: { ...conv.lastMessage, read: true }
+        };
+      }
+      return conv;
+    }));
   }, []);
 
   const pusherEvents = useMemo(
@@ -124,63 +200,105 @@ export const useChat = (parkingId?: number) => {
   /* =====================
      LOAD ONE CONVERSATION
   ====================== */
-  const loadConversation = async (otherUserId: number, parkingIdOverride?: number) => {
-    // Utilisation immédiate de l'override ou de la valeur actuelle du state
+  const loadConversation = useCallback(async (otherUserId: number, parkingIdOverride?: number, limit?: number) => {
     const pId = parkingIdOverride !== undefined ? parkingIdOverride : currentParkingId;
 
     console.log(`📂 [loadConversation] Chargement discussion avec ${otherUserId} (parkingId: ${pId})`);
     setActivePartnerId(otherUserId);
-    setMessages([]);
-    setLoading(true);
+
+    // NE PAS VIDER messages[] ici si on charge la même conversation (ou pendant la pagination)
+    // Mais pour l'instant, pour simplifier et éviter les mélanges, on vide.
+    // L'amélioration serait de vérifier si otherUserId === activePartnerId
+    if (activePartnerId !== otherUserId) {
+      setMessages([]);
+      setLoading(true);
+    }
+
+    loadingRef.current = true;
 
     try {
-      const res = await chatService.getConversation(otherUserId, pId);
+      const res = await chatService.getConversation(otherUserId, pId, limit);
       const data = Array.isArray(res.data) ? res.data : res.data?.messages || [];
-      console.log(`📡 [loadConversation] ${data.length} messages récupérés du serveur`);
-      setMessages(sortMessages(data));
+
+      // Vérification que l'utilisateur n'a pas changé de conversation pendant le chargement
+      if (loadingRef.current) {
+        setMessages(sortMessages(data));
+      }
     } catch (e) {
       console.error('❌ [loadConversation] Erreur:', e);
     } finally {
-      setLoading(false);
+      if (loadingRef.current) {
+        setLoading(false);
+        loadingRef.current = false;
+      }
     }
-  };
+  }, [currentParkingId, activePartnerId]); // Added activePartnerId dep
+
+  // Suivre la présence de l'utilisateur actif
+  useEffect(() => {
+    if (!activePartnerId) return;
+
+    let cleanupPresence: (() => void) | undefined;
+
+    const trackPartnerPresence = async () => {
+      try {
+        cleanupPresence = await subscribeToOtherUserPresence(activePartnerId, (isOnline) => {
+          setUserPresence(prev => ({
+            ...prev,
+            [activePartnerId]: {
+              ...prev[activePartnerId],
+              isOnline,
+              lastSeen: isOnline ? null : new Date().toISOString()
+            }
+          }));
+        });
+      } catch (error) {
+        console.error('❌ [useChat] Erreur suivi présence:', error);
+      }
+    };
+
+    trackPartnerPresence();
+
+    return () => {
+      if (cleanupPresence) {
+        cleanupPresence();
+      }
+    };
+  }, [activePartnerId]);
 
   /* =====================
      SEND MESSAGE
   ====================== */
-  const sendMessage = async (content: string, receiverId: number) => {
+  const sendMessage = useCallback(async (content: string, receiverId: number) => {
     if (!content.trim() || !userRef.current?.id) return;
 
-    setActivePartnerId(receiverId);
+    const myId = Number(userRef.current.id);
 
-    console.log('📤 [sendMessage] Envoi message:', {
-      receiverId,
-      content,
-      myId: userRef.current.id,
-      activePartnerId: receiverId,
-      parkingId: currentParkingId,
-    });
+    // Assurer que le partenaire actif est correct
+    if (activePartnerId !== receiverId) {
+      setActivePartnerId(receiverId);
+    }
 
     const clientTempId = Date.now().toString();
 
+    // 1. Mise à jour Optimiste
     const optimistic: Message = {
-      id: Number(clientTempId),
+      id: Number(clientTempId), // ID temporaire
       clientTempId,
-      senderId: userRef.current.id,
+      senderId: myId,
       receiverId,
       content: content.trim(),
       createdAt: new Date().toISOString(),
       read: false,
-      status: 'sending',
+      status: 'sending', // Indicateur visuel potentiel
+      parkingId: currentParkingId ?? null,
     };
 
-    console.log('➕ [sendMessage] Ajout message optimiste');
-    setMessages(prev => {
-      console.log(`📊 [sendMessage] Messages avant: ${prev.length}, après: ${prev.length + 1}`);
-      return [...prev, optimistic];
-    });
+    // Ajouter immédiatement le message
+    setMessages(prev => sortMessages([...prev, optimistic]));
 
     try {
+      // 2. Appel API
       const { data } = await chatService.sendMessage(
         receiverId,
         content,
@@ -188,52 +306,64 @@ export const useChat = (parkingId?: number) => {
         clientTempId
       );
 
-      console.log('✅ [sendMessage] Réponse serveur reçue:', data);
-
-      // Mise à jour immédiate avec les données réelles du serveur
+      // 3. Mise à jour avec la réponse réelle
       setMessages(prev => {
+        // Est-ce que le message existe déjà (via Pusher qui aurait été plus rapide) ?
+        const alreadyReceivedViaPusher = prev.some(m => m.id === data.id);
+
+        // Si oui, on supprime l'optimiste car le "vrai" est déjà là
+        if (alreadyReceivedViaPusher) {
+          return prev.filter(m => String(m.clientTempId) !== String(clientTempId));
+        }
+
+        // Sinon, on remplace l'optimiste par le vrai
         const index = prev.findIndex(m => String(m.clientTempId) === String(clientTempId));
         if (index !== -1) {
           const copy = [...prev];
-          copy[index] = { ...data, status: 'sent' };
-          console.log(`📝 [sendMessage] Message optimiste mis à jour avec ID réel: ${data.id}`);
+          copy[index] = { ...data, clientTempId, status: 'sent' };
           return sortMessages(copy);
         }
-        return sortMessages([...prev, { ...data, status: 'sent' }]);
+
+        // Cas de secours : on ajoute le vrai si l'optimiste a disparu
+        return sortMessages([...prev, { ...data, clientTempId, status: 'sent' }]);
       });
 
-      // Recharger les conversations pour mettre à jour le dernier message dans la liste
+      // On rafraîchit la liste des conversations en arrière-plan
       loadConversations();
+
     } catch (e) {
       console.error('❌ [sendMessage] Erreur envoi API:', e);
+      // Marquer le message comme échoué
       setMessages(prev =>
         prev.map(m =>
-          m.clientTempId === clientTempId ? { ...m, status: 'failed' } : m
+          String(m.clientTempId) === String(clientTempId) ? { ...m, status: 'failed' } : m
         )
       );
     }
-  };
+  }, [currentParkingId, activePartnerId, loadConversations]);
 
-  const retryMessage = async (msg: Message) => {
+  const retryMessage = useCallback(async (msg: Message) => {
     setMessages(prev => prev.filter(m => m.clientTempId !== msg.clientTempId));
     await sendMessage(msg.content, msg.receiverId);
-  };
+  }, [sendMessage]);
 
   useEffect(() => {
-    if (userRef.current) loadConversations();
+    if (userRef.current) {
+      loadConversations();
+    }
   }, [loadConversations]);
 
   // 🔹 Filtrer les messages pour la conversation active uniquement
   const filteredMessages = useMemo(() => {
     if (!activePartnerId || !userRef.current?.id) {
-      console.log('🔍 [useChat] Pas de filtre actif, retour de tous les messages:', messages.length);
       return messages;
     }
 
     const myId = Number(userRef.current.id);
     const partnerId = Number(activePartnerId);
 
-    const filtered = messages.filter(m => {
+    // On garde uniquement les messages échangés avec le partenaire actif
+    return messages.filter(m => {
       const senderId = Number(m.senderId);
       const receiverId = Number(m.receiverId);
 
@@ -242,10 +372,9 @@ export const useChat = (parkingId?: number) => {
         (senderId === partnerId && receiverId === myId)
       );
     });
-
-    return filtered;
   }, [messages, activePartnerId]);
-  // 🔹 Marquer les messages comme lus quand on est dans la conversation
+
+  // 🔹 Marquer les messages comme lus LORSQUE l'utilisateur consulte la conversation
   useEffect(() => {
     const markRead = async () => {
       const currentUser = userRef.current;
@@ -254,7 +383,7 @@ export const useChat = (parkingId?: number) => {
       const myId = Number(currentUser.id);
       const partnerId = Number(activePartnerId);
 
-      // Chercher les messages non lus envoyés par le partenaire pour moi
+      // Identifier les messages non lus venant du partenaire
       const unreadIds = messages
         .filter(m =>
           Number(m.senderId) === partnerId &&
@@ -264,24 +393,25 @@ export const useChat = (parkingId?: number) => {
         .map(m => m.id);
 
       if (unreadIds.length > 0) {
-        console.log(`👁️ [useChat] Marquage de ${unreadIds.length} messages comme lus`);
-        // On traite en parallèle pour la réactivité
-        unreadIds.forEach(async (id) => {
-          try {
-            await chatService.markAsRead(id);
-            // Mise à jour locale immédiate
-            setMessages(prev => prev.map(m => m.id === id ? { ...m, read: true } : m));
-          } catch (e) {
-            console.log('❌ [useChat] Erreur markAsRead pour ID:', id);
-          }
-        });
+        // Mise à jour optimiste locale
+        setMessages(prev => prev.map(m => unreadIds.includes(m.id) ? { ...m, read: true } : m));
+
+        setConversations(prev => prev.map(c =>
+          c.user.id === partnerId
+            ? { ...c, unreadCount: 0, lastMessage: { ...c.lastMessage, read: true } }
+            : c
+        ));
+
+        // Appel API non bloquant
+        Promise.all(unreadIds.map(id => chatService.markAsRead(id)))
+          .catch(e => console.log('❌ [useChat] Erreur markAsRead silencieuse:', e));
       }
     };
 
     markRead();
   }, [messages, activePartnerId]);
 
-  const deleteMessage = async (id: number) => {
+  const deleteMessage = useCallback(async (id: number) => {
     try {
       await chatService.deleteMessage(id);
       setMessages(prev => prev.filter(m => m.id !== id));
@@ -289,9 +419,9 @@ export const useChat = (parkingId?: number) => {
     } catch (e) {
       console.error('❌ Erreur suppression message:', e);
     }
-  };
+  }, [loadConversations]);
 
-  const updateMessage = async (id: number, content: string) => {
+  const updateMessage = useCallback(async (id: number, content: string) => {
     try {
       const { data } = await chatService.updateMessage(id, content);
       setMessages(prev => prev.map(m => (m.id === id ? data : m)));
@@ -299,7 +429,12 @@ export const useChat = (parkingId?: number) => {
     } catch (e) {
       console.error('❌ Erreur modification message:', e);
     }
-  };
+  }, [loadConversations]);
+
+  // Fonction pour récupérer le statut d'un utilisateur spécifique
+  const getUserPresence = useCallback((userId: number) => {
+    return userPresence[userId] || { isOnline: false, lastSeen: null };
+  }, [userPresence]);
 
   return {
     messages: filteredMessages,
@@ -307,13 +442,13 @@ export const useChat = (parkingId?: number) => {
     loading,
     loadConversation,
     sendMessage,
-    deleteMessage,      // ✅ ajouté
-    updateMessage,      // ✅ ajouté
+    deleteMessage,
+    updateMessage,
     retryMessage,
     setCurrentParkingId,
     currentParkingId,
     resetActivePartner: () => setActivePartnerId(null),
     pusherStatus,
+    userPresence: getUserPresence,
   };
-
 };

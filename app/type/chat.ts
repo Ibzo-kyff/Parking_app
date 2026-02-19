@@ -40,6 +40,7 @@ export interface ConversationItem {
     role: 'CLIENT' | 'PARKING';
   };
   lastMessage: Message;
+  unreadCount?: number;
 }
 
 export type ConversationList = ConversationItem[];

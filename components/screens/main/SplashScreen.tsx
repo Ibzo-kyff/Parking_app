@@ -5,7 +5,7 @@ const SplashScreen = () => {
   const router = useRouter();
   useEffect(() => {
     const timer = setTimeout(() => {
-      router.replace('Login'); 
+      router.replace('Login');
     }, 2000);
 
     return () => clearTimeout(timer);
@@ -13,8 +13,8 @@ const SplashScreen = () => {
 
   return (
     <View style={styles.container}>
-      <Image 
-        source={require('../../../assets/images/logo.png')} 
+      <Image
+        source={require('../../../assets/images/icon.png')}
         style={styles.logo}
       />
       <Text style={styles.title}>Mon Application</Text>
