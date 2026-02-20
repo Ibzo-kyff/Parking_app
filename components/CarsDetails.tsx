@@ -481,10 +481,11 @@ function CarDetailScreen() {
   };
   // Fonction pour naviguer vers la page du parking
   const navigateToParking = () => {
-    if (vehicule?.parking) {
+    if (vehicule?.parking && (vehicule.parking.id !== undefined && vehicule.parking.id !== null)) {
+      // Navigate to the DetailParkings screen which expects an `id` param
       router.push({
-        pathname: '/(Clients)/parkingDetails',
-        params: { parking: JSON.stringify(vehicule.parking) }
+        pathname: '/DetailParkings',
+        params: { id: String(vehicule.parking.id) }
       });
     }
   };
