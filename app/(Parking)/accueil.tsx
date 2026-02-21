@@ -391,12 +391,18 @@ const AccueilParking = () => {
             <Text style={styles.quickLinkText}>Ajouter</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.quickLink} onPress={() => router.navigate('/voitures/vendues')}>
+          <TouchableOpacity
+            style={styles.quickLink}
+            onPress={() => router.push(`/voitures/vendues?parkingId=${parkingData.parking.id}`)}
+          >
             <Ionicons name="car-sport" size={24} color="#FD6A00" />
             <Text style={styles.quickLinkText}>Vendues</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.quickLink} onPress={() => router.navigate('/voitures/louees')}>
+          <TouchableOpacity
+            style={styles.quickLink}
+            onPress={() => router.push(`/voitures/louees?parkingId=${parkingData.parking.id}`)}
+          >
             <Ionicons name="time" size={24} color="#FD6A00" />
             <Text style={styles.quickLinkText}>Louées</Text>
           </TouchableOpacity>
