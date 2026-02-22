@@ -1,3 +1,4 @@
+// app/(auth)/LoginScreen.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -68,7 +69,7 @@ const LoginScreen = () => {
     router.push('/(auth)/ForgotPasswordScreen');
   };
 
-  // Fonction d'enregistrement du token Expo Push
+  // Fonction d'enregistrement du token Expo Push - CORRIGÉE
   const registerForPushNotificationsAsync = async (accessToken: string) => {
     if (!Device.isDevice) {
       console.log('Push notifications non supportées sur simulateur/émulateur');
@@ -101,21 +102,13 @@ const LoginScreen = () => {
         return;
       }
 
-      const response = await fetch(`${BASE_URL}/auth/users/push-token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ token }),
-      });
+      // IMPORTANT: Utiliser l'instance api avec l'intercepteur plutôt que fetch direct
+      // pour bénéficier du refresh automatique
+      const { default: api } = await import('../../components/services/api');
+      
+      await api.post('/auth/users/push-token', { token });
 
-      if (response.ok) {
-        console.log('Token push enregistré avec succès sur le serveur');
-      } else {
-        const errorText = await response.text();
-        console.warn('Échec enregistrement token push :', response.status, errorText);
-      }
+      console.log('Token push enregistré avec succès sur le serveur');
     } catch (error) {
       console.error('Erreur lors de la récupération ou envoi du token push :', error);
     }
@@ -145,6 +138,8 @@ const LoginScreen = () => {
         router.push('/(auth)/VerifyEmailScreen');
         return;
       }
+      if (role === 'PARKING') {
+      }
 
       // Mise à jour du contexte d'authentification
       setAuthState({
@@ -158,12 +153,12 @@ const LoginScreen = () => {
         prenom,
       });
 
-      // Stockage persistant du refreshToken
+      // Stockage persistant du refreshToken (déjà fait dans api.login)
       if (refreshToken) {
         await AsyncStorage.setItem('refreshToken', refreshToken);
       }
 
-      console.log('Connexion réussie');
+      console.log('✅ Connexion réussie');
 
       // Enregistrement du token push avec le nouveau accessToken
       if (accessToken) {
