@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAuthToken } from '../components/services/api'; 
 import axios from 'axios';
 import { refreshAccessToken } from '../components/services/api';
 import Constants from 'expo-constants';
+import { useRouter } from 'expo-router'; // Pour la redirection en cas d'échec de refresh
 
 interface AuthState {
   accessToken: string | null;
@@ -21,7 +22,7 @@ interface AuthContextType {
   setAuthState: (state: Partial<AuthState>) => void;
   clearAuthState: () => void;
   isLoading: boolean;
-  refreshAuth: () => Promise<boolean>; 
+  refreshAuth: () => Promise<string | false>; // Changé pour retourner le nouveau token ou false
   user: {
     id: number | null;
     nom: string | null;
@@ -32,7 +33,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const BASE_URL = Constants.expoConfig?.extra?.BASE_URL || process.env.BASE_URL;
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const router = useRouter(); // Pour rediriger en cas d'échec de refresh global
   const [authState, setAuthState] = useState<AuthState>({
     accessToken: null,
     refreshToken: null,
@@ -44,6 +47,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     prenom: null,
   });
   const [isLoading, setIsLoading] = useState(true);
+
+  // Lock pour refresh concurrent (évite les race conditions et multiples appels)
+  const isRefreshingRef = useRef(false);
+  const refreshSubscribersRef = useRef<((token: string) => void)[]>([]);
+
+  // Fonctions pour gérer les abonnés au refresh (pour les requêtes en attente)
+  const subscribeTokenRefresh = (cb: (token: string) => void) => {
+    refreshSubscribersRef.current.push(cb);
+  };
+
+  const onRefreshed = (token: string) => {
+    refreshSubscribersRef.current.forEach((cb) => cb(token));
+    refreshSubscribersRef.current = [];
+  };
 
   useEffect(() => {
     loadAuthData();
