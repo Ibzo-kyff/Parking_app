@@ -134,28 +134,27 @@ export const ChatWindow: React.FC<Props> = ({
 
   // 🔹 Statut de connexion dynamique
   const getConnectionStatus = useMemo(() => {
-    // Si Pusher n'est pas connecté
-    if (pusherStatus !== 'connected') {
+    // When Pusher is connecting show a specific label
+    if (pusherStatus === 'connecting') {
+      return { text: 'Connexion...', color: '#FF9500', isOnline: false };
+    }
+
+    // If Pusher is connected we can trust realtime presence
+    if (pusherStatus === 'connected') {
+      if (presenceData.isOnline) {
+        return { text: 'En ligne', color: '#4CD964', isOnline: true };
+      }
       return {
-        text: pusherStatus === 'connecting' ? 'Connexion...' : 'Hors ligne',
-        color: '#FF6B6B',
+        text: presenceData.lastSeen ? `Vu ${formatLastSeen(presenceData.lastSeen)}` : 'Hors ligne',
+        color: '#8E8E93',
         isOnline: false
       };
     }
 
-    // Si l'utilisateur est en ligne
-    if (presenceData.isOnline) {
-      return {
-        text: 'En ligne',
-        color: '#4CD964',
-        isOnline: true
-      };
-    }
-
-    // Si hors ligne avec lastSeen
+    // If disconnected/failed: show lastSeen from API if available, otherwise offline
     return {
       text: presenceData.lastSeen ? `Vu ${formatLastSeen(presenceData.lastSeen)}` : 'Hors ligne',
-      color: '#FF9500',
+      color: presenceData.lastSeen ? '#FF9500' : '#FF6B6B',
       isOnline: false
     };
   }, [pusherStatus, presenceData, formatLastSeen]);
@@ -166,7 +165,7 @@ export const ChatWindow: React.FC<Props> = ({
       if (!receiverId) return;
 
       try {
-        const response = await api.get(`/users/${receiverId}/presence`);
+        const response = await api.get(`/api/messages/users/${receiverId}/presence`);
 
         if (response.status === 200) {
           setUserPresence({
@@ -175,7 +174,14 @@ export const ChatWindow: React.FC<Props> = ({
           });
         }
       } catch (error) {
-        console.error('Erreur récupération présence:', error);
+        // Si l'API répond 404 cela signifie "absence de ressource" (pas de donnée de présence).
+        // On ne considère pas cela comme une erreur fatale — on applique un fallback propre.
+        const status = (error as any)?.response?.status;
+        if (status === 404) {
+          setUserPresence({ isOnline: false, lastSeen: null });
+        } else {
+          console.error('Erreur récupération présence:', error);
+        }
       }
     };
 
@@ -190,6 +196,28 @@ export const ChatWindow: React.FC<Props> = ({
 
     return unsubscribe;
   }, []);
+
+  // 🔹 Quand Pusher se reconnecte, rafraîchir l'état de présence via API
+  useEffect(() => {
+    const refreshPresence = async () => {
+      if (!receiverId) return;
+      try {
+        const response = await api.get(`/api/messages/users/${receiverId}/presence`);
+        if (response.status === 200) {
+          setUserPresence({
+            isOnline: response.data.isOnline,
+            lastSeen: response.data.lastSeen,
+          });
+        }
+      } catch (err) {
+        // silent
+      }
+    };
+
+    if (pusherStatus === 'connected') {
+      refreshPresence();
+    }
+  }, [pusherStatus, receiverId]);
 
   // 🔹 Suivre la présence de l'autre utilisateur via Pusher
   useEffect(() => {
@@ -303,7 +331,7 @@ export const ChatWindow: React.FC<Props> = ({
               <Text style={[styles.fallbackAvatarText, { color: headerTextColor }]}>
                 {displayInitials}
               </Text>
-              {status.isOnline && (
+              {(pusherStatus === 'connected' && presenceData.isOnline) && (
                 <View style={styles.onlineIndicator} />
               )}
             </View>

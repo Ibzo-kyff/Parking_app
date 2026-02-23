@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAuthToken } from '../components/services/api'; 
-import axios from 'axios'; 
+import axios from 'axios';
+import { refreshAccessToken } from '../components/services/api';
 import Constants from 'expo-constants';
 
 interface AuthState {
@@ -102,38 +103,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   // refreshAuth corrigée : Charge depuis storage si absent dans state
-  const refreshAuth = async (): Promise<boolean> => {
-    let currentRefreshToken = authState.refreshToken;
+// AuthContext.tsx - Modifiez refreshAuth
+const refreshAuth = async (): Promise<boolean> => {
+  let currentRefreshToken = authState.refreshToken;
 
+  if (!currentRefreshToken) {
+    currentRefreshToken = await AsyncStorage.getItem('refreshToken');
     if (!currentRefreshToken) {
-      currentRefreshToken = await AsyncStorage.getItem('refreshToken');
-      if (!currentRefreshToken) {
-        console.error('Pas de refreshToken disponible dans state ou storage');
-        return false;
-      }
-      // Mettre à jour le state pour cohérence
-      await updateAuthState({ refreshToken: currentRefreshToken });
-    }
-
-    try {
-      const response = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken: currentRefreshToken }, {
-        withCredentials: true
-      });
-      const { accessToken, refreshToken: newRefreshToken } = response.data;
-
-      await updateAuthState({
-        accessToken,
-        refreshToken: newRefreshToken || currentRefreshToken,
-      });
-      setAuthToken(accessToken);
-      console.log('Refresh réussi, new refreshToken:', newRefreshToken);
-      return true;
-    } catch (error) {
-      console.error('Erreur lors du rafraîchissement du token:', error);
-      await clearAuthState();
+      console.error('Pas de refreshToken disponible dans state ou storage');
       return false;
     }
-  };
+    await updateAuthState({ refreshToken: currentRefreshToken });
+  }
+
+  try {
+    const result = await refreshAccessToken(currentRefreshToken as string);
+    const accessToken = result.accessToken;
+    const newRefreshToken = result.refreshToken;
+
+    await updateAuthState({
+      accessToken,
+      refreshToken: newRefreshToken || currentRefreshToken,
+    });
+    
+    // ✅ IMPORTANT: Mettre à jour le token dans l'instance axios
+    setAuthToken(accessToken as string);
+    
+    console.log('Refresh réussi, new refreshToken:', newRefreshToken);
+    return true;
+  } catch (error) {
+    console.error('Erreur lors du rafraîchissement du token:', error);
+    await clearAuthState();
+    return false;
+  }
+};
 
   return (
     <AuthContext.Provider value={{ 

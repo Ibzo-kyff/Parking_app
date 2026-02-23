@@ -277,38 +277,30 @@ const ReservationPage: React.FC<ReservationListProps> = ({
     }, [])
   );
 
-  const loadReservations = useCallback(async () => {
-    try {
-      setError(null);
-      const data = await fetchReservations();
-      setReservations(data);
-    } catch (err: any) {
-      console.error("Erreur chargement réservations:", err);
-
-      if (err.response && err.response.status === 403) {
-        const refreshed = await refreshAuth();
-        if (refreshed) {
-          try {
-            const data = await fetchReservations();
-            setReservations(data);
-            return;
-          } catch (retryErr: any) {
-            setError(retryErr.message || "Impossible de charger après refresh");
-          }
-        } else {
-          setError("Session expirée, veuillez vous reconnecter");
-          showError("Session expirée", "Votre session a expiré. Veuillez vous reconnecter.");
-        }
-      } else {
-        setError(err.message || "Impossible de charger les réservations");
-        showError("Erreur", "Impossible de charger les réservations");
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+// ReservationPage.tsx - Version simplifiée
+const loadReservations = useCallback(async () => {
+  try {
+    setError(null);
+    setLoading(true);
+    
+    const data = await fetchReservations(); // L'intercepteur gère tout
+    setReservations(data);
+  } catch (err: any) {
+    console.error("Erreur chargement réservations:", err);
+    
+    // Si erreur 403 après refresh, c'est que le refresh a échoué
+    if (err.response?.status === 403) {
+      showError("Session expirée", "Veuillez vous reconnecter");
+      router.push("/(auth)/LoginScreen");
+    } else {
+      setError(err.message || "Impossible de charger les réservations");
+      showError("Erreur", "Impossible de charger les réservations");
     }
-  }, [fetchReservations, refreshAuth]);
-
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+}, [fetchReservations]); // Plus besoin de refreshAuth
   // Auto-refresh lors du chargement initial
   useEffect(() => {
     if (!authState?.accessToken) {
