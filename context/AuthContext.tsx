@@ -119,9 +119,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // refreshAuth corrigée : Charge depuis storage si absent dans state
+// refreshAuth corrigée : Charge depuis storage si absent dans state
 // AuthContext.tsx - Modifiez refreshAuth
-const refreshAuth = async (): Promise<boolean> => {
+const refreshAuth = async (): Promise<string | false> => {
   let currentRefreshToken = authState.refreshToken;
 
   if (!currentRefreshToken) {
@@ -134,9 +134,29 @@ const refreshAuth = async (): Promise<boolean> => {
   }
 
   try {
-    const result = await refreshAccessToken(currentRefreshToken as string);
-    const accessToken = result.accessToken;
-    const newRefreshToken = result.refreshToken;
+  const result = await refreshAccessToken(currentRefreshToken as string);
+
+  // Validation : s'assurer que la réponse contient bien les tokens attendus
+  // Le service peut retourner soit une string (nouvel access token) soit un objet { accessToken, refreshToken }
+  if (!result) {
+    console.error('Le rafraîchissement a renvoyé une réponse invalide:', result);
+    await clearAuthState();
+    return false;
+  }
+
+  let accessToken: string | undefined;
+  let newRefreshToken: string | undefined;
+
+  if (typeof result === 'string') {
+    accessToken = result;
+  } else if (typeof result === 'object' && 'accessToken' in result) {
+    accessToken = (result as any).accessToken;
+    newRefreshToken = (result as any).refreshToken;
+  } else {
+    console.error('Le rafraîchissement a renvoyé une réponse invalide:', result);
+    await clearAuthState();
+    return false;
+  }
 
     await updateAuthState({
       accessToken,
@@ -147,7 +167,7 @@ const refreshAuth = async (): Promise<boolean> => {
     setAuthToken(accessToken as string);
     
     console.log('Refresh réussi, new refreshToken:', newRefreshToken);
-    return true;
+    return accessToken as string;
   } catch (error) {
     console.error('Erreur lors du rafraîchissement du token:', error);
     await clearAuthState();

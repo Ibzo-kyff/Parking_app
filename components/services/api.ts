@@ -209,7 +209,7 @@ export const login = async (credentials: { email: string; password: string }): P
 };
 
 // Fonction de refresh manuelle (optionnelle)
-export const refreshAccessToken = async (): Promise<string | null> => {
+export const refreshAccessToken = async (p0: string): Promise<string | null> => {
   try {
     const storedRefreshToken = await AsyncStorage.getItem('refreshToken');
     if (!storedRefreshToken) {
