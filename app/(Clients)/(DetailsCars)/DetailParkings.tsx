@@ -87,11 +87,11 @@ export default function ParkingDetails() {
       
       setParking(data as ExtendedParking);
     } catch (err: any) {
-      console.error("Error loading parking:", {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status
-      });
+      // console.error("Error loading parking:", {
+      //   message: err.message,
+      //   response: err.response?.data,
+      //   status: err.response?.status
+      // });
       
       let errorMessage = err.message || "Impossible de charger ce parking";
       
@@ -184,7 +184,7 @@ export default function ParkingDetails() {
       });
       
       if (result.action === Share.sharedAction) {
-        console.log('Shared successfully');
+        // console.log('Shared successfully');
       }
     } catch (error: any) {
       Alert.alert("Erreur", "Impossible de partager les informations");

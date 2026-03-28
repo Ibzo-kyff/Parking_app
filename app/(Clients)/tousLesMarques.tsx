@@ -47,7 +47,7 @@ export default function TousLesMarques() {
         setMarques(unique);
         setFilteredMarques(unique);
       } catch (error) {
-        console.error('❌ Erreur lors du chargement des marques :', error);
+        // console.error('❌ Erreur lors du chargement des marques :', error);
       } finally {
         setLoading(false);
       }
@@ -69,11 +69,11 @@ export default function TousLesMarques() {
   };
 
   const handleImageError = (itemId: string | number) => {
-    console.log(`❌ Erreur de chargement de l'image pour la marque ${itemId}`);
+    // console.log(`❌ Erreur de chargement de l'image pour la marque ${itemId}`);
   };
 
   const handleMarquePress = (marque: Marque) => {
-  console.log('Marque sélectionnée:', marque.name);
+  // console.log('Marque sélectionnée:', marque.name);
   
   // Navigation vers la liste des véhicules avec la marque en paramètre
   router.push({
