@@ -71,7 +71,7 @@ const LoginScreen = () => {
   // Fonction d'enregistrement du token Expo Push
   const registerForPushNotificationsAsync = async (accessToken: string) => {
     if (!Device.isDevice) {
-      console.log('Push notifications non supportées sur simulateur/émulateur');
+      // console.log('Push notifications non supportées sur simulateur/émulateur');
       return;
     }
 
@@ -80,13 +80,13 @@ const LoginScreen = () => {
       ({ status } = await Notifications.requestPermissionsAsync());
     }
     if (status !== 'granted') {
-      console.log('Permission pour les notifications refusée par l’utilisateur');
+      // console.log('Permission pour les notifications refusée par l’utilisateur');
       return;
     }
 
     const projectId = Constants?.expoConfig?.extra?.eas?.projectId;
     if (!projectId) {
-      console.error('projectId manquant dans app.config.js (extra.eas.projectId)');
+      // console.error('projectId manquant dans app.config.js (extra.eas.projectId)');
       return;
     }
 
@@ -111,13 +111,13 @@ const LoginScreen = () => {
       });
 
       if (response.ok) {
-        console.log('Token push enregistré avec succès sur le serveur');
+        // console.log('Token push enregistré avec succès sur le serveur');
       } else {
         const errorText = await response.text();
-        console.warn('Échec enregistrement token push :', response.status, errorText);
+        // console.warn('Échec enregistrement token push :', response.status, errorText);
       }
     } catch (error) {
-      console.error('Erreur lors de la récupération ou envoi du token push :', error);
+      // console.error('Erreur lors de la récupération ou envoi du token push :', error);
     }
   };
 

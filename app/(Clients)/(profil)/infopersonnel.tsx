@@ -33,7 +33,7 @@ const Infopersonnel = () => {
       clearAuthState();
       router.replace('/(auth)/LoginScreen');
     } catch (error) {
-      console.error("Erreur lors de la déconnexion:", error);
+      // console.error("Erreur lors de la déconnexion:", error);
     }
   };
 
@@ -155,7 +155,7 @@ const Infopersonnel = () => {
       
       Alert.alert("Succès", "Informations mises à jour");
     } catch (err: any) {
-      console.error("Erreur lors de la sauvegarde:", err);
+      // console.error("Erreur lors de la sauvegarde:", err);
       
       if (err.status === 401 || err.status === 403) {
         Alert.alert(

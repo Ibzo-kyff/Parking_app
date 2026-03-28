@@ -134,7 +134,7 @@ const AccueilParking = () => {
       }
       
       setError('Erreur lors de la récupération des données du parking');
-      console.error('Erreur API:', err);
+      // console.error('Erreur API:', err);
       
       if (err.response?.status === 403) {
         Alert.alert(
@@ -169,10 +169,6 @@ const AccueilParking = () => {
   const handleHistorique = () => router.navigate('/historique');
   const handleVoirTout = () => router.navigate('(ParkingDetail)/voiturePopulaire');
 
-  const handleSelectMarque = (marque: string) => {
-    router.push(`/voitures/marque/${marque}`);
-  };
-
   // 🔹 NAVIGATION VERS LES DÉTAILS DE LA VOITURE
   const handleSelectVoiture = (voiture: Voiture) => {
     router.push({
@@ -206,14 +202,15 @@ const AccueilParking = () => {
     </TouchableOpacity>
   );
 
+  // 🔹 Render marque NON cliquable
   const renderMarqueItem = ({ item }: { item: { id: number; name: string; logoUrl: string } }) => (
-    <TouchableOpacity style={styles.marqueCard} onPress={() => handleSelectMarque(item.name)}>
+    <View style={styles.marqueCard}>
       <Image
         source={{ uri: item.logoUrl || 'https://via.placeholder.com/40x40' }}
         style={styles.marqueLogo}
       />
       <Text style={styles.marqueNom}>{item.name}</Text>
-    </TouchableOpacity>
+    </View>
   );
 
   // 🔹 Fonction pour formater le texte du statut
@@ -322,7 +319,7 @@ const AccueilParking = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Carousel Marques */}
+        {/* Carousel Marques - NON CLIQUABLE */}
         <View style={styles.marquesSection}>
           <Text style={styles.sectionTitle}>Marques</Text>
           <FlatList

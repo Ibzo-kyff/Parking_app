@@ -111,7 +111,7 @@ const MonParkingScreen: React.FC = () => {
       setLoading(true);
       try {
         if (authState.accessToken) {
-          console.log('🔑 Token présent, récupération données...');
+          // console.log('🔑 Token présent, récupération données...');
           setAuthToken(authState.accessToken);
           const data = await getParkingManagementData();
           
@@ -124,30 +124,30 @@ const MonParkingScreen: React.FC = () => {
           
           // DEBUG: Vérifier le premier véhicule pour voir tous les champs
           if (data.vehicles && data.vehicles.length > 0) {
-            console.log('🚗 Premier véhicule complet:', data.vehicles[0]);
-            console.log('📋 Champs disponibles:', Object.keys(data.vehicles[0]));
+            // console.log('🚗 Premier véhicule complet:', data.vehicles[0]);
+            // console.log('📋 Champs disponibles:', Object.keys(data.vehicles[0]));
           }
           
           setParkingData(data);
         } else {
-          console.warn('❌ Token absent');
+          // console.warn('❌ Token absent');
         }
       } catch (error: any) {
-        console.error('❌ Erreur API gestion parking:', {
-          message: error.message,
-          status: error.response?.status,
-          data: error.response?.data
-        });
+        // console.error('❌ Erreur API gestion parking:', {
+        //   message: error.message,
+        //   status: error.response?.status,
+        //   data: error.response?.data
+        // });
         
         if (error.response?.status === 403) {
-          console.log("🔄 Tentative de rafraîchissement...");
+          // console.log("🔄 Tentative de rafraîchissement...");
           const success = await refreshAuth();
           if (success && authState.accessToken) {
             setAuthToken(authState.accessToken);
             const data = await getParkingManagementData();
             setParkingData(data);
           } else {
-            console.error('❌ Rafraîchissement échoué');
+            // console.error('❌ Rafraîchissement échoué');
           }
         }
       } finally {
@@ -158,7 +158,7 @@ const MonParkingScreen: React.FC = () => {
     if (authState.accessToken) {
       fetchParkingData();
     } else {
-      console.error('❌ Token absent, requête non effectuée');
+      // console.error('❌ Token absent, requête non effectuée');
       setLoading(false);
     }
   }, [authState.accessToken]);
@@ -307,7 +307,7 @@ const MonParkingScreen: React.FC = () => {
 
   // FONCTION POUR VOIR LES DÉTAILS COMPLETS
   const handleVoiturePress = (vehicule: Vehicule) => {
-    console.log('🚗 Navigation vers détails:', vehicule);
+    // console.log('🚗 Navigation vers détails:', vehicule);
     router.push({
       pathname: "/(Clients)/CreateListingScreen",
       params: { 

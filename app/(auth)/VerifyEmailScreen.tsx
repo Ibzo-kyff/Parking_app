@@ -28,7 +28,7 @@ const VerifyEmailScreen = () => {
           router.replace('/(auth)/LoginScreen');
         }
       } catch (error) {
-        console.error('Erreur lors du chargement de l\'email:', error);
+        // console.error('Erreur lors du chargement de l\'email:', error);
         router.replace('/(auth)/LoginScreen');
       }
     };
