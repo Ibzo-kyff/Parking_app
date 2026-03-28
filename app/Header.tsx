@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, FlatList } from 'react-native';
+// components/Header.tsx
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -22,117 +23,116 @@ const Header: React.FC = () => {
   const [prenom, setPrenom] = useState('User');
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [badgeCount, setBadgeCount] = useState(0);
+  
+  // Référence pour éviter les appels multiples
+  const isMounted = useRef(true);
+  const pollingInterval = useRef<NodeJS.Timeout | null>(null);
 
   const token = authState.accessToken;
   const userId = authState.userId ? Number(authState.userId) : null;
   const parkingId = authState.parkingId ? Number(authState.parkingId) : null;
   const role = authState.role;
 
-  // 🔑 Clé unique par compte (CLIENT / PARKING)
-  const getLastSeenKey = () => {
+  useEffect(() => {
+    isMounted.current = true;
+    
+    if (authState.prenom) {
+      setPrenom(authState.prenom);
+    }
+
+    // Nettoyage
+    return () => {
+      isMounted.current = false;
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
+      }
+    };
+  }, [authState.prenom]);
+
+  const getLastSeenKey = useCallback(() => {
     if (role === 'PARKING' && parkingId) {
       return `LAST_NOTIFICATION_SEEN_PARKING_${parkingId}`;
     }
-    if ((role === 'CLIENT' || role === 'USER') && userId) {
+    if (role === 'CLIENT' && userId) {
       return `LAST_NOTIFICATION_SEEN_USER_${userId}`;
     }
-    return 'LAST_NOTIFICATION_SEEN_UNKNOWN';
-  };
+    return null;
+  }, [role, parkingId, userId]);
 
-  useEffect(() => {
-    if (authState.prenom) setPrenom(authState.prenom);
-  }, [authState.prenom]);
-
-  // Fonction pour traiter les notifications récupérées
-  const processNotifications = async (allNotifications: Notification[]) => {
-    const storageKey = getLastSeenKey();
-    const lastSeen = await AsyncStorage.getItem(storageKey);
-    const lastSeenDate = lastSeen ? new Date(lastSeen) : null;
-
-    // Filtrer les notifications non lues et nouvelles
-    const newNotifications = allNotifications.filter((n) => {
-      if (!n.createdAt) return false;
-      const notifDate = new Date(n.createdAt);
-      return n.read === false && (!lastSeenDate || notifDate > lastSeenDate);
-    });
-
-    setNotifications(newNotifications);
-    setBadgeCount(newNotifications.length);
-  };
-
-  // 🔔 Récupérer toutes les notifications non lues
-  const fetchNotificationsData = async () => {
-    if (!token) return;
-
-    let allNotifications: Notification[] = [];
-    let retryAfterRefresh = false;
+  const processNotifications = useCallback(async (allNotifications: Notification[]) => {
+    if (!isMounted.current) return;
 
     try {
+      const storageKey = getLastSeenKey();
+      if (!storageKey) return;
+
+      const lastSeen = await AsyncStorage.getItem(storageKey);
+      const lastSeenDate = lastSeen ? new Date(lastSeen) : null;
+
+      const newNotifications = allNotifications.filter((n) => {
+        if (!n.createdAt) return false;
+        const notifDate = new Date(n.createdAt);
+        return n.read === false && (!lastSeenDate || notifDate > lastSeenDate);
+      });
+
+      if (isMounted.current) {
+        setNotifications(newNotifications);
+        setBadgeCount(newNotifications.length);
+      }
+    } catch (error) {
+      console.error('Erreur processNotifications:', error);
+    }
+  }, [getLastSeenKey]);
+
+  const fetchNotifications = useCallback(async () => {
+    if (!token) return;
+    if (!userId && !parkingId) return;
+
+    try {
+      let allNotifications: Notification[] = [];
+      
       if (role === 'PARKING' && parkingId) {
         allNotifications = await getNotifications(undefined, parkingId);
-      } else if ((role === 'CLIENT' || role === 'USER') && userId) {
+      } else if (role === 'CLIENT' && userId) {
         allNotifications = await getNotifications(userId, undefined);
       }
 
-      await processNotifications(allNotifications);
-    } catch (error: any) {
-      if (error.message === 'INVALID_TOKEN' && !retryAfterRefresh) {
-        const refreshed = await refreshAuth();
-        if (refreshed) {
-          retryAfterRefresh = true;
-          // Réessayer la récupération après refresh
-          try {
-            if (role === 'PARKING' && parkingId) {
-              allNotifications = await getNotifications(undefined, parkingId);
-            } else if ((role === 'CLIENT' || role === 'USER') && userId) {
-              allNotifications = await getNotifications(userId, undefined);
-            }
-            await processNotifications(allNotifications);
-            return; // Succès après retry, on sort
-          } catch (retryError) {
-            console.error('Erreur après refresh du token:', retryError);
-          }
-        }
-        // Si refresh échoue ou retry échoue, déconnexion
-        clearAuthState();
-        router.replace('/(auth)/LoginScreen');
-      } else {
-        console.error('Erreur badge notification:', error);
-        setNotifications([]);
-        setBadgeCount(0);
+      if (isMounted.current) {
+        await processNotifications(allNotifications);
       }
-    }
-  };
-
-  useEffect(() => {
-    fetchNotificationsData();
-
-    const interval = setInterval(fetchNotificationsData, 15000); 
-    return () => clearInterval(interval);
-  }, [token, role, userId, parkingId]);
-
-  //  Quand on ouvre une notification individuelle
-  const handleReadNotification = async (notifId: number) => {
-    try {
-      // Mettre à jour côté serveur
-      await markNotificationAsRead(notifId);
-
-      // Retirer du tableau local
-      setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-      setBadgeCount((prev) => Math.max(prev - 1, 0));
     } catch (error) {
-      console.log('Erreur read notification:', error);
+      console.error('Erreur fetchNotifications:', error);
+      // L'interceptor va gérer les erreurs d'auth
     }
-  };
+  }, [token, role, userId, parkingId, processNotifications]);
 
-  // 🔔 Ouvrir la liste des notifications (toutes)
+  // Setup polling
+  useEffect(() => {
+    if (!token || !(userId || parkingId)) return;
+
+    // Premier fetch
+    fetchNotifications();
+
+    // Polling toutes les 30 secondes
+    pollingInterval.current = setInterval(fetchNotifications, 30000);
+
+    return () => {
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
+      }
+    };
+  }, [token, userId, parkingId, fetchNotifications]);
+
   const handleOpenNotifications = async () => {
     const storageKey = getLastSeenKey();
-    await AsyncStorage.setItem(storageKey, new Date().toISOString());
-
-    // On peut garder les notifications locales intactes ou les marquer toutes lues ici
-    setBadgeCount(0);
-
+    if (storageKey) {
+      await AsyncStorage.setItem(storageKey, new Date().toISOString());
+    }
+    
+    if (isMounted.current) {
+      setBadgeCount(0);
+    }
+    
     router.push('/(Clients)/Notifications');
   };
 
@@ -142,14 +142,25 @@ const Header: React.FC = () => {
       {
         text: 'Oui',
         onPress: async () => {
-          await logout();
-          clearAuthState();
-          setBadgeCount(0);
-          router.replace('/(auth)/LoginScreen');
+          try {
+            await logout();
+          } catch (error) {
+            console.error('Logout error:', error);
+          } finally {
+            await clearAuthState();
+            if (isMounted.current) {
+              setBadgeCount(0);
+            }
+            router.replace('/(auth)/LoginScreen');
+          }
         },
       },
     ]);
   };
+
+  if (!token) {
+    return null; // Ne rien afficher si non authentifié
+  }
 
   return (
     <View style={styles.container}>
@@ -176,7 +187,6 @@ const Header: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: {
-    top: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

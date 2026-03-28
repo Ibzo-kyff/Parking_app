@@ -6,12 +6,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const usePushNotifications = () => {
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
-  const { user, refreshAuth } = useAuth();
+  const { user } = useAuth(); // On retire refreshAuth : géré globalement maintenant
   const notificationListener = useRef<Notifications.Subscription | null>(null);
   const responseListener = useRef<Notifications.Subscription | null>(null);
 
   useEffect(() => {
-    // On ne s'enregistre que si l'utilisateur est connecté
     if (!user || !user.id) return;
 
     registerForPushNotificationsAsync().then((token) => {
@@ -28,30 +27,23 @@ export const usePushNotifications = () => {
   }, [user?.id]);
 
   async function registerForPushNotificationsAsync(): Promise<string | null> {
-    if (!Device.isDevice) {
-      // Sur simulateur, on ne peut pas avoir de token push expo
-      return null;
-    }
+    if (!Device.isDevice) return null;
 
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
-
     if (existingStatus !== 'granted') {
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
-
     if (finalStatus !== 'granted') {
       console.warn('Failed to get push token for push notification!');
       return null;
     }
 
     try {
-      // Remplacez par votre vrai projectId si nécessaire dans app.json
       const token = (await Notifications.getExpoPushTokenAsync()).data;
-      console.log('📡 [Push] Token obtenu:', token);
+      console.log(' [Push] Token obtenu:', token);
 
-      // Envoyer le token au backend
       await sendPushTokenToBackend(token);
       return token;
     } catch (e) {
@@ -61,62 +53,21 @@ export const usePushNotifications = () => {
   }
 
   async function sendPushTokenToBackend(token: string) {
-    let retryAfterRefresh = false;
+    try {
+      const { default: api } = await import('../components/services/api'); // Garde pour lazy load si besoin
+      const authToken = await getAuthToken(); // Dupliqué OK pour l'instant
 
-    const attemptSend = async () => {
-      try {
-        const { default: api } = await import('../components/services/api');
-        const authToken = await getAuthToken(); // Assurez-vous que getAuthToken est importé ou défini ici si nécessaire
-        const headers = authToken ? {
+      console.log('📤 [Push] Enregistrement du token sur le serveur...');
+
+      // **CORRECTION : Bon path backend**
+      await api.post('/auth/users/push-token', { token }, {
+        headers: authToken ? {
           Authorization: `Bearer ${authToken}`,
           'Content-Type': 'application/json'
-        } : {};
-
-        console.log('📤 [Push] Enregistrement du token sur le serveur...');
-
-        // Tentative principale sur /auth/push-token
-        await api.post('/auth/push-token', { token }, { headers });
-        console.log('✅ [Push] Token enregistré (/auth/push-token)');
-        return true;
-      } catch (e: any) {
-        if (e.response?.status === 404 || e.response?.status === 403) {
-          console.log(`⚠️  [Push] Échec sur /auth/push-token (${e.response.status}), tentative sur /users/push-token...`);
-          try {
-            const { default: api } = await import('../components/services/api');
-            const authToken = await getAuthToken();
-            const headers = authToken ? {
-              Authorization: `Bearer ${authToken}`,
-              'Content-Type': 'application/json'
-            } : {};
-
-            await api.post('/users/push-token', { token }, { headers });
-            console.log('✅ [Push] Token enregistré (/users/push-token)');
-            return true;
-          } catch (fallbackError: any) {
-            throw fallbackError;
-          }
-        } else {
-          throw e;
-        }
-      }
-    };
-
-    try {
-      await attemptSend();
+        } : {}
+      });
+      console.log('✅ [Push] Token enregistré (/auth/users/push-token)');
     } catch (error: any) {
-      if ((error.response?.status === 401 || error.response?.status === 403) && !retryAfterRefresh) {
-        retryAfterRefresh = true;
-        const refreshed = await refreshAuth();
-        if (refreshed) {
-          // Réessayer après refresh
-          try {
-            await attemptSend();
-            return;
-          } catch (retryError) {
-            console.error('❌ [Push] Erreur après refresh:', retryError);
-          }
-        }
-      }
       console.error('❌ [Push] Erreur registration serveur:', {
         status: error.response?.status,
         data: error.response?.data,
@@ -125,21 +76,14 @@ export const usePushNotifications = () => {
     }
   }
 
-  // Fonction pour obtenir le token d'auth (dupliquée ici pour autonomie, idéalement importer depuis Notification.ts)
   async function getAuthToken(): Promise<string | null> {
     try {
       const authState = await AsyncStorage.getItem("authState");
       if (authState) {
         const parsedAuth = JSON.parse(authState);
-        if (parsedAuth.accessToken) {
-          return parsedAuth.accessToken;
-        }
+        return parsedAuth.accessToken || null;
       }
-      const userToken = await AsyncStorage.getItem("userToken");
-      if (userToken) {
-        return userToken;
-      }
-      return null;
+      return await AsyncStorage.getItem("userToken");
     } catch (error) {
       return null;
     }

@@ -22,7 +22,6 @@ export interface NotificationData {
 
 const getAuthToken = async (): Promise<string | null> => {
   try {
-    // Essayer d'abord avec authState (pour compatibilité avec useAuth)
     const authState = await AsyncStorage.getItem("authState");
     if (authState) {
       const parsedAuth = JSON.parse(authState);
@@ -30,13 +29,10 @@ const getAuthToken = async (): Promise<string | null> => {
         return parsedAuth.accessToken;
       }
     }
-
-    // Fallback sur userToken (ancien système)
     const userToken = await AsyncStorage.getItem("userToken");
     if (userToken) {
       return userToken;
     }
-
     return null;
   } catch (error) {
     return null;
@@ -51,7 +47,7 @@ const getAuthHeaders = async () => {
   } : {};
 };
 
-// Récupérer les notifications
+// Récupérer les notifications (géré par interceptors pour refresh)
 export const getNotifications = async (
   userId?: number,
   parkingId?: number
@@ -86,30 +82,29 @@ export const getNotifications = async (
       return firstIndex === index;
     });
 
-    
     return uniqueNotifications;
   } catch (error) {
     const axiosError = error as AxiosError;
 
-    // Log détaillé de l'erreur
+    // Log détaillé
     if (axiosError.response) {
       console.error(
-        " Erreur API GET notifications :",
+        "Erreur API GET notifications :",
         `Status: ${axiosError.response.status}`,
         `Data: ${JSON.stringify(axiosError.response.data)}`
       );
     } else if (axiosError.request) {
-      console.error(" Pas de réponse du serveur:", axiosError.request);
+      console.error("Pas de réponse du serveur:", axiosError.request);
     } else {
-      console.error(" Erreur configuration requête:", axiosError.message);
+      console.error("Erreur configuration requête:", axiosError.message);
     }
 
+    // Plus de throw : Les interceptors gèrent 401/403, on return vide pour continuer
     if (axiosError.response?.status === 401 || axiosError.response?.status === 403) {
-      console.log(" Token expiré ou invalide - déconnexion recommandée");
-      throw new Error('INVALID_TOKEN');
+      console.log("Token expiré ou invalide - interceptors devraient rafraîchir");
     }
 
-    return [];
+    return []; // Return vide sur erreur pour éviter crash
   }
 };
 
