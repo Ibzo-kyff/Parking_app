@@ -808,8 +808,7 @@ const styles = StyleSheet.create({
   },
   container: { 
     flex: 1, 
-    backgroundColor: '#f5f5f7' ,
-    top:12
+    backgroundColor: '#f5f5f7' 
   },
   
   // Header redessiné

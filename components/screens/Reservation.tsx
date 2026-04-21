@@ -520,9 +520,7 @@ const loadReservations = useCallback(async () => {
     setSelectedReservation(item);
     setModalTitle("Confirmer l'annulation");
     setModalMessage(
-      item.type === "ACHAT" 
-        ? "Êtes-vous sûr de vouloir annuler cet achat ? Cette action est irréversible."
-        : "Êtes-vous sûr de vouloir annuler cette réservation ? Cette action est irréversible."
+      "Êtes-vous sûr de vouloir annuler cette réservation ? Cette action est irréversible."
     );
     setModalType("info");
     setShowCancelModal(true);
@@ -562,21 +560,21 @@ const loadReservations = useCallback(async () => {
     
     // ----- PARKING -----
     if (isParking) {
-      if (item.status === "PENDING") return item.type === "ACHAT" ? "GÉRER L'ACHAT" : "GÉRER LA RÉSERVATION";
-      if (item.status === "ACCEPTED" && !isPast) return item.type === "ACHAT" ? "ANNULER L'ACHAT" : "ANNULER LA RÉSERVATION";
+      if (item.status === "PENDING") return "GÉRER LA RÉSERVATION";
+      if (item.status === "ACCEPTED" && !isPast) return "ANNULER LA RÉSERVATION";
       return "VOIR LES DÉTAILS";
     } 
     
     // ----- CLIENT -----
     else {
       // RÉSERVATIONS ANNULÉES → Réserver à nouveau
-      if (item.status === "CANCELED") return item.type === "ACHAT" ? "ACHETER À NOUVEAU" : "RÉSERVER À NOUVEAU";
+      if (item.status === "CANCELED") return "RÉSERVER À NOUVEAU";
       
       // RÉSERVATIONS TERMINÉES (date passée OU statut COMPLETED) → Louer/Acheter à nouveau
-      if (item.status === "COMPLETED" || isPast) return item.type === "ACHAT" ? "ACHETER À NOUVEAU" : "LOUER À NOUVEAU";
+      if (item.status === "COMPLETED" || isPast) return "LOUER À NOUVEAU";
       
       // RÉSERVATIONS ACTIVES (PENDING ou ACCEPTED avec date non dépassée) → UNIQUEMENT ANNULER
-      return item.type === "ACHAT" ? "ANNULER L'ACHAT" : "ANNULER LA RÉSERVATION";
+      return "ANNULER LA RÉSERVATION";
     }
   };
 
@@ -797,9 +795,7 @@ const loadReservations = useCallback(async () => {
                 <View style={styles.modalTitleRow}>
                   <MaterialIcons name="receipt-long" size={24} color="#FFF" />
                   <Text style={styles.modalTitle}>
-                    {isParking 
-                      ? (selectedReservation.type === "ACHAT" ? "Gérer l'achat" : "Gérer la réservation") 
-                      : (selectedReservation.type === "ACHAT" ? "Détails de l'achat" : "Détails de la réservation")}
+                    {isParking ? "Gérer la réservation" : "Détails de la réservation"}
                   </Text>
                 </View>
                 <Text style={styles.modalSubtitle}>#{selectedReservation.id}</Text>
@@ -921,7 +917,7 @@ const loadReservations = useCallback(async () => {
                       </Text>
                     </View>
                   </View>
-                  {!!selectedReservation.dateFin && (
+                  {selectedReservation.dateFin && (
                     <View style={styles.modalInfoRow}>
                       <View style={styles.modalInfoIcon}>
                         <MaterialIcons name="stop" size={18} color={isPast ? "#F44336" : "#FF9800"} />
@@ -935,7 +931,7 @@ const loadReservations = useCallback(async () => {
                       </View>
                     </View>
                   )}
-                  {selectedReservation.type === "LOCATION" && !!selectedReservation.dateDebut && !!selectedReservation.dateFin && (
+                  {selectedReservation.type === "LOCATION" && selectedReservation.dateDebut && selectedReservation.dateFin && (
                     <View style={styles.modalInfoRow}>
                       <View style={styles.modalInfoIcon}>
                         <MaterialIcons name="timelapse" size={18} color="#2196F3" />
@@ -1289,7 +1285,7 @@ const loadReservations = useCallback(async () => {
                         <Text style={styles.dateText}>{formatDate(item.dateDebut)}</Text>
                       </View>
                     </View>
-                    {!!item.dateFin && (
+                    {item.dateFin && (
                       <View style={styles.dateItem}>
                         <MaterialIcons name="stop" size={14} color={isPast ? "#F44336" : "#FF9800"} />
                         <View>
