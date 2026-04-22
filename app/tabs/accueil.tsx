@@ -329,8 +329,8 @@ const styles = StyleSheet.create({
   mainScrollView: { flex: 1 }, 
   scrollViewContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
   searchSection: {
-    marginTop: 20,
-    marginBottom: 20,
+    marginTop: 10,
+    marginBottom: 10,
     paddingHorizontal: 16,
     paddingVertical: 16,
     backgroundColor: '#fff',
