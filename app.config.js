@@ -28,7 +28,7 @@ module.exports = ({ config }) => {
           backgroundColor: "#ffffff"
         },
         edgeToEdgeEnabled: true,
-        package: "com.mobilitysorganization.mobilitymali"
+        package: "com.mobilitymali.app"
       },
       web: {
         favicon: "./assets/favicon.png"
